@@ -6,6 +6,7 @@ PARALLEL=-j6
 
 TOPDIR=${PWD}
 PS3SUPPORT=${PWD}/ps3support
+PS3INSTALL=~
 
 export FFMPEG=${PS3SUPPORT}/ffmpeg
 
