@@ -107,6 +107,8 @@ typedef enum {
   ACTION_CYCLE_AUDIO,
   ACTION_CYCLE_SUBTITLE,
 
+  ACTION_RELOAD_DATA,
+
   ACTION_mappable_end,
 } action_type_t;
 

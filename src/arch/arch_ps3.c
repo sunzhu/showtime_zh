@@ -397,7 +397,7 @@ arch_set_default_paths(int argc, char **argv)
     return;
   x++;
   strcpy(x, "settings");
-  showtime_settings_path = strdup(buf);
+  showtime_persistent_path = strdup(buf);
   strcpy(x, "cache");
   showtime_cache_path = strdup(buf);
 }
@@ -583,4 +583,10 @@ arch_preload_fonts(void)
   freetype_load_font("file:///dev_flash/data/font/SCE-PS3-YG-R-KOR.TTF");
   freetype_load_font("file:///dev_flash/data/font/SCE-PS3-DH-R-CGB.TTF");
   freetype_load_font("file:///dev_flash/data/font/SCE-PS3-CP-R-KANA.TTF");
+}
+
+const char *
+showtime_get_system_type(void)
+{
+  return "PS3";
 }

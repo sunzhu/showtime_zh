@@ -805,6 +805,17 @@ http_client_rawauth(struct http_auth_req *har, const char *str)
  *
  */
 static void
+http_ua_send(htsbuf_queue_t *q)
+{
+  htsbuf_qprintf(q, 
+ 		 "User-Agent: Showtime %s %s\r\n",
+		 showtime_get_system_type(), htsversion);
+}
+
+/**
+ *
+ */
+static void
 http_auth_send(http_file_t *hf, htsbuf_queue_t *q, const char *method,
 	       const char **parameters)
 {
@@ -1300,7 +1311,7 @@ http_connect(http_file_t *hf, char *errbuf, int errlen)
 
   hts_mutex_unlock(&http_redirects_mutex);
 
-  ssl = !strcmp(proto, "https");
+  ssl = !strcmp(proto, "https") || !strcmp(proto, "webdavs");
   if(port < 0)
     port = ssl ? 443 : 80;
 
@@ -1358,12 +1369,12 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
   }
   htsbuf_qprintf(&q, 
 		 "Accept-Encoding: identity\r\n"
-		 "User-Agent: Showtime %s\r\n"
 		 "Host: %s\r\n"
 		 "Connection: %s\r\n",
-		 htsversion,
 		 hf->hf_connection->hc_hostname,
 		 hf->hf_want_close ? "close" : "keep-alive");
+
+  http_ua_send(&q);
 
   htsbuf_qprintf(&q, "\r\n");
 
@@ -1587,13 +1598,11 @@ again:
   htsbuf_qprintf(&q, 
 		 "GET %s HTTP/1.%d\r\n"
 		 "Accept-Encoding: identity\r\n"
-		 "User-Agent: Showtime %s\r\n"
 		 "Host: %s\r\n",
 		 hf->hf_path,
 		 hf->hf_version,
-		 htsversion,
 		 hf->hf_connection->hc_hostname);
-
+  http_ua_send(&q);
   http_auth_send(hf, &q, "GET", NULL);
   htsbuf_qprintf(&q, "\r\n");
 
@@ -1745,15 +1754,13 @@ http_read(fa_handle_t *handle, void *buf, const size_t size)
       htsbuf_qprintf(&q, 
 		     "GET %s HTTP/1.%d\r\n"
 		     "Accept-Encoding: identity\r\n"
-		     "User-Agent: Showtime %s\r\n"
 		     "Host: %s\r\n"
 		     "Connection: %s\r\n",
 		     hf->hf_path,
 		     hf->hf_version,
-		     htsversion,
 		     hc->hc_hostname,
 		     hf->hf_want_close ? "close" : "keep-alive");
-
+      http_ua_send(&q);
       http_auth_send(hf, &q, "GET", NULL);
 
       char range[100];
@@ -2006,8 +2013,6 @@ http_quickload(struct fa_protocol *fap, const char *url,
     if((s = http_header_get(&headers, "last-modified")) != NULL)
       http_ctime(&fs->fs_mtime, s);
 
-    fs->fs_cache_age = 3600;
-
     if((s  = http_header_get(&headers, "date")) != NULL && 
        (s2 = http_header_get(&headers, "expires")) != NULL) {
       time_t expires, sdate;
@@ -2187,13 +2192,16 @@ parse_propfind(http_file_t *hf, htsmsg_t *xml, fa_dir_t *fd,
       if(strcmp(rpath, ehref)) {
 	http_connection_t *hc = hf->hf_connection;
 
-	if(hc->hc_port != 80) {
-	  snprintf(path, URL_MAX, "webdav://%s:%d%s", 
-		   hc->hc_hostname, hc->hc_port, href);
-	} else {
-	  snprintf(path, URL_MAX, "webdav://%s%s", 
-		   hc->hc_hostname, href);
-	}
+        if(!hc->hc_ssl && hc->hc_port == 80)
+          snprintf(path, URL_MAX, "webdav://%s%s",
+                   hc->hc_hostname, href);
+        else if(hc->hc_ssl && hc->hc_port == 443)
+          snprintf(path, URL_MAX, "webdavs://%s%s",
+                   hc->hc_hostname, href);
+        else
+          snprintf(path, URL_MAX, "%s://%s:%d%s",
+                   hc->hc_ssl ? "webdavs" : "webdav", hc->hc_hostname,
+		   hc->hc_port, href);
 
 	if((q = strrchr(path, '/')) != NULL) {
 	  q++;
@@ -2304,16 +2312,15 @@ dav_propfind(http_file_t *hf, fa_dir_t *fd, char *errbuf, size_t errlen,
 		   "PROPFIND %s HTTP/1.%d\r\n"
 		   "Depth: %d\r\n"
 		   "Accept-Encoding: identity\r\n"
-		   "User-Agent: Showtime %s\r\n"
 		   "Host: %s\r\n"
 		   "Connection: %s\r\n",
 		   hf->hf_path,
 		   hf->hf_version,
 		   fd != NULL ? 1 : 0,
-		   htsversion,
 		   hf->hf_connection->hc_hostname,
 		   hf->hf_want_close ? "close" : "keep-alive");
-    
+
+    http_ua_send(&q);
     http_auth_send(hf, &q, "PROPFIND", NULL);
     htsbuf_qprintf(&q, "\r\n");
 
@@ -2438,6 +2445,23 @@ static fa_protocol_t fa_protocol_webdav = {
 };
 FAP_REGISTER(webdav);
 
+/**
+ *
+ */
+static fa_protocol_t fa_protocol_webdavs = {
+  .fap_flags = FAP_INCLUDE_PROTO_IN_URL,
+  .fap_name  = "webdavs",
+  .fap_scan  = dav_scandir,
+  .fap_open  = http_open,
+  .fap_close = http_close,
+  .fap_read  = http_read,
+  .fap_seek  = http_seek,
+  .fap_fsize = http_fsize,
+  .fap_stat  = dav_stat,
+  .fap_quickload = http_quickload,
+  .fap_get_last_component = http_get_last_component,
+};
+FAP_REGISTER(webdavs);
 
 /**
  *
@@ -2497,14 +2521,13 @@ http_request(const char *url, const char **arguments,
   htsbuf_qprintf(&q,
 		 " HTTP/1.%d\r\n"
 		 "Accept-Encoding: identity\r\n"
-		 "User-Agent: Showtime %s\r\n"
 		 "Connection: %s\r\n"
 		 "Host: %s\r\n",
 		 hf->hf_version,
-		 htsversion,
 		 hf->hf_want_close ? "close" : "keep-alive",
 		 hc->hc_hostname);
 
+  http_ua_send(&q);
   if(postdata != NULL) 
     htsbuf_qprintf(&q, "Content-Length: %d\r\n", postdata->hq_size);
 
@@ -2669,12 +2692,13 @@ http_request(const char *url, const char **arguments,
     }
   done:
     buf[size] = 0;
-    if(result == NULL) {
+    if(result == NULL)
       free(buf);
-    } else {
+    else
       *result = buf;
+
+    if(result_sizep != NULL)
       *result_sizep = size;
-    }
   }
 
   http_destroy(hf);

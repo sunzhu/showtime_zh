@@ -323,17 +323,22 @@ static JSBool
 js_getAuthCredentials(JSContext *cx, JSObject *obj,
 		      uintN argc, jsval *argv, jsval *rval)
 {
-  const char *id, *reason, *source;
+  char buf[256];
+  const char *id = NULL, *reason, *source;
   char *username, *password;
   JSBool query, forcetmp = 0;
   int r;
   jsval val;
+  js_plugin_t *jsp = JS_GetPrivate(cx, obj);
 
-  if(!JS_ConvertArguments(cx, argc, argv, "sssb/b",
-			  &id, &source, &reason, &query, &forcetmp))
+  if(!JS_ConvertArguments(cx, argc, argv, "ssb/sb",
+			  &source, &reason, &query, &id, &forcetmp))
     return JS_FALSE;
 
-  r = keyring_lookup(id, &username, &password, NULL, query, source, reason,
+  snprintf(buf, sizeof(buf), "plguin-%s%s%s", jsp->jsp_id,
+	   id ? "-" : "", id ?: "");
+
+  r = keyring_lookup(buf, &username, &password, NULL, query, source, reason,
 		     forcetmp);
 
   if(r == 1) {
@@ -422,6 +427,33 @@ js_time(JSContext *cx, JSObject *obj,
 /**
  *
  */
+static JSBool 
+js_durationtostring(JSContext *cx, JSObject *obj,
+		    uintN argc, jsval *argv, jsval *rval)
+{
+  int s;
+  char tmp[32];
+  if (!JS_ConvertArguments(cx, argc, argv, "u", &s))
+    return JS_FALSE;
+
+  int m = s / 60;
+  int h = s / 3600;
+  
+  if(h > 0) {
+    snprintf(tmp, sizeof(tmp), "%d:%02d:%02d", h, m % 60, s % 60);
+  } else {
+    snprintf(tmp, sizeof(tmp), "%d:%02d", m % 60, s % 60);
+  }
+
+  *rval = STRING_TO_JSVAL(JS_NewStringCopyZ(cx, tmp));
+  return JS_TRUE;
+  return JS_TRUE;
+}
+
+
+/**
+ *
+ */
 static JSFunctionSpec showtime_functions[] = {
     JS_FS("trace",            js_trace,    1, 0, 0),
     JS_FS("print",            js_print,    1, 0, 0),
@@ -431,14 +463,13 @@ static JSFunctionSpec showtime_functions[] = {
     JS_FS("queryStringSplit", js_queryStringSplit, 1, 0, 0),
     JS_FS("pathEscape",       js_pathEscape, 1, 0, 0),
     JS_FS("paramEscape",      js_paramEscape, 1, 0, 0),
-    JS_FS("createService",    js_createService, 4, 0, 0),
     JS_FS("canHandle",        js_canHandle, 1, 0, 0),
-    JS_FS("getAuthCredentials",  js_getAuthCredentials, 4, 0, 0),
     JS_FS("message",          js_message, 3, 0, 0),
     JS_FS("sleep",            js_sleep, 1, 0, 0),
     JS_FS("JSONEncode",       js_json_encode, 1, 0, 0),
     JS_FS("JSONDecode",       js_json_decode, 1, 0, 0),
     JS_FS("time",             js_time, 0, 0, 0),
+    JS_FS("durationToString", js_durationtostring, 0, 0, 0),
     JS_FS_END
 };
 
@@ -499,10 +530,11 @@ plugin_finalize(JSContext *cx, JSObject *obj)
  *
  */
 static void
-js_plugin_unload(JSContext *cx, js_plugin_t *jsp)
+js_plugin_unload0(JSContext *cx, js_plugin_t *jsp)
 {
   js_page_flush_from_plugin(cx, jsp);
   js_io_flush_from_plugin(cx, jsp);
+  js_service_flush_from_plugin(cx, jsp);
 }
 
 /**
@@ -512,7 +544,7 @@ static JSBool
 js_forceUnload(JSContext *cx, JSObject *obj,
 	      uintN argc, jsval *argv, jsval *rval)
 {
-  js_plugin_unload(cx, JS_GetPrivate(cx, obj));
+  js_plugin_unload0(cx, JS_GetPrivate(cx, obj));
   *rval = JSVAL_VOID;
   return JS_TRUE;
 }
@@ -558,23 +590,26 @@ jsp_setEnableSearch(JSContext *cx, JSObject *obj, jsval idval, jsval *vp)
 }
 
 
+static JSBool
+plugin_add_del_prop(JSContext *cx, JSObject *obj, jsval id, jsval *vp)
+{
+  js_plugin_t *jsp = JS_GetPrivate(cx, obj);
+
+  if(jsp->jsp_protect_object) {
+    JS_ReportError(cx, "Plugin object can not be modified");
+    return JS_FALSE;
+  }
+  return JS_TRUE;
+}
+
+
 /**
  *
  */
 static JSClass plugin_class = {
   "plugin", JSCLASS_HAS_PRIVATE,
-  JS_PropertyStub,JS_PropertyStub,JS_PropertyStub,JS_PropertyStub,
+  plugin_add_del_prop,plugin_add_del_prop,JS_PropertyStub,JS_PropertyStub,
   JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub, plugin_finalize,
-  JSCLASS_NO_OPTIONAL_MEMBERS
-};
-
-/**
- *
- */
-static JSClass plugin_conf_class = {
-  "pluginconf", JSCLASS_HAS_PRIVATE,
-  JS_PropertyStub,JS_PropertyStub,JS_PropertyStub,JS_PropertyStub,
-  JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub, JS_FinalizeStub,
   JSCLASS_NO_OPTIONAL_MEMBERS
 };
 
@@ -588,8 +623,39 @@ static JSFunctionSpec plugin_functions[] = {
     JS_FS("addHTTPAuth",      js_addHTTPAuth, 2, 0, 0),
     JS_FS("forceUnload",      js_forceUnload, 0, 0, 0),
     JS_FS("createSettings",   js_createSettings, 2, 0, 0),
+    JS_FS("createService",    js_createService, 4, 0, 0),
+    JS_FS("getAuthCredentials",  js_getAuthCredentials, 3, 0, 0),
     JS_FS_END
 };
+
+
+/**
+ *
+ */
+void
+js_plugin_unload(const char *id)
+{
+  JSContext *cx;
+  js_plugin_t *jsp;
+
+  LIST_FOREACH(jsp, &js_plugins, jsp_link)
+    if(!strcmp(jsp->jsp_id, id))
+      break;
+
+  if(jsp == NULL)
+    return;
+
+  fa_unreference(jsp->jsp_ref);
+    
+  cx = js_newctx(NULL);
+  JS_BeginRequest(cx);
+
+  js_plugin_unload0(cx, jsp);
+
+  JS_EndRequest(cx);
+  JS_GC(cx);
+  JS_DestroyContext(cx);
+}
 
 
 /**
@@ -602,13 +668,18 @@ js_plugin_load(const char *id, const char *url, char *errbuf, size_t errlen)
   struct fa_stat fs;
   JSContext *cx;
   js_plugin_t *jsp;
-  JSObject *pobj, *gobj, *confobj;
+  JSObject *pobj, *gobj;
   JSScript *s;
   char path[PATH_MAX];
   jsval val;
+  fa_handle_t *ref;
+  
+  ref = fa_reference(url);
 
-  if((sbuf = fa_quickload(url, &fs, NULL, errbuf, errlen)) == NULL)
+  if((sbuf = fa_quickload(url, &fs, NULL, errbuf, errlen)) == NULL) {
+    fa_unreference(ref);
     return -1;
+  }
 
   cx = js_newctx(err_reporter);
   JS_BeginRequest(cx);
@@ -618,12 +689,13 @@ js_plugin_load(const char *id, const char *url, char *errbuf, size_t errlen)
     if(!strcmp(jsp->jsp_id, id))
       break;
   if(jsp != NULL)
-    js_plugin_unload(cx, jsp);
+    js_plugin_unload0(cx, jsp);
 
   jsp = calloc(1, sizeof(js_plugin_t));
   jsp->jsp_url = strdup(url);
   jsp->jsp_id  = strdup(id);
-
+  jsp->jsp_ref = ref;
+  
   LIST_INSERT_HEAD(&js_plugins, jsp, jsp_link);
 
   gobj = JS_NewObject(cx, &global_class, NULL, NULL);
@@ -640,24 +712,24 @@ js_plugin_load(const char *id, const char *url, char *errbuf, size_t errlen)
 
   JS_DefineFunctions(cx, pobj, plugin_functions);
 
-  /* Plugin config object */
-  confobj = JS_DefineObject(cx, pobj, "config", &plugin_conf_class, NULL, 0);
-
-  JS_SetPrivate(cx, confobj, jsp);
 
   val = STRING_TO_JSVAL(JS_NewStringCopyZ(cx, url));
-  JS_SetProperty(cx, confobj, "url", &val);
+  JS_SetProperty(cx, pobj, "url", &val);
 
   if(!fa_parent(path, sizeof(path), url)) {
     val = STRING_TO_JSVAL(JS_NewStringCopyZ(cx, path));
-    JS_SetProperty(cx, confobj, "path", &val);
+    JS_SetProperty(cx, pobj, "path", &val);
   }
 
-  JS_DefineProperty(cx, confobj, "URIRouting", BOOLEAN_TO_JSVAL(1),
+  JS_DefineProperty(cx, pobj, "URIRouting", BOOLEAN_TO_JSVAL(1),
 		    NULL, jsp_setEnableURIRoute, JSPROP_PERMANENT);
+  jsp->jsp_enable_uri_routing = 1;
 
-  JS_DefineProperty(cx, confobj, "search", BOOLEAN_TO_JSVAL(1),
+  JS_DefineProperty(cx, pobj, "search", BOOLEAN_TO_JSVAL(1),
 		    NULL, jsp_setEnableSearch, JSPROP_PERMANENT);
+  jsp->jsp_enable_search = 1;
+
+  jsp->jsp_protect_object = 1;
 
   s = JS_CompileScript(cx, pobj, sbuf, fs.fs_size, url, 1);
   free(sbuf);
@@ -687,6 +759,7 @@ static int
 js_init(void)
 {
   JSContext *cx;
+  jsval val;
 
   JS_SetCStringsAreUTF8();
 
@@ -698,6 +771,13 @@ js_init(void)
 
   showtimeobj = JS_NewObject(cx, &showtime_class, NULL, NULL);
   JS_DefineFunctions(cx, showtimeobj, showtime_functions);
+
+  val = INT_TO_JSVAL(showtime_get_version_int());
+  JS_SetProperty(cx, showtimeobj, "currentVersionInt", &val);
+
+  val = STRING_TO_JSVAL(JS_NewStringCopyZ(cx, htsversion));
+  JS_SetProperty(cx, showtimeobj, "currentVersionString", &val);
+
 
   JSFunction *fn = JS_DefineFunction(cx, showtimeobj, "RichText",
 				     js_RichText, 1, 0);
@@ -727,7 +807,7 @@ js_fini(void)
 
   for(jsp = LIST_FIRST(&js_plugins); jsp != NULL; jsp = n) {
     n = LIST_NEXT(jsp, jsp_link);
-    js_plugin_unload(cx, jsp);
+    js_plugin_unload0(cx, jsp);
   }
 
   JS_RemoveRoot(cx, &showtimeobj);

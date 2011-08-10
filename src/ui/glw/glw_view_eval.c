@@ -90,8 +90,6 @@ typedef struct sub_cloner {
   prop_t *sc_pending_select;
 
   int sc_entries;
-  int sc_offset;
-  int sc_limit;
 
   prop_t *sc_originating_prop;
 
@@ -133,9 +131,7 @@ typedef struct clone {
   int c_pos;
   prop_t *c_prop;
 
-  char c_visible;      // Set if clone should visible to parent
   char c_evaluated;
-  char c_active;       // Set if widget is visible on screen
 
   prop_t *c_clone_root;
 
@@ -985,14 +981,6 @@ eval_dynamic(glw_t *w, token_t *rpn, struct glw_rctx *rc, prop_t *view)
 
 static void cloner_resequence(sub_cloner_t *sc);
 
-/**
- *
- */
-static int
-clone_is_hidden(sub_cloner_t *sc, clone_t *c)
-{
-  return c->c_pos >= sc->sc_limit + sc->sc_offset || c->c_pos < sc->sc_offset;
-}
 
 
 /**
@@ -1005,7 +993,6 @@ clone_eval(clone_t *c)
   glw_view_eval_context_t n;
   token_t *body = glw_view_clone_chain(sc->sc_cloner_body);
   const glw_class_t *gc = c->c_w->glw_class;
-  c->c_evaluated = 1;
 
   if(gc->gc_freeze != NULL)
     gc->gc_freeze(c->c_w);
@@ -1027,34 +1014,6 @@ clone_eval(clone_t *c)
 
   if(gc->gc_thaw != NULL)
     gc->gc_thaw(c->c_w);
-}
-
-
-/**
- *
- */
-static void
-clone_update(clone_t *c)
-{
-  sub_cloner_t *sc = c->c_sc;
-  int visible;
-
-  visible = !clone_is_hidden(sc, c);
-
-  if(visible == c->c_visible)
-    return;
-  
-  c->c_visible = visible;
-
-  if(visible) {
-
-    if(!c->c_evaluated)
-      clone_eval(c);
-
-    glw_unhide(c->c_w);
-  } else {
-    glw_hide(c->c_w);
-  }
 }
 
 
@@ -1199,7 +1158,7 @@ cloner_add_child0(sub_cloner_t *sc, prop_t *p, prop_t *before,
   if(flags & PROP_ADD_SELECTED && parent->glw_class->gc_select_child != NULL)
     parent->glw_class->gc_select_child(parent, c->c_w, NULL);
 
-  clone_update(c);
+  clone_eval(c);
 }
 
 
@@ -1323,10 +1282,11 @@ cloner_del_child(sub_cloner_t *sc, prop_t *p, glw_t *parent)
     return;
   }
 
-  // It must be in the pending list
-  gpsp = prop_tag_clear(p, &sc->sc_pending);
   if(sc->sc_pending_select == p)
     sc->sc_pending_select = NULL;
+
+  if((gpsp = prop_tag_clear(p, &sc->sc_pending)) == NULL)
+    return;
 
   assert(gpsp->gpsp_prop == p);
   prop_ref_dec(p);
@@ -1639,16 +1599,13 @@ prop_callback_counter(void *opaque, prop_event_t event, ...)
   t = prop_callback_alloc_token(gps, TOKEN_INT);
   t->propsubr = gps;
   t->t_int = sc->sc_entries;
+
   rpn = gps->gps_rpn;
 
-  if(t != NULL) {
-      
-    if(gps->gps_token != NULL) {
-      glw_view_token_free(gps->gps_token);
-      gps->gps_token = NULL;
-    }
-    gps->gps_token = t;
-  }
+  if(gps->gps_token != NULL)
+    glw_view_token_free(gps->gps_token);
+
+  gps->gps_token = t;
 
   if(rpn != NULL) 
     eval_dynamic(gps->gps_widget, rpn, NULL, gps->gps_prop_view);
@@ -2095,16 +2052,11 @@ glwf_cloner(glw_view_eval_context_t *ec, struct token *self,
   token_t *a = argc > 0 ? argv[0] : NULL;
   token_t *b = argc > 1 ? argv[1] : NULL;
   token_t *c = argc > 2 ? argv[2] : NULL;
-  token_t *d = argc > 3 ? argv[3] : NULL;
-  token_t *e = argc > 4 ? argv[4] : NULL;
   glw_prop_sub_pending_t *gpsp;
   int f;
   const glw_class_t *cl;
   glw_t *parent = ec->w;
   glw_t *w;
-
-  if(argc < 3)
-    return glw_view_seterr(ec->ei, self, "Cloner not enough arguments");
 
   if(parent == NULL) 
     return glw_view_seterr(ec->ei, self, 
@@ -2155,9 +2107,6 @@ glwf_cloner(glw_view_eval_context_t *ec, struct token *self,
   if(a->type == TOKEN_DIRECTORY) {
     sub_cloner_t *sc = (sub_cloner_t *)a->propsubr;
     sc->sc_anchor = self->t_extra;
-
-    sc->sc_offset = d ? token2int(d) : 0;
-    sc->sc_limit  = e ? token2int(e) : INT_MAX;
 
     cloner_cleanup(sc);
 
@@ -2927,86 +2876,249 @@ glwf_scurve_dtor(struct token *self)
 
 
 /**
- * Float to string
+ *
  */
-static int 
-glwf_float2str(glw_view_eval_context_t *ec, struct token *self,
-	       token_t **argv, unsigned int argc)
+static int
+fmt_add_string(char *out, int len, const char *str)
 {
-  token_t *a = argv[0];
-  token_t *b = argv[1];
-  token_t *r;
-  float value;
-  char buf[30];
-  int prec;
-
-  if((a = token_resolve(ec, a)) == NULL)
-    return -1;
-  if((b = token_resolve(ec, b)) == NULL)
-    return -1;
-
-  switch(a->type) {
-  case TOKEN_FLOAT:
-    value = a->t_float;
-    break;
-  case TOKEN_INT:
-    value = a->t_int;
-    break;
-  default:
-    r = eval_alloc(self, ec, TOKEN_STRING);
-    r->t_rstring = rstr_alloc("0");
-    eval_push(ec, r);
-    return 0;
+  char c;
+  while((c = *str++)) {
+    if(out)
+      out[len] = c;
+    len++;
   }
-  
-  prec = 2;
-  if(b != NULL && b->type == TOKEN_FLOAT)
-    prec = b->t_float;
-  if(b != NULL && b->type == TOKEN_INT)
-    prec = b->t_int;
-
-  snprintf(buf, sizeof(buf), "%.*f", prec, value);
-
-  r = eval_alloc(self, ec, TOKEN_STRING);
-  r->t_rstring = rstr_alloc(buf);
-  eval_push(ec, r);
-  return 0;
+  return len;
 }
 
 
 /**
- * Int to string
+ *
+ */
+static void
+build_fmt(char *fmt, int zeropad, int fl1, int fl2, char type)
+{
+  int fmtptr = 1;
+
+  fmt[0] = '%';
+  if(zeropad)
+    fmt[fmtptr++] = '0';
+  if(fl1 != -1)
+    fmt[fmtptr++] = fl1 + '0';
+  if(fl2 != -1) {
+    fmt[fmtptr++] = '.';
+    fmt[fmtptr++] = fl2 + '0';
+  }
+  fmt[fmtptr++] = type;
+  fmt[fmtptr] = 0;
+}
+
+
+/**
+ *
+ */
+static int
+fmt_add_int(char *out, int len, int v, int zeropad, int fl1, int fl2)
+{
+  char fmt[32];
+  char buf[64];
+
+  build_fmt(fmt, zeropad, fl1, fl2, 'd');
+
+  snprintf(buf, sizeof(buf), fmt, v);
+
+  size_t l = strlen(buf);
+
+  if(out)
+    memcpy(out + len, buf, l);
+
+  return len + l;
+}
+
+
+/**
+ *
+ */
+static int
+fmt_add_float(char *out, int len, float v, int zeropad, int fl1, int fl2)
+{
+  char fmt[32];
+  char buf[64];
+
+  build_fmt(fmt, zeropad, fl1, fl2, 'f');
+
+  snprintf(buf, sizeof(buf), fmt, v);
+
+  size_t l = strlen(buf);
+
+  if(out)
+    memcpy(out + len, buf, l);
+
+  return len + l;
+}
+
+
+/**
+ * String formating internal
+ */
+static size_t
+dofmt(char *out, const char *fmt, token_t **argv, unsigned int argc)
+{
+  size_t len = 0;
+  char c;
+  int argptr = 0;
+
+  while((c = *fmt) != 0) {
+    if(c != '%') {
+      if(out) 
+	out[len] = c;
+      len++;
+      fmt++;
+    } else {
+      int zeropad = 0;
+      int off = 1;
+      int fl1 = -1;
+      int fl2 = -1;
+
+      if(fmt[off] == '0') {
+	zeropad = 1;
+	off++;
+      }
+      while(fmt[off] >= '0' && fmt[off] <= '9') {
+	if(fl1 == -1)
+	  fl1 = 0;
+	fl1 = fl1 * 10 + fmt[off++] - '0';
+      }
+
+      if(fmt[off] == '.')  {
+	off++;
+	while(fmt[off] >= '0' && fmt[off] <= '9') {
+	  if(fl2 == -1)
+	    fl2 = 0;
+	  fl2 = fl2 * 10 + fmt[off++] - '0';
+	}
+      }
+
+      int type = fmt[off];
+      if(type == 0)
+	break;
+      off++;
+      fmt += off;
+
+      if(type == '%') {
+	if(out) 
+	  out[len] = '%';
+	len++;
+	continue;
+      }
+
+      if(argptr == argc)
+	continue;
+
+      token_t *arg = argv[argptr];
+      argptr++;
+      int i32;
+      float flt;
+
+      switch(type) {
+      case 'd':
+	switch(arg->type) {
+	case TOKEN_INT:
+	  i32 = arg->t_int;
+	  break;
+	case TOKEN_FLOAT:
+	  i32 = arg->t_float;
+	  break;
+	default:
+	  i32 = 0;
+	  break;
+	}
+	len = fmt_add_int(out, len, i32, zeropad, fl1, fl2);
+	break;
+
+      case 'f':
+	switch(arg->type) {
+	case TOKEN_INT:
+	  flt = arg->t_int;
+	  break;
+	case TOKEN_FLOAT:
+	  flt = arg->t_float;
+	  break;
+	default:
+	  flt = 0;
+	  break;
+	}
+	len = fmt_add_float(out, len, flt, zeropad, fl1, fl2);
+	break;
+
+      default:
+	switch(arg->type) {
+	case TOKEN_INT:
+	  len = fmt_add_int(out, len, arg->t_int, zeropad, fl1, fl2);
+	  break;
+	case TOKEN_FLOAT:
+	  len = fmt_add_float(out, len, arg->t_float, zeropad, fl1, fl2);
+	  break;
+	case TOKEN_STRING:
+	  len = fmt_add_string(out, len, rstr_get(arg->t_rstring));
+	  break;
+	case TOKEN_LINK:
+	  len = fmt_add_string(out, len, rstr_get(arg->t_link_rtitle));
+	  break;
+	default:
+	  break;
+	}
+	break;
+      }
+    }
+  }
+  return len;
+
+}
+
+/**
+ * String formating
  */
 static int 
-glwf_int2str(glw_view_eval_context_t *ec, struct token *self,
-	     token_t **argv, unsigned int argc)
+glwf_fmt(glw_view_eval_context_t *ec, struct token *self,
+	 token_t **argv, unsigned int argc)
 {
   token_t *a = argv[0];
   token_t *r;
-  int value;
-  char buf[30];
+  int i;
+  token_t **res_args;
+  unsigned int num_res_args;
+
+  if(argc < 1) 
+    return glw_view_seterr(ec->ei, self,
+			    "fmt() requires at least one arguments");
   
   if((a = token_resolve(ec, a)) == NULL)
     return -1;
   
-  switch(a->type) {
-    case TOKEN_FLOAT:
-      value = a->t_float;
-      break;
-    case TOKEN_INT:
-      value = a->t_int;
-      break;
-    default:
-      value = 0;
-      break;
-  }  
-  
-  snprintf(buf, sizeof(buf), "%d", value);
+  if(a->type != TOKEN_STRING)
+    return glw_view_seterr(ec->ei, a,
+			   "fmt() first argument is not a string");
+
+  num_res_args = argc - 1;
+  if(num_res_args > 0) {
+    res_args = alloca(sizeof(token_t *) * num_res_args);
+    for(i = 0; i < num_res_args; i++)
+      if((res_args[i] = token_resolve(ec, argv[i+1])) == NULL)
+	return -1;
+
+  } else {
+    res_args = NULL;
+  }
+
+  const char *str = rstr_get(a->t_rstring);
+  size_t len = dofmt(NULL, str, res_args, num_res_args);
   r = eval_alloc(self, ec, TOKEN_STRING);
-  r->t_rstring = rstr_alloc(buf);
+  r->t_rstring  = rstr_allocl(NULL, len);
+  dofmt(rstr_data(r->t_rstring), str, res_args, num_res_args);
   eval_push(ec, r);
   return 0;
 }
+
 
 /**
  *
@@ -3741,6 +3853,16 @@ glwf_browse(glw_view_eval_context_t *ec, struct token *self,
   return 0;
 }
 
+typedef struct {
+  prop_t *title;
+  setting_t *s;
+
+} glwf_setting_t;
+
+
+
+
+
 /**
  *
  */
@@ -3756,8 +3878,13 @@ glwf_null_ctor(struct token *self)
 static void
 glwf_setting_dtor(struct token *self)
 {
-  if(self->t_extra != NULL)
-    setting_destroy(self->t_extra);
+  glwf_setting_t *gs = self->t_extra;
+  if(gs == NULL)
+    return;
+
+  setting_destroy(gs->s);
+  prop_destroy(gs->title);
+  free(gs);
 }
 
 
@@ -3778,13 +3905,11 @@ glw_settingInt(glw_view_eval_context_t *ec, struct token *self,
   token_t *prop  = argv[7];
 
   glw_root_t *gr = ec->w->glw_root;
+  glwf_setting_t *gs = self->t_extra;
 
-  if(self->t_extra != NULL)
-    return 0;
 
-  if(resolve_property_name(ec, prop, 0))
+  if((title = token_resolve(ec, title)) == NULL)
     return -1;
-
   if((def  = token_resolve(ec, def)) == NULL)
     return -1;
   if((unit = token_resolve(ec, unit)) == NULL)
@@ -3804,11 +3929,18 @@ glw_settingInt(glw_view_eval_context_t *ec, struct token *self,
   
   if(unit->type != TOKEN_STRING)
     return glw_view_seterr(ec->ei, unit, "Unit argument is not a string");
+
   
-  if(self->t_extra == NULL) {
-    self->t_extra = 
+  if(gs == NULL) {
+    if(resolve_property_name(ec, prop, 0))
+      return -1;
+
+    gs = malloc(sizeof(glwf_setting_t));
+    gs->title = prop_create_root(NULL);
+
+    gs->s = 
       settings_create_int(gr->gr_settings, rstr_get(id->t_rstring),
-			rstr_get(title->t_rstring), 
+			  gs->title, 
 			  token2int(def), gr->gr_settings_store, 
 			  token2int(min), token2int(max), token2int(step),
 			  NULL, NULL,
@@ -3816,8 +3948,11 @@ glw_settingInt(glw_view_eval_context_t *ec, struct token *self,
 			  gr->gr_courier,
 			  glw_settings_save, gr);
     
-    prop_link(settings_get_value(self->t_extra), prop->t_prop);
+    prop_link(settings_get_value(gs->s), prop->t_prop);
+    self->t_extra = gs;
   }
+  prop_set_rstring(gs->title, title->t_rstring);
+
   ec->dynamic_eval |= GLW_VIEW_DYNAMIC_KEEP;
   return 0;
 }
@@ -3835,11 +3970,11 @@ glw_settingBool(glw_view_eval_context_t *ec, struct token *self,
   token_t *prop  = argv[3];
 
   glw_root_t *gr = ec->w->glw_root;
+  glwf_setting_t *gs = self->t_extra;
 
-  if((def  = token_resolve(ec, def)) == NULL)
+  if((title = token_resolve(ec, title)) == NULL)
     return -1;
-
-  if(resolve_property_name(ec, prop, 0))
+  if((def  = token_resolve(ec, def)) == NULL)
     return -1;
 
   if(title->type != TOKEN_STRING)
@@ -3848,18 +3983,26 @@ glw_settingBool(glw_view_eval_context_t *ec, struct token *self,
   if(id->type != TOKEN_STRING)
     return glw_view_seterr(ec->ei, id, "Second argument is not a string");
 
-  if(self->t_extra == NULL) {
-    self->t_extra = 
+  if(gs == NULL) {
+    if(resolve_property_name(ec, prop, 0))
+      return -1;
+
+    gs = malloc(sizeof(glwf_setting_t));
+    gs->title = prop_create_root(NULL);
+
+    gs->s = 
       settings_create_bool(gr->gr_settings, rstr_get(id->t_rstring),
-			   rstr_get(title->t_rstring), 
+			   gs->title,
 			   token2int(def), gr->gr_settings_store, 
 			   NULL, NULL,
 			   SETTINGS_INITIAL_UPDATE,
 			   gr->gr_courier,
 			   glw_settings_save, gr);
     
-    prop_link(settings_get_value(self->t_extra), prop->t_prop);
+    prop_link(settings_get_value(gs->s), prop->t_prop);
+    self->t_extra = gs;
   }
+  prop_set_rstring(gs->title, title->t_rstring);
 
   ec->dynamic_eval |= GLW_VIEW_DYNAMIC_KEEP;
   return 0;
@@ -4431,15 +4574,12 @@ glwf_join(glw_view_eval_context_t *ec, struct token *self,
   return 0;
 }
 
-    
-
-
 /**
  *
  */
 static const token_func_t funcvec[] = {
   {"widget", 2, glwf_widget},
-  {"cloner", -1, glwf_cloner},
+  {"cloner", 3, glwf_cloner},
   {"space", 1, glwf_space},
   {"onEvent", -1, glwf_onEvent},
   {"navOpen", -1, glwf_navOpen},
@@ -4453,8 +4593,6 @@ static const token_func_t funcvec[] = {
   {"changed", -1, glwf_changed, glwf_changed_ctor, glwf_changed_dtor},
   {"iir", -1, glwf_iir},
   {"scurve", 2, glwf_scurve, glwf_scurve_ctor, glwf_scurve_dtor},
-  {"float2str", 2, glwf_float2str},
-  {"int2str", 1, glwf_int2str},
   {"translate", -1, glwf_translate},
   {"strftime", 2, glwf_strftime},
   {"isSet", 1, glwf_isset},
@@ -4495,6 +4633,7 @@ static const token_func_t funcvec[] = {
   {"int", 1,glwf_int},
   {"clamp", 3, glwf_clamp},
   {"join", -1, glwf_join},
+  {"fmt", -1, glwf_fmt},
 };
 
 

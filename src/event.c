@@ -162,6 +162,8 @@ static struct strtab actionnames[] = {
   { "AudioTrack",            ACTION_CYCLE_AUDIO },
   { "SubtitleTrack",         ACTION_CYCLE_SUBTITLE },
 
+  { "ReloadData",            ACTION_RELOAD_DATA },
+
 };
 
 
@@ -426,7 +428,9 @@ event_dispatch(event_t *e)
   } else if(event_is_action(e, ACTION_NAV_BACK) ||
 	    event_is_action(e, ACTION_NAV_FWD) ||
 	    event_is_action(e, ACTION_HOME) ||
+	    event_is_action(e, ACTION_RELOAD_DATA) ||
 	    event_is_type(e, EVENT_OPENURL)) {
+
     event_to_prop(prop_get_by_name(PNVEC("global", "nav", "eventsink"),
 				   1, NULL), e);
 

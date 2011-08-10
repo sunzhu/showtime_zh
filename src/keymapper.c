@@ -93,6 +93,7 @@ static const keymap_defmap_t default_keymap[] = {
   { ACTION_ZOOM_UI_DECR,           "Ctrl+minus"},
 
   { ACTION_RELOAD_UI,              "F5"},
+  { ACTION_RELOAD_DATA,            "Shift+F5"},
   { ACTION_FULLSCREEN_TOGGLE,      "F11"},
 
   { ACTION_PLAYPAUSE,              "MediaPlayPause"},
@@ -354,19 +355,20 @@ keymapper_resolve(const char *str)
  *
  */
 static keymap_t *
-keymapper_create(prop_t *settingsparent, const char *name, const char *title,
+keymapper_create(prop_t *settingsparent, const char *name, prop_t *title,
 		 const keymap_defmap_t *def)
 {
   keymap_t *km;
-  const char *desc = "Configure mapping of keyboard and remote controller keys";
+  prop_t *desc = _p("Configure mapping of keyboard and remote controller keys");
   km = calloc(1, sizeof(keymap_t));
 
   LIST_INIT(&km->km_entries);
 
   km->km_name = strdup(name);
-  km->km_settings = prop_create(settings_add_dir(settingsparent, title,
-						 "keymap", NULL, desc),
-				"model");
+  km->km_settings =
+    prop_create(settings_add_dir(settingsparent, title,
+				 "keymap", NULL, desc),
+		"model");
 
   keymapper_create_entries(km, def);
   return km;
@@ -380,5 +382,5 @@ void
 keymapper_init(void)
 {
   hts_mutex_init(&km_mutex);
-  global_km = keymapper_create(NULL, "global", "Keymapper", default_keymap);
+  global_km = keymapper_create(NULL, "global", _p("Keymapper"), default_keymap);
 }

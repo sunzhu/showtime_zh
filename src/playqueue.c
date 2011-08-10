@@ -561,7 +561,8 @@ siblings_populate(void *opaque, prop_event_t event, ...)
 {
   prop_t *p;
   playqueue_entry_t *pqe;
-
+  prop_vec_t *pv;
+  int i;
   va_list ap;
   va_start(ap, event);
 
@@ -569,6 +570,12 @@ siblings_populate(void *opaque, prop_event_t event, ...)
   case PROP_ADD_CHILD:
     p = va_arg(ap, prop_t *);
     add_from_source(p, NULL);
+    break;
+
+  case PROP_ADD_CHILD_VECTOR:
+    pv = va_arg(ap, prop_vec_t *);
+    for(i = 0; i < prop_vec_len(pv); i++)
+      add_from_source(prop_vec_get(pv, i), NULL);
     break;
 
  case PROP_ADD_CHILD_BEFORE:
@@ -1102,6 +1109,10 @@ player_thread(void *aux)
     mp_set_url(mp, pqe->pqe_url);
     pqe_current = pqe;
     update_pq_meta();
+
+    if(playqueue_advance0(pqe, 0) == NULL && playqueue_source_sub != NULL)
+      prop_want_more_childs(playqueue_source_sub);
+
     hts_mutex_unlock(&playqueue_mutex);
 
     p = prop_get_by_name(PNVEC("self", "playing"), 1,

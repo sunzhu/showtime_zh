@@ -34,6 +34,8 @@ struct pixmap;
 #define TR_CODE_BOLD_OFF   0x7f000006
 #define TR_CODE_ITALIC_ON  0x7f000007
 #define TR_CODE_ITALIC_OFF 0x7f000008
+#define TR_CODE_HR         0x7f000009
+#define TR_CODE_FONT_RESET 0x7f00000a
 
 #define TR_CODE_ALPHA         0x7f000100  // Low 8 bit is alpha
 #define TR_CODE_SHADOW_ALPHA  0x7f000200  // Low 8 bit is alpha
@@ -42,6 +44,9 @@ struct pixmap;
 #define TR_CODE_SIZE_PX    0x7f010000  // Low 16 bit is the size in pixels
 #define TR_CODE_SHADOW     0x7f020000  // Low 16 bit is displacement in pixels
 #define TR_CODE_OUTLINE    0x7f030000  // Low 16 bit is thickness in pixels
+#define TR_CODE_FONT_SIZE  0x7f040000  /* HTML kinda legacy size 
+					  1: smallest, 7: biggest
+				       */
 
 
 #define TR_CODE_COLOR      0x7e000000  // Low 24 bit is BGR

@@ -26,6 +26,18 @@
 #include <htsmsg/htsmsg_store.h>
 #include <arch/threads.h>
 
+// NLS
+
+
+#define _(string) nls_get_rstring(string)
+#define _p(string) nls_get_prop(string)
+
+struct rstr;
+struct rstr *nls_get_rstring(const char *string);
+
+struct prop;
+struct prop *nls_get_prop(const char *string);
+
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
@@ -38,7 +50,13 @@
 
 void showtime_shutdown(int retcode);
 
+uint32_t showtime_get_version_int(void);
+
+uint32_t showtime_parse_version_int(const char *str);
+
 extern int64_t showtime_get_ts(void);
+
+extern const char *showtime_get_system_type(void);
 
 extern uint64_t arch_get_seed(void);
 
@@ -55,7 +73,8 @@ extern uint64_t arch_get_seed(void);
 #define CONTENT_DVD      7
 #define CONTENT_IMAGE    8
 #define CONTENT_ALBUM    9
-#define CONTENT_MAX      9 /* Update me! */
+#define CONTENT_PLUGIN   10
+#define CONTENT_MAX      10 /* Update me! */
 
 /**
  * Returns a "type" property name for the given CONTENT_..
@@ -74,6 +93,7 @@ static inline const char *content2type (int ctype) {
     [CONTENT_DVD]      = "dvd",
     [CONTENT_IMAGE]    = "image",
     [CONTENT_ALBUM]    = "album",
+    [CONTENT_PLUGIN]   = "plugin",
   };
 
   if (ctype < 0 || ctype > CONTENT_MAX)
@@ -150,7 +170,7 @@ void *shutdown_hook_add(void (*fn)(void *opaque, int exitcode), void *opaque,
 #define SHOWTIME_EXIT_POWEROFF 11
 
 extern char *showtime_cache_path;
-extern char *showtime_settings_path;
+extern char *showtime_persistent_path;
 
 
 /* From version.c */

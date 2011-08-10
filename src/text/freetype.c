@@ -229,6 +229,29 @@ face_close(FT_Stream stream)
 /**
  *
  */
+static void
+remove_face_alias(int family_id)
+{
+  int i;
+  face_t *f;
+  TAILQ_FOREACH(f, &faces, link) {
+    for(i = 1; f->family_id_vec[i] != 0; i++) {
+      if(f->family_id_vec[i] == family_id) {
+	while(1) {
+	  f->family_id_vec[i] = f->family_id_vec[i+1];
+	  if(f->family_id_vec[i] == 0)
+	    break;
+	  i++;
+	}
+      }
+    }
+  }
+}
+
+
+/**
+ *
+ */
 static face_t *
 face_create_epilogue(face_t *face, const char *source)
 {
@@ -248,6 +271,9 @@ face_create_epilogue(face_t *face, const char *source)
   face->family_id_vec[0] = family_get(family);
   
   FT_Select_Charmap(face->face, FT_ENCODING_UNICODE);
+
+  remove_face_alias(family_get(family));
+
   TAILQ_INSERT_TAIL(&faces, face, link);
   return face;
 }
@@ -326,7 +352,7 @@ face_create_from_memory(const void *ptr, size_t len)
  *
  */
 static int
-face_resovle(int uc, uint8_t style, int family_id,
+face_resolve(int uc, uint8_t style, int family_id,
 	     char *urlbuf, size_t urllen)
 {
 #if ENABLE_LIBFONTCONFIG
@@ -350,7 +376,7 @@ face_resovle(int uc, uint8_t style, int family_id,
 static int
 face_is_family(face_t *f, int family_id)
 {
-  int i;
+  int i = 0;
   while(f->family_id_vec[i] != 0)
     if(f->family_id_vec[i++] == family_id)
       return 1;
@@ -404,7 +430,7 @@ face_find(int uc, uint8_t style, int family_id)
        FT_Get_Char_Index(f->face, uc))
       return f;
 
-  if(!face_resovle(uc, style, family_id, url, sizeof(url))) {
+  if(!face_resolve(uc, style, family_id, url, sizeof(url))) {
     TAILQ_FOREACH(f, &faces, link)
       if(f->url != NULL && !strcmp(f->url, url))
 	break;
@@ -578,6 +604,12 @@ typedef struct line {
   int descender;
   int shadow;
   int outline;
+  uint32_t color;
+  enum {
+    LINE_TYPE_TEXT = 0,
+    LINE_TYPE_HR,
+
+  } type;
 } line_t;
 
 
@@ -594,6 +626,18 @@ typedef struct item {
 } item_t;
 
 
+static const float legacy_size_mult[16] = {
+  0,
+  0.5,
+  0.75,
+  1.0,
+  1.25,
+  1.5,
+  2.0,
+  3.0
+};
+
+
 /**
  *
  */
@@ -603,7 +647,8 @@ text_render0(const uint32_t *uc, const int len,
 	     int global_alignment, int max_width, int max_lines,
 	     const char *family)
 {
-  int family_id = family_get(family ?: "Arial");
+  const int default_family_id = family_get(family ?: "Arial");
+  int family_id = default_family_id;
   pixmap_t *pm;
   FT_UInt prev = 0;
   FT_BBox bbox;
@@ -624,7 +669,7 @@ text_render0(const uint32_t *uc, const int len,
   int color_output = 0;
 
   int current_size = default_size * scale;
-  uint32_t current_color = 0xff;
+  uint32_t current_color = 0xffffff;
   uint32_t current_alpha = 0xff000000;
 
   int current_outline = 0;
@@ -661,6 +706,7 @@ text_render0(const uint32_t *uc, const int len,
 
     if(li == NULL) {
       li = alloca(sizeof(line_t));
+      li->type = LINE_TYPE_TEXT;
       li->start = -1;
       li->count = 0;
       li->xspace = 0;
@@ -678,6 +724,19 @@ text_render0(const uint32_t *uc, const int len,
 
     case '\n':
     case TR_CODE_NEWLINE:
+      li = NULL;
+      continue;
+
+    case TR_CODE_HR:
+      li = alloca(sizeof(line_t));
+      li->type = LINE_TYPE_HR;
+      li->start = -1;
+      li->count = 0;
+      li->xspace = 0;
+      li->alignment = 0;
+      li->height = 4;
+      li->color = current_color | current_alpha;
+      TAILQ_INSERT_TAIL(&lq, li, link);
       li = NULL;
       continue;
       
@@ -711,6 +770,13 @@ text_render0(const uint32_t *uc, const int len,
 
     case TR_CODE_BOLD_OFF:
       style &= ~TR_STYLE_BOLD;
+      break;
+
+    case TR_CODE_FONT_RESET:
+      current_size = default_size * scale;
+      current_color = 0xffffff;
+      current_alpha = 0xff000000;
+      family_id = default_family_id;
       break;
 
     case TR_CODE_SIZE_PX ... TR_CODE_SIZE_PX + 0xffff:
@@ -756,6 +822,10 @@ text_render0(const uint32_t *uc, const int len,
       current_outline = 64 * (uc[i] & 0xffff) * scale;
       break;
 
+    case TR_CODE_FONT_SIZE + 1 ... TR_CODE_FONT_SIZE + 7:
+      current_size = legacy_size_mult[uc[i] & 0xf] * default_size * scale;
+      break;
+
     default:
       break;
     }
@@ -798,6 +868,9 @@ text_render0(const uint32_t *uc, const int len,
 
     int w = 0;
 
+    if(li->type == LINE_TYPE_HR)
+      continue;
+
     for(j = 0; j < li->count; j++) {
 
       if(j == 0 && (g = items[li->start + j].g) != NULL) {
@@ -823,6 +896,7 @@ text_render0(const uint32_t *uc, const int len,
 
 	if(k > 0) {
 	  lix = alloca(sizeof(line_t));
+	  lix->type = LINE_TYPE_TEXT;
 	  lix->start = li->start + k;
 	  lix->count = li->count - k;
 	  lix->xspace = 0;
@@ -882,7 +956,6 @@ text_render0(const uint32_t *uc, const int len,
   int target_width  = siz_x / 64 + 3; /// +3 ???
   int target_height = 0;
 
-  int origin_y = 0;
   TAILQ_FOREACH(li, &lq, link) {
 
     int height = 0;
@@ -890,34 +963,45 @@ text_render0(const uint32_t *uc, const int len,
     int shadow = 0;
     int outline = 0;
 
-    for(i = li->start; i < li->start + li->count; i++) {
-      glyph_t *g = items[i].g;
-      FT_Face f = g->face->face;
-      height = MAX(g->size, height);
-      descender = MIN(descender, 64 * f->descender * g->size / f->units_per_EM);
-      shadow = MAX(items[i].shadow, shadow);
-      outline = MAX(items[i].outline, outline);
-    }
-    li->height = height;
-    li->descender = descender;
-    li->shadow = shadow;
-    li->outline = outline;
+    switch(li->type) {
 
-    target_height += li->height;
+    case LINE_TYPE_TEXT:
 
-    if(max_lines > 1 && li->alignment == TR_ALIGN_JUSTIFIED) {
-      int spaces = 0;
-      int spill = siz_x - li->width;
       for(i = li->start; i < li->start + li->count; i++) {
-	if(items[i].code == ' ')
-	  spaces++;
+	glyph_t *g = items[i].g;
+	FT_Face f = g->face->face;
+	height = MAX(g->size, height);
+	descender = MIN(descender,
+			64 * f->descender * g->size / f->units_per_EM);
+	shadow = MAX(items[i].shadow, shadow);
+	outline = MAX(items[i].outline, outline);
       }
-      if((float)spill / li->width < 0.2)
-	li->xspace = spaces ? spill / spaces : 0;
+
+      li->height = height;
+      li->descender = descender;
+      li->shadow = shadow;
+      li->outline = outline;
+
+      if(max_lines > 1 && li->alignment == TR_ALIGN_JUSTIFIED) {
+	int spaces = 0;
+	int spill = siz_x - li->width;
+	for(i = li->start; i < li->start + li->count; i++) {
+	  if(items[i].code == ' ')
+	    spaces++;
+	}
+	if((float)spill / li->width < 0.2)
+	  li->xspace = spaces ? spill / spaces : 0;
+      }
+      break;
+
+    case LINE_TYPE_HR:
+      break;
     }
+    
+    target_height += li->height;
   }
 
-  origin_y = target_height * 64;
+  int origin_y = target_height * 64;
   start_x = -bbox.xMin;
   start_y = 0;
 
@@ -961,6 +1045,69 @@ text_render0(const uint32_t *uc, const int len,
   pen_y = 0;
 
   TAILQ_FOREACH(li, &lq, link) {
+
+    pen_y -= li->height * 64;
+
+    if(li->type == LINE_TYPE_HR) {
+      int ypos = 0;
+      ypos = target_height - (pen_y + li->height * 64);
+			      
+      ypos = ypos >> 6;
+      ypos = MIN(target_height, MAX(0, ypos));
+
+      
+      switch(pm->pm_pixfmt) {
+      case PIX_FMT_BGR32: 
+	{
+	  uint32_t *yptr = (uint32_t *)(pm->pm_pixels + ypos * pm->pm_linesize);
+	  int i;
+	  for(i = 0; i < pm->pm_width; i++)
+	    *yptr++ = li->color;
+
+	  yptr = (uint32_t *)(pm->pm_pixels + (ypos + 1) * pm->pm_linesize);
+	  uint32_t color;
+
+	  uint8_t r = li->color;
+	  uint8_t g = li->color >> 8;
+	  uint8_t b = li->color >> 16;
+	  uint8_t a = li->color >> 24;
+
+	  color = (a << 24) | ((b >> 1) << 16) |
+	    ((g >> 1) << 8) | (r >> 1);
+	  
+	  for(i = 0; i < pm->pm_width; i++)
+	    *yptr++ = color;
+	}
+	break;
+	
+      case PIX_FMT_Y400A:
+	{
+	  uint8_t *yptr = pm->pm_pixels + ypos * pm->pm_linesize;
+	  int i;
+	  uint8_t r = li->color;
+	  uint8_t a = li->color >> 24;
+	  for(i = 0; i < pm->pm_width; i++) {
+	    *yptr++ = li->color;
+	    *yptr++ = li->color >> 24;
+	  }
+
+	  yptr = pm->pm_pixels + (ypos + 1) * pm->pm_linesize;
+
+	  r = li->color >> 1;
+	  
+	  for(i = 0; i < pm->pm_width; i++) {
+	    *yptr++ = r;
+	    *yptr++ = a;
+	  }
+	}
+	break;
+	
+      default:
+	break;
+      }
+      continue;
+    }
+
     pen_x = 0;
     
     switch(li->alignment) {
@@ -975,7 +1122,6 @@ text_render0(const uint32_t *uc, const int len,
       break;
     }
 
-    pen_y -= li->height * 64;
     for(i = li->start; i < li->start + li->count; i++) {
 
       g = items[i].g;
