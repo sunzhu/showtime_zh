@@ -1,567 +1,574 @@
-language: Italian
-native: Italiano
-maintainer: Red Squirrel <iam@redsquirrel.tk>
+language: Turkish
+native: Türkçe
+maintainer: CoDeR_WOLCER
 #
 # ./glwthemes/mono/commandmenu/cmd_root.view
 #
 id: Audio settings
-msg: Impostazioni Audio
+msg: Ses Ayarları
 
 id: Languages
-msg: Linguaggio
+msg: Dil
 
 id: Settings
-msg: Impostazioni
+msg: Ayarlar
 
 id: Subtitle settings
-msg: Impostazioni dei sottotitoli
+msg: Altyazı Ayarları
 
 id: Video settings
-msg: Impostazioni video
+msg: Video Ayarları
 
 #
 # ./glwthemes/mono/directoryviews/infobox/audio.view
 #
 id: Added by: %s
-msg: Aggiunto da: %s
+msg: Added by: %s
 
 #
 # ./glwthemes/mono/include/buttons.view
 #
 id: Off
-msg: Disattiva
+msg: Kapalı
 
 id: On
-msg: Attiva
+msg: Açık
 
 #
 # ./glwthemes/mono/pages/about.view
 #
 id: Avail system RAM: %d kB
-msg: RAM disponibile: %d kB
+msg: Mevcut system RAM: %d kB
 
 id: Detected CPUs: %d
-msg: CPU rilevate: %d
+msg: kulanım CPUs: %d
 
 id: Display info
-msg: Informazioni di visualizzazione
+msg: Ekran bilgileri
 
 id: Framerate: %.2f Hz
-msg: Framerate: %.2f Hz
+msg: Framerate %.2f Hz
 
 id: GPU: %s
 msg: GPU: %s
 
 id: Height: %d px
-msg: Altezza: %d px
+msg: yükseklik: %d px
 
 id: Renderer: %s
 msg: Renderer: %s
 
 id: System info
-msg: Informazioni di sistema
+msg: System bilgi
 
 id: Total system RAM: %d kB
-msg: RAM totale: %d kB
+msg: Toplam sistem RAM: %d kB
 
 id: Version: %s
-msg: Versione: %s
+msg: Version: %s
 
 id: Width: %d px
-msg: Larghezza: %d px
+msg: Genişlik: %d px
 
 id: Windowmanager: %s
-msg: Gestore finestre: %s
+msg: Window manager: %s
 
 #
 # ./glwthemes/mono/pages/about_top.view
 #
 id: About
-msg: Informazioni
+msg: hakkında
 
 #
 # ./glwthemes/mono/pages/home_top.view
 #
 id: Home
-msg: Home
+msg: Ev
 
 #
 # ./glwthemes/mono/pages/openerror.view
 #
 id: Unable to open resource
-msg: Impossibile aprire la risorsa
+msg: Unable to open resource
 
 #
 # ./glwthemes/mono/pages/openerror_top.view
 #
 id: Page load error
-msg: Errore di caricamento pagina
+msg: Sayfa açılamadı
 
 #
 # ./glwthemes/mono/pages/playqueue_top.view
 #
 id: Playqueue
-msg: Coda di riproduzione
+msg: Playqueue
 
 #
 # ./glwthemes/mono/playdecks/dvd.view
 #
 id: Chapter %d / %d
-msg: Capitolo %d / %d
+msg: Bölüm %d / %d
 
 id: Title %d / %d
-msg: Titolo %d / %d
+msg: Başlık %d / %d
 
 #
 # ./glwthemes/mono/playdecks/tracks.view
 #
 id: Track %d / %d
-msg: Traccia %d / %d
+msg: Başlık %d / %d
 
 #
 # ./glwthemes/mono/playdecks/video.view
 #
 id: CPU is too slow to decode this video
-msg: CPU troppo lenta per poter decodificare questo video
+msg: CPU yavaş kalıyor bu video'da
 
 #
 # ./glwthemes/mono/popups/auth.view
 #
 id: Cancel
-msg: Annulla
+msg: İptal
 
 id: OK
-msg: OK
+msg: Tammam
 
 id: Password
-msg: Password
+msg: Şifre
 
 id: Remember me
-msg: Ricordami
+msg: Hatırla beni
 
 id: Username
-msg: Nome Utente
+msg: Kulanıcı Adı
 
 #
 # ./glwthemes/mono/screensaver.view
 #
 id: No media loaded
-msg: Nessun media caricato
+msg: Açılamadı
 
 #
 # ./glwthemes/mono/skins/grey/infobox.skin
 #
 id: Delete
-msg: Cancella
+msg: Sil
 
 id: Enqueue
-msg: Metti in coda
+msg: Enqueue
 
 #
 # ./glwthemes/mono/sysinfo.view
 #
 id: Audio output
-msg: Uscita audio
+msg: Ses Çıkışı
 
 id: CPUs
-msg: CPU
+msg: CPUs
 
 id: GPU & Display
-msg: GPU e visualizzazione
+msg: GPU & Display
 
 id: GPU Core temperature: %d / %d °
-msg: Temperatura GPU: %d / %d °
+msg: GPU çekirdek ısısı: %d / %d °
 
 #
 # ./glwthemes/mono/universe.view
 #
 id: Adjust background tint based on daytime
-msg: Modifica lo sfondo a seconda dell'ora 
+msg: Hintergrundfarbe abhängig von der Tageszeit einstellen
 
 id: Audio muted
-msg: Audio silenziato
+msg: Sessiz
 
 id: Fancy UI animations
-msg: Animazioni dell'interfaccia
+msg: Fancy UI animations
 
 id: Master volume: %d dB
-msg: Volume principale: %d dB
+msg: Ses seviyesi: %d dB
 
 id: Starwars scroller tilt
-msg: Inclinazione interfaccia in stile StarWars
+msg: Starwars scroller tilt
 
 id: Top bar navigation buttons
-msg: Pulsanti nella barra di navigazione in alto
+msg: Top Bar navigasyon düğmeleri
 
 #
 # ./src/api/opensubtitles.c
 #
 id: Settings for opensubtitles.org
-msg: Impostazioni per opensubtitles.org
+msg: Ayarlar için opensubtitles.org
 
 id: Use opensubtitles.org
-msg: Utilizza opensubtitles.org
+msg: opensubtitles.org kullan
 
 #
 # ./src/audio/audio.c
 #
 id: Audio/Video sync delay
-msg: Ritardo di sincronizzazione Audio/Video
+msg: Audio/Video sync geçikme
 
 id: Current output device
-msg: Periferica d'uscita attuale
+msg: Current output device
 
 id: Force stereo downmix
-msg: Forza stereo downmix
+msg: Force stereo downmix
 
 id: Phantom LFE
-msg: Phantom LFE
+msg: Phantom-LFE
 
 id: Phantom center
-msg: Phantom center
+msg: Phantom-center
 
 id: Select audio output device and related configurations
-msg: Seleziona periferica d'uscita audio e relative impostazioni
+msg: Ses çıkış aygıtı seçin ve ilgili yapılandırmaları
 
 id: Small front speakers
-msg: Altoparlanti piccoli frontali
+msg: Küçük ön hoparlör
 
 id: Swap LFE+center with surround
-msg: Scambia LFE+center con surround
+msg: Swap LFE+center with surround
 
 #
 # ./src/backend/dvd/cdda.c
 #
 id: Invalid CD URL
-msg: URL CD non valido
+msg: Geçersiz CD URL
 
 id: Invalid CD track
-msg: Traccia CD non valida
+msg: Geçersiz CD Track
 
 id: Unable to open CD
-msg: Impossibile aprire il CD
+msg: CD açılamıyor
 
 #
 # ./src/backend/htsp/htsp.c
 #
 id: Invalid HTSP URL
-msg: URL HTSP non valido
+msg: Geçersiz HTSP URL
 
 #
 # ./src/backend/search.c
 #
 id: Search
-msg: Cerca
+msg: Ara
 
 #
 # ./src/backend/spotify/spotify.c
 #
 id: Automatic login when Showtime starts
-msg: Login automatico all'avvio di Showtime
+msg: Showtime başlarken Otomatik giriş
 
 id: Enable Spotify
-msg: Attiva Spotify
+msg: Spotify etkinleştirin
 
 id: Friends
-msg: Amici
+msg: Arkadaşlar
 
 id: High bitrate
-msg: Alto bitrate
+msg: Yüksek bitrate
 
 id: Inbox
-msg: Posta in arrivo
+msg: Gelen kutusu
 
 id: New albums on Spotify
-msg: Nuovi album su Spotify
+msg: Yeni albüm aç Spotify
 
 id: New releases
-msg: Nuovi rilasci
+msg: Yenilikler
 
 id: Playlists
-msg: Playlist
+msg: Oynatma listesi
 
 id: Relogin (switch user)
-msg: Ripeti login (cambia utente)
+msg: Relogin (switch user)
 
 id: Search result
-msg: Risultati della ricerca
+msg: Arama sonucu
 
 id: Spotify friends
-msg: Amici su Spotify
+msg: Spotify Arkadalarım
 
 id: Spotify music service
-msg: Servizio musicale di Spotify
+msg: Spotify Music service
 
 id: Spotify offers you legal and free access to a huge library of music. To use Spotify in Showtime you need a Spotify Preemium account.\nFor more information about Spotify, visit http://www.spotify.com/\n\nYou will be prompted for your Spotify username and password when first accessing any of the Spotify features in Showtime.
-msg: Spotify ti offre un accesso libero e legale a un'ingente raccolta di musica. Per usare Spotify in Showtime necessiti di un account Premium su Spotify.\nPer maggiori informazioni su Spotify visita http://www.spotify.com/\n\nTi verranno chiesti i tuoi dati login (nome utente e password) su Spotify quando accedi per la prima volta a qualsiasi funzione di Spotify in Showtime.
+msg: Spotify büyük bir müzik kütüphanesi için yasal ve ücretsiz erişim sunmaktadır. Spotify Showtime olarak kullanmak için bir Spotify Preemium hesabı gerekir. \ NBu Spotify hakkında daha fazla bilgi \ n \ nBu ilk Spotify erişirken Spotify kullanıcı adınızı ve şifrenizi girmeniz istenecektir http://www.spotify.com/ ziyaret Showtime de sahiptir.
 
 id: Spotify playlists
-msg: Spotify playlist
+msg: Spotyfy Oynatma listesi 
 
 id: Starred
-msg: Speciali
+msg: Starred
 
 #
 # ./src/bookmarks.c
 #
 id: Bookmarks
-msg: Segnalibri
+msg: Bookmarks
 
 #
 # ./src/fileaccess/fa_locatedb.c
 #
 id: Search using Unix locatedb
-msg: Cerca usando il locatedb Unix
+msg: Search using Unix locatedb
 
 #
 # ./src/fileaccess/fa_spotlight.c
 #
 id: Search using spotlight
-msg: Cerca usando spotlight
+msg: Search using spotlight
 
 #
 # ./src/i18n.c
 #
 id: Language
-msg: Linguaggio
+msg: Dil
 
 id: Language codes should be configured as three character ISO codes, example (eng, swe, fra)
-msg: I codici di linguaggio vanno impostati usando i corrispondenti 3 caratteri ISO.\nAd esempio ENG, SWE, FRA, ITA...
+# Missing translation
+msg: 
 
 id: Preferred languages
-msg: Imposta i linguaggi preferiti
+msg: tercih edilen dil
 
 id: Primary audio language code
-msg: Codice di linguaggio primario per l'audio
+msg: Birincil ses dil kodu
 
 id: Primary subtitle language code
-msg: Codice di linguaggio primario per i sottotitoli
+msg: Birincil altyazı dil kodu
 
 id: SRT character set
-msg: Set di caratteri per sottotitoli in formato SRT
+msg: SRT character set
 
 id: Secondary audio language code
-msg: Codice di linguaggio secondario per l'audio
+msg: İkincil ses dil kodu
 
 id: Secondary subtitle language code
-msg: Codice di linguaggio secondario per i sottotitoli
+msg: İkincil altyazı dil kodu
 
 id: Tertiary audio language code
-msg: Codice di linguaggio terziario per l'audio
+msg: Üçüncül ses dil kodu
 
 id: Tertiary subtitle language code
-msg: Codice di linguaggio terziario per i sottotitoli
+msg: Üçüncül altyazı dil kodu
 
 #
 # ./src/ipc/serdev/lgtv.c
 #
 id: Automatic TV power on/off
-msg: Controllo spegnimento automatico TV
+msg: Otomatik TV açma / kapama
 
 id: Input source
-msg: Sorgente di ingresso
+msg: Input source
 
 id: LG Television set
-msg: Apparato TV LG
+msg: LG Television set
 
 #
 # ./src/keymapper.c
 #
 id: Configure mapping of keyboard and remote controller keys
-msg: Configura mappatura tastiera e comandi remoti
+msg: Tastenbelegung und Fernbedienungseinstellung
 
 id: Keymapper
-msg: Mappatura tasti
+msg: Keymapper
 
 #
 # ./src/media.c
 #
 id: Align subtitles on video frame
-msg: Allineare sottotitoli su frame video
+msg: Align subtitles on video frame
 
 id: Audio delay
-msg: Ritardo audio
+msg: ses delay
 
 id: Subtitle delay
-msg: Ritardo sottotitoli
+msg: altyazı delay
 
 id: Subtitle scaling
-msg: Dimensione dei sottotitoli
+msg: Altyazı ölçekleme
 
 id: Video zoom
-msg: Zoom video
+msg: Video zoom
 
 #
 # ./src/navigator.c
 #
 id: No handler for URL
-msg: Nessun handler per URL
+msg: URL'si yok işleyici
 
 #
 # ./src/plugins.c
 #
 id: Invalud URI
-msg: URI non valido
+# Missing translation
+msg: 
 
 id: Plugin ID %s does not exist
-msg: Il Plugin ID %s non esiste
+# Missing translation
+msg: 
 
 id: Plugin ID %s have no download URL
-msg: Il Plugin ID %s non ha un URL
+# Missing translation
+msg: 
 
 id: Unable to load plugin.json: %s
-msg: Impossibile caricare plugin.json: %s
+# Missing translation
+msg: 
 
 id: Unable to load plugin.json: Malformed JSON
-msg: Impossibile caricare plugin.json: JSON non valido
+# Missing translation
+msg: 
 
 id: Unable to request plugin repository: %s
-msg: Impossibile ottenere il repository del plugin: %s
+# Missing translation
+msg: 
 
 #
 # ./src/runcontrol.c
 #
 id: Automatic standby
-msg: Standby automatico
+msg: Automatic standby
 
 id: Run control
-msg: Controllo d'avvio
+msg: Run control
 
 #
 # ./src/sd/sd.c
 #
 id: Enabled
-msg: Attivo
+msg: Etkin
 
 id: Name
-msg: Nome
+msg: isim
 
 id: Type
-msg: Tipo
+msg: Type
 
 #
 # ./src/settings.c
 #
 id: Applications and installed plugins
-msg: Applicazioni e plugin installati
+msg: Uygulamalar ve yüklü eklentiler
 
 id: Discovered media sources
-msg: Sorgenti media trovate
+msg: Bulundu medya kaynakları
 
 id: Global settings
-msg: Impostazioni globali
+msg: Global ayarları
 
 #
 # ./src/ui/glw/glw.c
 #
 id: Display and user interface
-msg: Schermo e interfaccia utente
+msg: Ekran ve kullanıcı arabirimi
 
 id: Horizontal underscan
-msg: Underscan orizzontale
+msg: Horizontal underscan
 
 id: Screensaver delay
-msg: Attesa prima dello screensaver
+msg: Screensaver delay
 
 id: Userinterface size
-msg: Dimensione interfaccia utente
+msg: Userinterface size
 
 id: Vertical underscan
-msg: Underscan verticale
+msg: Vertical underscan
 
 #
 # ./src/ui/glw/glw_x11.c
 #
 id: Fullscreen mode
-msg: Modalità a schermo pieno
+msg: tam ekran modu
 
 id: Map mouse wheel to up/down
-msg: Usa rotellina del mouse per scorrere su/giù
+msg: Map mouse wheel to up/down
 
 #
 # ./src/upnp/upnp.c
 #
 id: Enabled on home screen
-msg: Attivo nella schermata principale
+msg: Ana ekranda Etkin
 
 #
 # ./src/upnp/upnp_browse.c
 #
 id: Device not found
-msg: Periferica non trovata
+msg: Aygıt bulunamadı
 
 id: Malformed URI after device
-msg: URI non corretto dopo la periferica
+msg: Malformed URI after device
 
 id: Malformed URI after service
-msg: URI non corretto dopo il servizio
+msg: Malformed URI after service
 
 id: Service not found
-msg: Servizio non trovato
+msg: Service bulunamadı
 
 #
 # ./src/video/video_settings.c
 #
 id: Always try to select a subtitle
-msg: Prova sempre a selezionare un file di sottotitoli
+msg: Always try to select a subtitle
 
 id: Auto
 msg: Auto
 
 id: Center
-msg: Al centro
+msg: merkez
 
 id: Color
-msg: Colore
+msg: renk
 
 id: Enable VDPAU
-msg: Attiva VDPAU
+msg: VDPAU etkin
 
 id: Force subtitles to reside on video frame
-msg: Forza i sottotitoli a rimanere sempre in primo piano
+msg: Force subtitles to reside on video frame
 
 id: Generic settings for video subtitles
-msg: Impostazioni generiche per i sottotitoli
+msg: Generic settings for video subtitles
 
 id: Ignore embedded styling
-msg: Ignora i codici di stile incorporati
+msg: Ignore embedded styling
 
 id: Left
-msg: Sinistra
+msg: Sol
 
 id: Outline color
-msg: Colore contorni
+msg: Outline Rengi
 
 id: Outline size
-msg: Dimensioni contorni
+msg: Outline boyutu
 
 id: Right
-msg: Destra
+msg: Sağ
 
 id: Shadow color
-msg: Colore ombra
+msg: Gölgelenme rengi
 
 id: Shadow offset
-msg: Offset ombra
+msg: Gölgelenme ayar
 
 id: Stretch video to widescreen
-msg: Adatta video a widescreen
+msg: Stretch video to widescreen
 
 id: Subtitle position
-msg: Posizione sottotitoli
+msg: Altyazı pozisyonu
 
 id: Subtitle size
-msg: Dimensione sottotitoli
+msg: Altyazı boyutu
 
 id: Subtitle styling
-msg: Stile sottotitoli
+msg: Altyazı modeli
 
 id: Subtitles
-msg: Sottotitoli
+msg: Altyazılar
 
 id: Video acceleration and display behaviour
-msg: Accelerazione video e comportamento schermo
+msg: Video hızlandırma ve görüntü davranışı
 
 id: Video playback
-msg: Riproduzione video
+msg: Video oynatma listesi
 

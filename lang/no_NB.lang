@@ -1,567 +1,567 @@
-language: Italian
-native: Italiano
-maintainer: Red Squirrel <iam@redsquirrel.tk>
+language: Norwegian (Bokmål)
+native: Norsk (Bokmål)
+maintainer: Hans Cats <hanscats@gmail.com>
 #
 # ./glwthemes/mono/commandmenu/cmd_root.view
 #
 id: Audio settings
-msg: Impostazioni Audio
+msg: Lydinnstillinger
 
 id: Languages
-msg: Linguaggio
+msg: Språk
 
 id: Settings
-msg: Impostazioni
+msg: Innstillinger
 
 id: Subtitle settings
-msg: Impostazioni dei sottotitoli
+msg: Innstillinger for undertekster
 
 id: Video settings
-msg: Impostazioni video
+msg: Videoinnstillinger
 
 #
 # ./glwthemes/mono/directoryviews/infobox/audio.view
 #
 id: Added by: %s
-msg: Aggiunto da: %s
+msg: Lagt til av: %s
 
 #
 # ./glwthemes/mono/include/buttons.view
 #
 id: Off
-msg: Disattiva
+msg: Av
 
 id: On
-msg: Attiva
+msg: På
 
 #
 # ./glwthemes/mono/pages/about.view
 #
 id: Avail system RAM: %d kB
-msg: RAM disponibile: %d kB
+msg: Tilgjengelig systemminne: %d kB
 
 id: Detected CPUs: %d
-msg: CPU rilevate: %d
+msg: Oppdagede CPUer: %d
 
 id: Display info
-msg: Informazioni di visualizzazione
+msg: Visningsinformasjon
 
 id: Framerate: %.2f Hz
-msg: Framerate: %.2f Hz
+msg: Oppdateringsfrekvens %.2f Hz
 
 id: GPU: %s
 msg: GPU: %s
 
 id: Height: %d px
-msg: Altezza: %d px
+msg: Høyde: %d px
 
 id: Renderer: %s
 msg: Renderer: %s
 
 id: System info
-msg: Informazioni di sistema
+msg: Systeminformasjon
 
 id: Total system RAM: %d kB
-msg: RAM totale: %d kB
+msg: Totalt systemminne: %d kB
 
 id: Version: %s
-msg: Versione: %s
+msg: Versjon: %s
 
 id: Width: %d px
-msg: Larghezza: %d px
+msg: Bredde: %d px
 
 id: Windowmanager: %s
-msg: Gestore finestre: %s
+msg: Vindubehandler: %s
 
 #
 # ./glwthemes/mono/pages/about_top.view
 #
 id: About
-msg: Informazioni
+msg: Om
 
 #
 # ./glwthemes/mono/pages/home_top.view
 #
 id: Home
-msg: Home
+msg: Hjem
 
 #
 # ./glwthemes/mono/pages/openerror.view
 #
 id: Unable to open resource
-msg: Impossibile aprire la risorsa
+msg: Kan ikke åpne ressurs
 
 #
 # ./glwthemes/mono/pages/openerror_top.view
 #
 id: Page load error
-msg: Errore di caricamento pagina
+msg: Feil ved sidehenting
 
 #
 # ./glwthemes/mono/pages/playqueue_top.view
 #
 id: Playqueue
-msg: Coda di riproduzione
+msg: Spillekø
 
 #
 # ./glwthemes/mono/playdecks/dvd.view
 #
 id: Chapter %d / %d
-msg: Capitolo %d / %d
+msg: Kapittel %d / %d
 
 id: Title %d / %d
-msg: Titolo %d / %d
+msg: Tittel %d / %d
 
 #
 # ./glwthemes/mono/playdecks/tracks.view
 #
 id: Track %d / %d
-msg: Traccia %d / %d
+msg: Spor %d / %d
 
 #
 # ./glwthemes/mono/playdecks/video.view
 #
 id: CPU is too slow to decode this video
-msg: CPU troppo lenta per poter decodificare questo video
+msg: CPUen er for treg for å spille av denne videoen
 
 #
 # ./glwthemes/mono/popups/auth.view
 #
 id: Cancel
-msg: Annulla
+msg: Avbryt
 
 id: OK
 msg: OK
 
 id: Password
-msg: Password
+msg: Passord
 
 id: Remember me
-msg: Ricordami
+msg: Husk passord
 
 id: Username
-msg: Nome Utente
+msg: Brukernavn
 
 #
 # ./glwthemes/mono/screensaver.view
 #
 id: No media loaded
-msg: Nessun media caricato
+msg: Ingen media lastet
 
 #
 # ./glwthemes/mono/skins/grey/infobox.skin
 #
 id: Delete
-msg: Cancella
+msg: Slett
 
 id: Enqueue
-msg: Metti in coda
+msg: Kø
 
 #
 # ./glwthemes/mono/sysinfo.view
 #
 id: Audio output
-msg: Uscita audio
+msg: Lydutgang
 
 id: CPUs
-msg: CPU
+msg: CPUer
 
 id: GPU & Display
-msg: GPU e visualizzazione
+msg: GPU og skjerm
 
 id: GPU Core temperature: %d / %d °
-msg: Temperatura GPU: %d / %d °
+msg: GPU kjernetemperatur: %d / %d °
 
 #
 # ./glwthemes/mono/universe.view
 #
 id: Adjust background tint based on daytime
-msg: Modifica lo sfondo a seconda dell'ora 
+msg: Juster bakgrunnsfarge basert på tid på døgnet
 
 id: Audio muted
-msg: Audio silenziato
+msg: Lyd dempet
 
 id: Fancy UI animations
-msg: Animazioni dell'interfaccia
+msg: Heftige animasjoner i brukergrensesnittet
 
 id: Master volume: %d dB
-msg: Volume principale: %d dB
+msg: Hovedvolum: %d dB
 
 id: Starwars scroller tilt
-msg: Inclinazione interfaccia in stile StarWars
+msg: Vis brukergrensesnittet som i Starwars åpningsscene
 
 id: Top bar navigation buttons
-msg: Pulsanti nella barra di navigazione in alto
+msg: Navigasjonknapper på toppen av skjermen
 
 #
 # ./src/api/opensubtitles.c
 #
 id: Settings for opensubtitles.org
-msg: Impostazioni per opensubtitles.org
+msg: Innstillinger for opensubtitles.org
 
 id: Use opensubtitles.org
-msg: Utilizza opensubtitles.org
+msg: Bruk opensubtitles.org
 
 #
 # ./src/audio/audio.c
 #
 id: Audio/Video sync delay
-msg: Ritardo di sincronizzazione Audio/Video
+msg: Audio/Video synkronisert forsinkelse
 
 id: Current output device
-msg: Periferica d'uscita attuale
+msg: Nåværende lydutgang
 
 id: Force stereo downmix
-msg: Forza stereo downmix
+msg: Tving stereo nedmiksing
 
 id: Phantom LFE
-msg: Phantom LFE
+msg: Fantom-LFE
 
 id: Phantom center
-msg: Phantom center
+msg: Fantom-senter
 
 id: Select audio output device and related configurations
-msg: Seleziona periferica d'uscita audio e relative impostazioni
+msg: Velg lydutgang og relaterte innstillinger
 
 id: Small front speakers
-msg: Altoparlanti piccoli frontali
+msg: Små fronthøyttalere
 
 id: Swap LFE+center with surround
-msg: Scambia LFE+center con surround
+msg: Bytt LFE+senter med surround
 
 #
 # ./src/backend/dvd/cdda.c
 #
 id: Invalid CD URL
-msg: URL CD non valido
+msg: Ugyldig CD URL
 
 id: Invalid CD track
-msg: Traccia CD non valida
+msg: Ugyldig CD track
 
 id: Unable to open CD
-msg: Impossibile aprire il CD
+msg: Kan ikke åpne CD
 
 #
 # ./src/backend/htsp/htsp.c
 #
 id: Invalid HTSP URL
-msg: URL HTSP non valido
+msg: Ugyldig HTSP URL
 
 #
 # ./src/backend/search.c
 #
 id: Search
-msg: Cerca
+msg: Søk
 
 #
 # ./src/backend/spotify/spotify.c
 #
 id: Automatic login when Showtime starts
-msg: Login automatico all'avvio di Showtime
+msg: Logg automatisk inn når Showtime starter
 
 id: Enable Spotify
-msg: Attiva Spotify
+msg: Slå på Spotify
 
 id: Friends
-msg: Amici
+msg: Venner
 
 id: High bitrate
-msg: Alto bitrate
+msg: Høy bithastighet
 
 id: Inbox
-msg: Posta in arrivo
+msg: Innboks
 
 id: New albums on Spotify
-msg: Nuovi album su Spotify
+msg: Nye album på Spotify
 
 id: New releases
-msg: Nuovi rilasci
+msg: Nye plateslipp
 
 id: Playlists
-msg: Playlist
+msg: Spillelister
 
 id: Relogin (switch user)
-msg: Ripeti login (cambia utente)
+msg: Logg inn igjen (bytt bruker)
 
 id: Search result
-msg: Risultati della ricerca
+msg: Søkeresultat
 
 id: Spotify friends
-msg: Amici su Spotify
+msg: Venner på Spotify
 
 id: Spotify music service
-msg: Servizio musicale di Spotify
+msg: Spotify musikktjeneste
 
 id: Spotify offers you legal and free access to a huge library of music. To use Spotify in Showtime you need a Spotify Preemium account.\nFor more information about Spotify, visit http://www.spotify.com/\n\nYou will be prompted for your Spotify username and password when first accessing any of the Spotify features in Showtime.
-msg: Spotify ti offre un accesso libero e legale a un'ingente raccolta di musica. Per usare Spotify in Showtime necessiti di un account Premium su Spotify.\nPer maggiori informazioni su Spotify visita http://www.spotify.com/\n\nTi verranno chiesti i tuoi dati login (nome utente e password) su Spotify quando accedi per la prima volta a qualsiasi funzione di Spotify in Showtime.
+msg: Spotify tilbyr lovlig og fri tilgang til et stort bibliotek av musikk. For å bruke Spotify i Showtime må du ha en Spotify Premium-konto.\nFor mer informasjon om Spotify, besøk http://www.spotify.com/\n\nDu vil bli spurt om ditt Spotifybrukernavn og passord når du bruker Spotifys funksjoner i Showtime for første gang.
 
 id: Spotify playlists
-msg: Spotify playlist
+msg: Spotyfylister
 
 id: Starred
-msg: Speciali
+msg: Stjernemerket
 
 #
 # ./src/bookmarks.c
 #
 id: Bookmarks
-msg: Segnalibri
+msg: Bokmerker
 
 #
 # ./src/fileaccess/fa_locatedb.c
 #
 id: Search using Unix locatedb
-msg: Cerca usando il locatedb Unix
+msg: Søk via Unix locatedb
 
 #
 # ./src/fileaccess/fa_spotlight.c
 #
 id: Search using spotlight
-msg: Cerca usando spotlight
+msg: Søk via spotlight
 
 #
 # ./src/i18n.c
 #
 id: Language
-msg: Linguaggio
+msg: Språk
 
 id: Language codes should be configured as three character ISO codes, example (eng, swe, fra)
-msg: I codici di linguaggio vanno impostati usando i corrispondenti 3 caratteri ISO.\nAd esempio ENG, SWE, FRA, ITA...
+msg: Språkkoder konfigureres som tre tegns ISO-koder, for eksempel: eng, swe, fra
 
 id: Preferred languages
-msg: Imposta i linguaggi preferiti
+msg: Foretrukket språk
 
 id: Primary audio language code
-msg: Codice di linguaggio primario per l'audio
+msg: Primærspråk for lyd
 
 id: Primary subtitle language code
-msg: Codice di linguaggio primario per i sottotitoli
+msg: Primærspråk for undertekster
 
 id: SRT character set
-msg: Set di caratteri per sottotitoli in formato SRT
+msg: Tegnkodning for SRT-undertekster
 
 id: Secondary audio language code
-msg: Codice di linguaggio secondario per l'audio
+msg: Sekundærspråk for lyd
 
 id: Secondary subtitle language code
-msg: Codice di linguaggio secondario per i sottotitoli
+msg: Sekundærspråk for undertekster
 
 id: Tertiary audio language code
-msg: Codice di linguaggio terziario per l'audio
+msg: Tertiærspråk for lyd
 
 id: Tertiary subtitle language code
-msg: Codice di linguaggio terziario per i sottotitoli
+msg: Tertiærspråk for undertekster
 
 #
 # ./src/ipc/serdev/lgtv.c
 #
 id: Automatic TV power on/off
-msg: Controllo spegnimento automatico TV
+msg: Automatisk på/av-kontroll av TV
 
 id: Input source
-msg: Sorgente di ingresso
+msg: Inngangskilde
 
 id: LG Television set
-msg: Apparato TV LG
+msg: LG TV-apparat
 
 #
 # ./src/keymapper.c
 #
 id: Configure mapping of keyboard and remote controller keys
-msg: Configura mappatura tastiera e comandi remoti
+msg: Innstillinger av tastatur og fjernkontroll
 
 id: Keymapper
-msg: Mappatura tasti
+msg: Tastatur- og knappehåndterer
 
 #
 # ./src/media.c
 #
 id: Align subtitles on video frame
-msg: Allineare sottotitoli su frame video
+msg: Juster undertekster til videoens størrelse
 
 id: Audio delay
-msg: Ritardo audio
+msg: Forsinkelse for lyd
 
 id: Subtitle delay
-msg: Ritardo sottotitoli
+msg: Forsinkelse for undertekster
 
 id: Subtitle scaling
-msg: Dimensione dei sottotitoli
+msg: Størrelse på undertekster
 
 id: Video zoom
-msg: Zoom video
+msg: Video zoom
 
 #
 # ./src/navigator.c
 #
 id: No handler for URL
-msg: Nessun handler per URL
+msg: Ingen håndterer for URL
 
 #
 # ./src/plugins.c
 #
 id: Invalud URI
-msg: URI non valido
+msg: Feil URI
 
 id: Plugin ID %s does not exist
-msg: Il Plugin ID %s non esiste
+msg: Plugin ID %s finnes ikke
 
 id: Plugin ID %s have no download URL
-msg: Il Plugin ID %s non ha un URL
+msg: Plugin ID %s har ingen nedlastnings URL
 
 id: Unable to load plugin.json: %s
-msg: Impossibile caricare plugin.json: %s
+msg: Kan ikke hente plugin.json: %s
 
 id: Unable to load plugin.json: Malformed JSON
-msg: Impossibile caricare plugin.json: JSON non valido
+msg: Kan ikke hente plugin.json: Feil formateret JSON
 
 id: Unable to request plugin repository: %s
-msg: Impossibile ottenere il repository del plugin: %s
+msg: Kan ikke finne plugin-mappen: %s
 
 #
 # ./src/runcontrol.c
 #
 id: Automatic standby
-msg: Standby automatico
+msg: Automatisk standby
 
 id: Run control
-msg: Controllo d'avvio
+msg: Kjørekontroll
 
 #
 # ./src/sd/sd.c
 #
 id: Enabled
-msg: Attivo
+msg: På
 
 id: Name
-msg: Nome
+msg: Navn
 
 id: Type
-msg: Tipo
+msg: Type
 
 #
 # ./src/settings.c
 #
 id: Applications and installed plugins
-msg: Applicazioni e plugin installati
+msg: Applikasjoner og installerte plugins
 
 id: Discovered media sources
-msg: Sorgenti media trovate
+msg: Oppdagede mediakilder
 
 id: Global settings
-msg: Impostazioni globali
+msg: Globale innstillninger
 
 #
 # ./src/ui/glw/glw.c
 #
 id: Display and user interface
-msg: Schermo e interfaccia utente
+msg: Skjerm og brukergrensesnitt
 
 id: Horizontal underscan
-msg: Underscan orizzontale
+msg: Horisontal underskanning
 
 id: Screensaver delay
-msg: Attesa prima dello screensaver
+msg: Skjermsparertid
 
 id: Userinterface size
-msg: Dimensione interfaccia utente
+msg: Størrelse på brukergrensesnitt
 
 id: Vertical underscan
-msg: Underscan verticale
+msg: Vertikal underskanning
 
 #
 # ./src/ui/glw/glw_x11.c
 #
 id: Fullscreen mode
-msg: Modalità a schermo pieno
+msg: Fullskjermsmodus
 
 id: Map mouse wheel to up/down
-msg: Usa rotellina del mouse per scorrere su/giù
+msg: Tolk musens skrollhjul som opp- og ned-knapper
 
 #
 # ./src/upnp/upnp.c
 #
 id: Enabled on home screen
-msg: Attivo nella schermata principale
+msg: Tilgjengelig på hjem-siden
 
 #
 # ./src/upnp/upnp_browse.c
 #
 id: Device not found
-msg: Periferica non trovata
+msg: Kan ikke finne enhet
 
 id: Malformed URI after device
-msg: URI non corretto dopo la periferica
+msg: Misformet URI etter enheten
 
 id: Malformed URI after service
-msg: URI non corretto dopo il servizio
+msg: Misformet URI etter tjensten
 
 id: Service not found
-msg: Servizio non trovato
+msg: Kan ikke finne tjenesten
 
 #
 # ./src/video/video_settings.c
 #
 id: Always try to select a subtitle
-msg: Prova sempre a selezionare un file di sottotitoli
+msg: Forsøk alltid å velge en undertekst
 
 id: Auto
-msg: Auto
+msg: Automatisk
 
 id: Center
-msg: Al centro
+msg: Sentrert
 
 id: Color
-msg: Colore
+msg: Farge
 
 id: Enable VDPAU
-msg: Attiva VDPAU
+msg: Aktiver VDPAU
 
 id: Force subtitles to reside on video frame
-msg: Forza i sottotitoli a rimanere sempre in primo piano
+msg: Tving undertekster til alltid å ligge over videobilde
 
 id: Generic settings for video subtitles
-msg: Impostazioni generiche per i sottotitoli
+msg: Generelle innstillininger for undertekster
 
 id: Ignore embedded styling
-msg: Ignora i codici di stile incorporati
+msg: Overse innebygde stilkoder
 
 id: Left
-msg: Sinistra
+msg: Venstre
 
 id: Outline color
-msg: Colore contorni
+msg: Farge på konturer
 
 id: Outline size
-msg: Dimensioni contorni
+msg: Størrelse på konturer
 
 id: Right
-msg: Destra
+msg: Høyre
 
 id: Shadow color
-msg: Colore ombra
+msg: Farge på skygger
 
 id: Shadow offset
-msg: Offset ombra
+msg: Skyggeoffset
 
 id: Stretch video to widescreen
-msg: Adatta video a widescreen
+msg: Strekk ut video horisontalt 
 
 id: Subtitle position
-msg: Posizione sottotitoli
+msg: Posisjon på undertekster
 
 id: Subtitle size
-msg: Dimensione sottotitoli
+msg: Størrelse på undertekster
 
 id: Subtitle styling
-msg: Stile sottotitoli
+msg: Stil på undertekster
 
 id: Subtitles
-msg: Sottotitoli
+msg: Undertekster
 
 id: Video acceleration and display behaviour
-msg: Accelerazione video e comportamento schermo
+msg: Videoakselerasjon og innstillinger for visning av video
 
 id: Video playback
-msg: Riproduzione video
+msg: Videoavspiling
 
