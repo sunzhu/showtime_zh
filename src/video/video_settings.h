@@ -21,6 +21,8 @@ extern struct subtitle_settings subtitle_settings;
 struct video_settings {
   int vdpau;
   int stretch_horizontal;
+  int vzoom;
+  int force_42;
 };
 
 extern struct video_settings video_settings;
