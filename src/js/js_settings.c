@@ -266,6 +266,23 @@ js_createInfo(JSContext *cx, JSObject *obj, uintN argc,
 /**
  *
  */
+static JSBool 
+js_createDivider(JSContext *cx, JSObject *obj, uintN argc, 
+	      jsval *argv, jsval *rval)
+{
+  js_setting_group_t *jsg = JS_GetPrivate(cx, obj);
+  const char *title;
+
+  if(!JS_ConvertArguments(cx, argc, argv, "s", &title))
+    return JS_FALSE;
+
+  settings_create_divider(jsg->jsg_root, _p(title));
+  return JS_TRUE;
+}
+
+/**
+ *
+ */
 static jsval
 jsval_from_htsmsgfield(JSContext *cx, htsmsg_field_t *f)
 {
@@ -297,6 +314,7 @@ static JSFunctionSpec setting_functions[] = {
     JS_FS("createBool", js_createBool, 4, 0, 0),
     JS_FS("createString", js_createString, 4, 0, 0),
     JS_FS("createInfo", js_createInfo, 3, 0, 0),
+    JS_FS("createDivider", js_createDivider, 1, 0, 0),
     JS_FS_END
 };
 
@@ -456,6 +474,37 @@ js_createSettings(JSContext *cx, JSObject *obj, uintN argc,
   JS_SetPrivate(cx, robj, jsg);
 
   JS_DefineFunctions(cx, robj, setting_functions);
+  jsg->jsg_frozen = 0;
+  return JS_TRUE;
+}
+
+
+
+/**
+ *
+ */
+JSBool 
+js_createStore(JSContext *cx, JSObject *obj, uintN argc, 
+	       jsval *argv, jsval *rval)
+{
+  const char *id;
+  char spath[URL_MAX];
+  JSBool per_user = 0;
+
+  if(!JS_ConvertArguments(cx, argc, argv, "s/b", &id, &per_user))
+    return JS_FALSE;
+  js_plugin_t *jsp = JS_GetPrivate(cx, obj);
+  snprintf(spath, sizeof(spath), "jsstore/%s-%s", jsp->jsp_id, id);
+
+  js_setting_group_t *jsg = calloc(1, sizeof(js_setting_group_t));
+  JSObject *robj;
+  jsg->jsg_frozen = 1;
+  jsg->jsg_spath = strdup(spath);
+  jsg->jsg_store = htsmsg_store_load(spath) ?: htsmsg_create_map();
+
+  robj = JS_NewObjectWithGivenProto(cx, &setting_group_class, NULL, obj);
+  *rval = OBJECT_TO_JSVAL(robj);
+  JS_SetPrivate(cx, robj, jsg);
   jsg->jsg_frozen = 0;
   return JS_TRUE;
 }
