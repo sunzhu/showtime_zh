@@ -578,11 +578,12 @@ arch_get_seed(void)
 void
 arch_preload_fonts(void)
 {
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-VR-R-LATIN2.TTF");
+  /*freetype_load_font("file:///dev_flash/data/font/SCE-PS3-VR-R-LATIN2.TTF");
   freetype_load_font("file:///dev_flash/data/font/SCE-PS3-NR-R-JPN.TTF");
   freetype_load_font("file:///dev_flash/data/font/SCE-PS3-YG-R-KOR.TTF");
   freetype_load_font("file:///dev_flash/data/font/SCE-PS3-DH-R-CGB.TTF");
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-CP-R-KANA.TTF");
+  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-CP-R-KANA.TTF");*/
+  freetype_load_font("file:///dev_hdd0/game/HTSS00003/USRDIR/FONT.TTF");
 }
 
 const char *
