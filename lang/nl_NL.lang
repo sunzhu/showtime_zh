@@ -104,6 +104,17 @@ id: Playqueue
 msg: Afspeellijst
 
 #
+# ./glwthemes/mono/pages/video.view
+#
+id: Playback status
+# Missing translation
+msg: 
+
+id: Unable to start video playback
+# Missing translation
+msg: 
+
+#
 # ./glwthemes/mono/playdecks/dvd.view
 #
 id: Chapter %d / %d
@@ -127,12 +138,6 @@ msg: CPU is te langzaam om deze video te decoderen
 #
 # ./glwthemes/mono/popups/auth.view
 #
-id: Cancel
-msg: Annuleren
-
-id: OK
-msg: Oké
-
 id: Password
 msg: Wachtwoord
 
@@ -141,6 +146,15 @@ msg: Onthoud mij
 
 id: Username
 msg: Gebruikersnaam
+
+#
+# ./glwthemes/mono/popups/textDialog.view
+#
+id: Cancel
+msg: Annuleren
+
+id: OK
+msg: Oké
 
 #
 # ./glwthemes/mono/screensaver.view
@@ -206,7 +220,7 @@ msg: Opensubtitles.org gebruiken
 # ./src/audio/audio.c
 #
 id: Audio/Video sync delay
-msg: Vertraging audio/video synchronisatie
+msg: Vertraging audio/video-synchronisatie
 
 id: Current output device
 msg: Huidige uitvoerapparaat
@@ -221,7 +235,7 @@ id: Phantom center
 msg: Phantom-center
 
 id: Select audio output device and related configurations
-msg: Geluidsuitvoerapparaat en gerelateerde configuraties selecteren
+msg: Geluidsuitvoerapparaat en gerelateerde configuraties kiezen
 
 id: Small front speakers
 msg: Kleine voorluidsprekers
@@ -261,6 +275,10 @@ msg: Automatisch inloggen als Showtime opstart
 
 id: Enable Spotify
 msg: Spotify inschakelen
+
+id: Forget me
+# Missing translation
+msg: 
 
 id: Friends
 msg: Vrienden
@@ -516,10 +534,6 @@ msg: Kleur
 
 id: Enable VDPAU
 msg: VDPAU inschakelen
-
-id: Force Level 4.2 for h264 content
-# Missing translation
-msg: 
 
 id: Force subtitles to reside on video frame
 msg: Ondertitels forceren om op de videoframe te blijven

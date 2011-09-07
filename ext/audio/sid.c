@@ -1244,7 +1244,7 @@ be_sidplayer_play(const char *url0, media_pipe_t *mp,
   *p++= 0;
   subSong = atoi(p) - 1;
 
-  if((fh = fa_open(url, errbuf, errlen, 0)) == NULL)
+  if((fh = fa_open(url, errbuf, errlen)) == NULL)
     return NULL;
 
   fsize = fa_read(fh, sidfile, sizeof(sidfile));
@@ -1270,10 +1270,8 @@ be_sidplayer_play(const char *url0, media_pipe_t *mp,
 
     if(mb == NULL) {
 
-      mb = media_buf_alloc();
+      mb = media_buf_alloc_unlocked(mp, sizeof(int16_t) * CHUNK_SIZE * 1);
       mb->mb_data_type = MB_AUDIO;
-      mb->mb_size = sizeof(int16_t) * CHUNK_SIZE * 1;
-      mb->mb_data = malloc(mb->mb_size);
       mb->mb_channels = 1;
       mb->mb_rate = 44100;
 

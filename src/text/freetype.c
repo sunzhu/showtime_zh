@@ -290,7 +290,7 @@ face_create_from_uri(const char *path)
   FT_Error err;
   size_t s;
 
-  fa_handle_t *fh = fa_open(path, errbuf, sizeof(errbuf), 0);
+  fa_handle_t *fh = fa_open(path, errbuf, sizeof(errbuf));
   if(fh == NULL) {
     TRACE(TRACE_ERROR, "Freetype", "Unable to load font: %s -- %s",
 	  path, errbuf);
@@ -604,6 +604,7 @@ typedef struct line {
   int descender;
   int shadow;
   int outline;
+  int default_height;
   uint32_t color;
   enum {
     LINE_TYPE_TEXT = 0,
@@ -706,6 +707,7 @@ text_render0(const uint32_t *uc, const int len,
 
     if(li == NULL) {
       li = alloca(sizeof(line_t));
+      li->default_height = current_size;
       li->type = LINE_TYPE_TEXT;
       li->start = -1;
       li->count = 0;
@@ -729,6 +731,7 @@ text_render0(const uint32_t *uc, const int len,
 
     case TR_CODE_HR:
       li = alloca(sizeof(line_t));
+      li->default_height = current_size;
       li->type = LINE_TYPE_HR;
       li->start = -1;
       li->count = 0;
@@ -896,6 +899,7 @@ text_render0(const uint32_t *uc, const int len,
 
 	if(k > 0) {
 	  lix = alloca(sizeof(line_t));
+	  lix->default_height = li->default_height;
 	  lix->type = LINE_TYPE_TEXT;
 	  lix->start = li->start + k;
 	  lix->count = li->count - k;
@@ -977,7 +981,7 @@ text_render0(const uint32_t *uc, const int len,
 	outline = MAX(items[i].outline, outline);
       }
 
-      li->height = height;
+      li->height = height ?: li->default_height;
       li->descender = descender;
       li->shadow = shadow;
       li->outline = outline;
@@ -1160,7 +1164,7 @@ text_render0(const uint32_t *uc, const int len,
 
 
       if(oglyph != NULL && 
-	 FT_Glyph_To_Bitmap(&oglyph, FT_RENDER_MODE_NORMAL, &pen, 0))
+	 FT_Glyph_To_Bitmap(&oglyph, FT_RENDER_MODE_NORMAL, &pen, 1))
 	oglyph = NULL;
 
       if(items[i].shadow && (oglyph != NULL || glyph != NULL)) {

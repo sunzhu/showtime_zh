@@ -216,7 +216,7 @@ video_seek(AVFormatContext *fctx, media_pipe_t *mp, media_buf_t **mbp,
   mp_flush(mp, 0);
   
   if(*mbp != NULL && *mbp != MB_SPECIAL_EOF)
-    media_buf_free(*mbp);
+    media_buf_free_unlocked(mp, *mbp);
   *mbp = NULL;
 
   prop_set_float(prop_create(mp->mp_prop_root, "seektime"), 
@@ -275,7 +275,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
       if(si == mp->mp_video.mq_stream) {
 	/* Current video stream */
-	mb = media_buf_alloc();
+	mb = media_buf_alloc_unlocked(mp, pkt.size);
 	mb->mb_data_type = MB_VIDEO;
 	mq = &mp->mp_video;
 
@@ -288,7 +288,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
       } else if(fctx->streams[si]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
 
-	mb = media_buf_alloc();
+	mb = media_buf_alloc_unlocked(mp, pkt.size);
 	mb->mb_data_type = MB_AUDIO;
 	mq = &mp->mp_audio;
 
@@ -296,7 +296,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
 	int duration = pkt.convergence_duration ?: pkt.duration;
 
-	mb = media_buf_alloc();
+	mb = media_buf_alloc_unlocked(mp, pkt.size);
 	mb->mb_codecid = fctx->streams[si]->codec->codec_id;
 	mb->mb_data_type = MB_SUBTITLE;
 	mq = &mp->mp_video;
@@ -328,21 +328,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
       mb->mb_stream = pkt.stream_index;
 
-      if(pkt.destruct == av_destruct_packet) {
-	/* Move the data pointers from ffmpeg's packet */
-	mb->mb_data = pkt.data;
-	pkt.data = NULL;
-
-	mb->mb_size = pkt.size;
-	pkt.size = 0;
-
-      } else {
-
-	mb->mb_data = malloc(pkt.size +   FF_INPUT_BUFFER_PADDING_SIZE);
-	memset(mb->mb_data + pkt.size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
-	memcpy(mb->mb_data, pkt.data, pkt.size);
-	mb->mb_size = pkt.size;
-      }
+      memcpy(mb->mb_data, pkt.data, pkt.size);
 
       if(mb->mb_pts != AV_NOPTS_VALUE && mb->mb_data_type == MB_AUDIO)
 	mb->mb_time = mb->mb_pts - fctx->start_time;
@@ -509,7 +495,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
   }
 
   if(mb != NULL && mb != MB_SPECIAL_EOF)
-    media_buf_free(mb);
+    media_buf_free_unlocked(mp, mb);
   return e;
 }
 
@@ -583,7 +569,8 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
   /**
    * Check file type
    */
-  if((avio = fa_libav_open(url, 65536, errbuf, errlen, 0)) == NULL)
+  if((avio = fa_libav_open(url, 65536, errbuf, errlen, FA_CACHE,
+			   mp->mp_prop_io)) == NULL)
     return NULL;
 
   if(avio_read(avio, buf, sizeof(buf)) == sizeof(buf)) {
@@ -592,7 +579,9 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
     }
   }
 
-  if(mimetype == NULL) {
+  int seek_is_fast = fa_seek_is_fast(avio->opaque);
+
+  if(seek_is_fast && mimetype == NULL) {
     if(fa_probe_iso(NULL, avio) == 0) {
       fa_libav_close(avio);
     isdvd:
@@ -605,7 +594,11 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
     }
   }
 
-  opensub_hash_rval = opensub_compute_hash(avio, &hash);
+  if(seek_is_fast)
+    opensub_hash_rval = opensub_compute_hash(avio, &hash);
+  else
+    opensub_hash_rval = 1;
+
   if(opensub_hash_rval == -1)
     TRACE(TRACE_DEBUG, "Video", "Unable to compute opensub hash");
 
