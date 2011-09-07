@@ -38,7 +38,7 @@ msg: Marche
 # ./glwthemes/mono/pages/about.view
 #
 id: Avail system RAM: %d kB
-msg: Mémoire disponible : %d kB
+msg: Mémoire système disponible : %d kB
 
 id: Detected CPUs: %d
 msg: CPUs détectés: %d
@@ -104,6 +104,17 @@ id: Playqueue
 msg: File de lecture
 
 #
+# ./glwthemes/mono/pages/video.view
+#
+id: Playback status
+# Missing translation
+msg: 
+
+id: Unable to start video playback
+# Missing translation
+msg: 
+
+#
 # ./glwthemes/mono/playdecks/dvd.view
 #
 id: Chapter %d / %d
@@ -127,12 +138,6 @@ msg: Le CPU est trop faible pour décoder cette vidéo
 #
 # ./glwthemes/mono/popups/auth.view
 #
-id: Cancel
-msg: Annuler
-
-id: OK
-msg: OK
-
 id: Password
 msg: Mot de passe
 
@@ -141,6 +146,15 @@ msg: Se souvenir de moi
 
 id: Username
 msg: Nom d'utilisateur
+
+#
+# ./glwthemes/mono/popups/textDialog.view
+#
+id: Cancel
+msg: Annuler
+
+id: OK
+msg: OK
 
 #
 # ./glwthemes/mono/screensaver.view
@@ -262,6 +276,10 @@ msg: S'authentifier automatiquement au démarrage de Showtime
 id: Enable Spotify
 msg: Activer Spotify
 
+id: Forget me
+# Missing translation
+msg: 
+
 id: Friends
 msg: Amis
 
@@ -356,7 +374,7 @@ msg: Code tertiaire de la langue pour les sous-titres
 # ./src/ipc/serdev/lgtv.c
 #
 id: Automatic TV power on/off
-msg: Automatisk på/av kontroll av TVn
+msg: Marche/Arrêt automatique de la TV
 
 id: Input source
 msg: Source d'entrée
@@ -516,10 +534,6 @@ msg: Couleur
 
 id: Enable VDPAU
 msg: Activer VDPAU
-
-id: Force Level 4.2 for h264 content
-# Missing translation
-msg: 
 
 id: Force subtitles to reside on video frame
 msg: Forcer les sous-titres à rester sur l'image vidéo

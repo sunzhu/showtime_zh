@@ -88,6 +88,7 @@ SRCS +=	src/misc/ptrvec.c \
 	src/misc/dbl.c \
 	src/misc/json.c \
 	src/misc/unicode_composition.c \
+	src/misc/pool.c \
 
 SRCS-${CONFIG_TREX} += ext/trex/trex.c
 
@@ -129,6 +130,8 @@ SRCS-$(CONFIG_LIBSMBCLIENT) += src/fileaccess/fa_smb.c
 SRCS-$(CONFIG_LOCATEDB) += src/fileaccess/fa_locatedb.c
 
 SRCS-$(CONFIG_SPOTLIGHT) += src/fileaccess/fa_spotlight.c
+
+SRCS-$(CONFIG_READAHEAD_CACHE) += src/fileaccess/fa_cache.c
 
 SRCS += ext/audio/sid.c
 
@@ -352,14 +355,6 @@ ${BUILDDIR}/src/ui/gu/%.o : CFLAGS = $(CFLAGS_GTK) \
 # IPC
 #
 SRCS                +=  src/ipc/ipc.c
-
-SRCS-$(CONFIG_DBUS) +=  src/ipc/dbus/dbus.c \
-			src/ipc/dbus/mpris.c \
-			src/ipc/dbus/mpkeys.c
-
-${BUILDDIR}/src/ipc/dbus/%.o : CFLAGS = $(CFLAGS_DBUS) \
--Wall -Werror -Wmissing-prototypes -Wno-cast-qual
-
 SRCS-$(CONFIG_LIRC) +=  src/ipc/lirc.c
 SRCS-$(CONFIG_STDIN)+=  src/ipc/stdin.c
 
@@ -498,9 +493,9 @@ SRCS-$(CONFIG_SPIDERMONKEY) += ext/spidermonkey/jsapi.c	\
                         src/js/js_json.c                \
 
 ${BUILDDIR}/ext/spidermonkey/%.o : CFLAGS = \
-	-Iext/spidermonkey -Isrc/arch/nspr -DDEBUG=1
+	-Iext/spidermonkey -Isrc/arch/nspr
 
-CFLAGS_com += -DXP_UNIX -DJS_HAS_XML_SUPPORT -DJS_THREADSAFE -DJS_GC_ZEAL
+CFLAGS_com += -DXP_UNIX -DJS_HAS_XML_SUPPORT -DJS_THREADSAFE
 
 #
 # polarssl
@@ -561,7 +556,7 @@ OBJDIRS+= $(sort $(dir $(BUNDLE_OBJS)))
 .PRECIOUS: ${BUNDLE_SRCS}
 
 # Common CFLAGS for all files
-CFLAGS_com += -g -funsigned-char ${OPTFLAGS}
+CFLAGS_com += -g -funsigned-char ${OPTFLAGS} ${CFLAGS_dbg}
 CFLAGS_com += -D_FILE_OFFSET_BITS=64
 CFLAGS_com += -I${BUILDDIR} -I${CURDIR}/src -I${CURDIR}
 
