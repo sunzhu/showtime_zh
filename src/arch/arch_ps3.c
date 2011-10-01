@@ -30,8 +30,10 @@
 #include <net/net.h>
 #include <net/netctl.h>
 
+#include <sysmodule/sysmodule.h>
 #include <psl1ght/lv2.h>
 #include <psl1ght/lv2/spu.h>
+#include <rtc.h>
 
 #include "threads.h"
 #include "atomic.h"
@@ -40,6 +42,7 @@
 #include "service.h"
 #include "misc/callout.h"
 #include "text/text.h"
+#include "notifications.h"
 
 #if ENABLE_PS3_VDEC
 #include "video/ps3_vdec.h"
@@ -66,10 +69,17 @@ mftb(void)
 static prop_t *sysprop;
 static prop_t *memprop;
 
+#define LOW_MEM_LOW_WATER  20 * 1024 * 1024
+#define LOW_MEM_HIGH_WATER 30 * 1024 * 1024
+
+
 static void
 memlogger_fn(callout_t *co, void *aux)
 {
+  static int low_mem_warning;
+
   callout_arm(&memlogger, memlogger_fn, NULL, 1);
+
   struct {
     uint32_t total;
     uint32_t avail;
@@ -79,6 +89,17 @@ memlogger_fn(callout_t *co, void *aux)
 
   prop_set_int(prop_create(memprop, "systotal"), meminfo.total / 1024);
   prop_set_int(prop_create(memprop, "sysfree"), meminfo.avail / 1024);
+
+  if(meminfo.avail < LOW_MEM_LOW_WATER && !low_mem_warning) {
+    low_mem_warning = 1;
+    notify_add(NULL, NOTIFY_ERROR, NULL, 5,
+	       _("System is low on memroy (%d kB RAM available)"),
+	       meminfo.avail / 1024);
+  }
+
+  if(meminfo.avail > LOW_MEM_HIGH_WATER)
+    low_mem_warning = 0;
+
 }
 
 
@@ -133,6 +154,11 @@ thread_trampoline(void *aux)
   hts_thread_exit_specific();
 #endif
   free(ta);
+
+  extern int netFreethreadContext(long long, int);
+
+  netFreethreadContext(0, 1);
+
   sys_ppu_thread_exit(0);
   return r;
 }
@@ -400,6 +426,7 @@ arch_set_default_paths(int argc, char **argv)
   showtime_persistent_path = strdup(buf);
   strcpy(x, "cache");
   showtime_cache_path = strdup(buf);
+  SysLoadModule(SYSMODULE_RTC);
 }
 
 
@@ -420,6 +447,27 @@ hts_mutex_init(hts_mutex_t *m)
   memset(&attr, 0, sizeof(attr));
   attr.attr_protocol = MUTEX_PROTOCOL_FIFO;
   attr.attr_recursive = MUTEX_NOT_RECURSIVE;
+  attr.attr_pshared  = 0x00200;
+  attr.attr_adaptive = 0x02000;
+
+  strcpy(attr.name, "mutex");
+
+  if((r = sys_mutex_create(m, &attr)) != 0) {
+    my_trace("Failed to create mutex: error: 0x%x", r);
+    exit(0);
+  }
+}
+
+
+
+void
+hts_mutex_init_recursive(hts_mutex_t *m)
+{
+  sys_mutex_attribute_t attr;
+  s32 r;
+  memset(&attr, 0, sizeof(attr));
+  attr.attr_protocol = MUTEX_PROTOCOL_FIFO;
+  attr.attr_recursive = MUTEX_RECURSIVE;
   attr.attr_pshared  = 0x00200;
   attr.attr_adaptive = 0x02000;
 
@@ -621,4 +669,26 @@ void
 hfree(void *ptr, size_t size)
 {
   Lv2Syscall1(349, (uint64_t)ptr);
+}
+
+
+void
+my_localtime(const time_t *now, struct tm *tm)
+{
+  rtc_datetime dt;
+  rtc_tick utc, local;
+
+  rtc_convert_time_to_datetime(&dt, *now);
+  rtc_convert_datetime_to_tick(&dt, &utc);
+  rtc_convert_utc_to_localtime(&utc, &local);
+  rtc_convert_tick_to_datetime(&dt, &local);
+
+  memset(tm, 0, sizeof(struct tm));
+
+  tm->tm_year = dt.year - 1900;
+  tm->tm_mon  = dt.month - 1;
+  tm->tm_mday = dt.day;
+  tm->tm_hour = dt.hour;
+  tm->tm_min  = dt.minute;
+  tm->tm_sec  = dt.second;
 }

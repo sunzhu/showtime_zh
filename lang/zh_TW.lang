@@ -215,6 +215,12 @@ id: Use opensubtitles.org
 msg: 啟用 opensubtitles.org
 
 #
+# ./src/arch/arch_ps3.c
+#
+id: System is low on memroy (%d kB RAM available)
+msg: 系統記憶體容量不足（可用容量 %d kB）
+
+#
 # ./src/audio/audio.c
 #
 id: Audio/Video sync delay
@@ -241,6 +247,9 @@ msg: 迷你前置揚聲器
 id: Swap LFE+center with surround
 msg: 使用環繞效果代替低頻與中間聲道
 
+id: Switching audio output to %s
+msg: 設定音訊輸出為 %s
+
 #
 # ./src/backend/dvd/cdda.c
 #
@@ -252,6 +261,12 @@ msg: 不正確的 CD 音軌
 
 id: Unable to open CD
 msg: 無法開啟 CD
+
+#
+# ./src/backend/dvd/dvd.c
+#
+id: DVD read error, restarting disc
+msg: DVD 讀取錯誤，嘗試重新讀取中
 
 #
 # ./src/backend/htsp/htsp.c
@@ -312,6 +327,9 @@ msg: Spotify offers you legal and free access to a huge library of music. To use
 
 id: Spotify playlists
 msg: Spotify 播放列表
+
+id: Spotify: Connection error: %s
+msg: 連線錯誤： %s
 
 id: Starred
 msg: Starred
@@ -386,7 +404,7 @@ id: Configure mapping of keyboard and remote controller keys
 msg: 設定鍵盤與遙控器按鍵對應
 
 id: Keymapper
-msg: 鍵盤對應
+msg: 按鍵設置
 
 #
 # ./src/media.c
@@ -508,11 +526,26 @@ msg: 找不到裝置
 id: Malformed URI after device
 msg: Malformed URI after device
 
-id: Malformed URI after service
-msg: Malformed URI after service
-
 id: Service not found
 msg: 找不到服務
+
+#
+# ./src/video/ps3_vdec.c
+#
+id: Cell-h264: Forcing level 4.2 for content in level %d.%d. This may break video playback.
+msg: Cell-h264： 強制以 H.264 level 4.2 解碼 level %d.%d 的影片。本選項有可能導致播放失敗
+
+id: Unable to accelerate %s, library not loaded.
+msg: 加速失敗 %s ：無法載入函式庫
+
+id: Unable to open Cell codec. Error 0x%x
+msg: 無法開啟 Cell 解碼套件。錯誤 0x%x
+
+id: Unable to open Cell codec. Unable to allocate %d bytes of RAM
+msg: 無法開啟 Cell 解碼套件。無法配置容量為 %d 位元組的記憶體空間
+
+id: Unable to query Cell codec. Error 0x%x
+msg: 無法查詢 Cell 解碼套件。錯誤 0x%x
 
 #
 # ./src/video/video_settings.c

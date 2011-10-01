@@ -263,6 +263,7 @@ mp_create(const char *name, int flags, const char *type)
   mp->mp_prop_primary = prop_create(mp->mp_prop_root, "primary");
 
   mp->mp_prop_io = prop_create(mp->mp_prop_root, "io");
+  mp->mp_prop_notifications = prop_create(mp->mp_prop_root, "notifications");
 
   //--------------------------------------------------
   // Video
@@ -587,19 +588,12 @@ mp_wait_for_empty_queues(media_pipe_t *mp)
   event_t *e;
   hts_mutex_lock(&mp->mp_mutex);
 
- again:
   while((e = TAILQ_FIRST(&mp->mp_eq)) == NULL &&
 	(mp->mp_audio.mq_packets_current || mp->mp_video.mq_packets_current))
     hts_cond_wait(&mp->mp_backpressure, &mp->mp_mutex);
 
-  if(e != NULL) {
+  if(e != NULL)
     TAILQ_REMOVE(&mp->mp_eq, e, e_link);
-    
-    if(event_is_type(e, EVENT_CURRENT_PTS)) {
-      event_release(e);
-      goto again;
-    }
-  }
 
   hts_mutex_unlock(&mp->mp_mutex);
   return e;
@@ -768,6 +762,85 @@ mb_enqueue_always(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb)
   hts_mutex_unlock(&mp->mp_mutex);
 }
 
+
+/**
+ *
+ */
+int
+mp_seek_in_queues(media_pipe_t *mp, int64_t pos)
+{
+  media_buf_t *abuf, *vbuf, *vk, *mb;
+  int rval = 1;
+  hts_mutex_lock(&mp->mp_mutex);
+
+  TAILQ_FOREACH(abuf, &mp->mp_audio.mq_q, mb_link)
+    if(abuf->mb_pts != AV_NOPTS_VALUE && abuf->mb_pts >= pos)
+      break;
+
+  if(abuf != NULL) {
+    vk = NULL;
+
+    TAILQ_FOREACH(vbuf, &mp->mp_video.mq_q, mb_link) {
+      if(vbuf->mb_keyframe)
+	vk = vbuf;
+      if(vbuf->mb_pts != AV_NOPTS_VALUE && vbuf->mb_pts >= pos)
+	break;
+    }
+    
+    if(vbuf != NULL && vk != NULL) {
+      int adrop = 0, vdrop = 0, vskip = 0;
+      while(1) {
+	mb = TAILQ_FIRST(&mp->mp_audio.mq_q);
+	if(mb == abuf)
+	  break;
+	TAILQ_REMOVE(&mp->mp_audio.mq_q, mb, mb_link);
+	mp->mp_audio.mq_packets_current--;
+	mp->mp_buffer_current -= mb->mb_size;
+	media_buf_free_locked(mp, mb);
+	adrop++;
+      }
+      mq_update_stats(mp, &mp->mp_audio);
+
+      while(1) {
+	mb = TAILQ_FIRST(&mp->mp_video.mq_q);
+	if(mb == vk)
+	  break;
+	TAILQ_REMOVE(&mp->mp_video.mq_q, mb, mb_link);
+	mp->mp_video.mq_packets_current--;
+	mp->mp_buffer_current -= mb->mb_size;
+	media_buf_free_locked(mp, mb);
+	vdrop++;
+      }
+      mq_update_stats(mp, &mp->mp_video);
+
+
+      while(mb != vbuf) {
+	mb->mb_skip = 1;
+	mb = TAILQ_NEXT(mb, mb_link);
+	vskip++;
+      }
+      mb->mb_skip = 2;
+      rval = 0;
+
+      mb = media_buf_alloc_locked(mp, 0);
+      mb->mb_data_type = MB_BLACKOUT;
+      mb_enq_head(mp, &mp->mp_video, mb);
+
+      mb = media_buf_alloc_locked(mp, 0);
+      mb->mb_data_type = MB_FLUSH;
+      mb_enq_head(mp, &mp->mp_video, mb);
+
+      mb = media_buf_alloc_locked(mp, 0);
+      mb->mb_data_type = MB_FLUSH;
+      mb_enq_tail(mp, &mp->mp_audio, mb);
+
+
+      TRACE(TRACE_DEBUG, "Media", "Seeking by dropping %d audio packets and %d+%d video packets from queue", adrop, vdrop, vskip);
+    }
+  }
+  hts_mutex_unlock(&mp->mp_mutex);
+  return rval;
+}
 
 
 /**
@@ -1300,12 +1373,12 @@ seek_by_propchange(void *opaque, prop_event_t event, ...)
       continue;
 
     ets = (event_ts_t *)e;
-    ets->pts = t;
+    ets->ts = t;
     return;
   }
 
   ets = event_create(EVENT_SEEK, sizeof(event_ts_t));
-  ets->pts = t;
+  ets->ts = t;
   mp_enqueue_event_locked(mp, &ets->h);
   event_release(&ets->h);
 }
@@ -1608,7 +1681,7 @@ static void
 mtm_rethink(media_track_mgr_t *mtm)
 {
   media_track_t *mt, *best = NULL;
-  int thres = 1;
+  int thres = 20;
   int best_score = 0;
 
   if (mtm->mtm_current_url) {
