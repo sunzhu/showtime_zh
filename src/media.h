@@ -33,9 +33,8 @@ struct video_decoder;
 
 typedef struct event_ts {
   event_t h;
-  int stream;
-  int64_t dts;
-  int64_t pts;
+  int64_t ts;
+
 } event_ts_t;
 
 
@@ -131,6 +130,8 @@ typedef struct media_buf {
   uint8_t mb_aspect_override : 2;
   uint8_t mb_disable_deinterlacer : 1;
   uint8_t mb_skip : 2;
+  uint8_t mb_keyframe : 1;
+  uint8_t mb_send_pts : 1;
 
   uint8_t mb_stream;
 
@@ -242,6 +243,7 @@ typedef struct media_pipe {
   prop_t *mp_prop_root;
   prop_t *mp_prop_type;
   prop_t *mp_prop_io;
+  prop_t *mp_prop_notifications;
   prop_t *mp_prop_primary;
   prop_t *mp_prop_metadata;
   prop_t *mp_prop_model;
@@ -383,6 +385,8 @@ void mp_send_cmd_u32_head(media_pipe_t *mp, media_queue_t *mq, int cmd,
 			  uint32_t u);
 
 void mp_flush(media_pipe_t *mp, int blackout);
+
+int mp_seek_in_queues(media_pipe_t *mp, int64_t pos);
 
 void mp_end(media_pipe_t *mp);
 

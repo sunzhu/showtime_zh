@@ -117,17 +117,29 @@ static int
 family_get(const char *name)
 {
   family_t *f;
+
   if(name == NULL)
     return 0;
 
+  char *n2 = mystrdupa(name), *e;
+  e = strrchr(n2, ' ');
+  if(e != NULL) {
+    e++;
+    if(!strcasecmp(e, "thin") ||
+       !strcasecmp(e, "light") ||
+       !strcasecmp(e, "bold") ||
+       !strcasecmp(e, "heavy"))
+      e[-1] = 0;
+  }
+
   LIST_FOREACH(f, &families, link)
-    if(!strcasecmp(name, f->name))
+    if(!strcasecmp(n2, f->name))
       break;
   
   if(f == NULL) {
     f = malloc(sizeof(family_t));
     f->id = ++family_id_tally;
-    f->name = strdup(name);
+    f->name = strdup(n2);
   } else {
     LIST_REMOVE(f, link);
   }
@@ -261,15 +273,20 @@ face_create_epilogue(face_t *face, const char *source)
 	family, style, source);
 
   if(style != NULL) {
-    if(!strcasecmp(style, "bold"))
-      face->style = TR_STYLE_BOLD;
-    if(!strcasecmp(style, "italic"))
-      face->style = TR_STYLE_ITALIC;
+    char *f = mystrdupa(style), *tmp = NULL;
+    const char *tok;
+    while((tok = strtok_r(f, " ", &tmp)) != NULL) {
+      f = NULL;
+      if(!strcasecmp(tok, "bold"))
+	face->style = TR_STYLE_BOLD;
+      if(!strcasecmp(tok, "italic"))
+	face->style = TR_STYLE_ITALIC;
+    }
   }
 
   face->family_id_vec = calloc(2, sizeof(int));
   face->family_id_vec[0] = family_get(family);
-  
+
   FT_Select_Charmap(face->face, FT_ENCODING_UNICODE);
 
   remove_face_alias(family_get(family));
@@ -1024,7 +1041,7 @@ text_render0(const uint32_t *uc, const int len,
   // --- allocate and init pixmap
 
   pm = pixmap_create(target_width + margin*2, target_height + margin*2,
-		     color_output ? PIX_FMT_BGR32 : PIX_FMT_Y400A);
+		     color_output ? PIX_FMT_BGR32 : PIX_FMT_Y400A, 1);
 
   pm->pm_lines = lines;
   pm->pm_flags = pmflags;

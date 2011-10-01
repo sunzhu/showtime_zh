@@ -31,6 +31,7 @@
 #include "settings.h"
 #include "prop/prop_grouper.h"
 #include "prop/prop_nodefilter.h"
+#include "arch/arch.h"
 
 LIST_HEAD(clone_list, clone);
 
@@ -1042,7 +1043,7 @@ cloner_pagination_check(sub_cloner_t *sc)
 static int
 clone_sig_handler(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 {
-  clone_t *c = opaque, *d;
+  clone_t *c = opaque;
   sub_cloner_t *sc = c->c_sc;
 
   switch(signal) {
@@ -1073,8 +1074,6 @@ clone_sig_handler(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
     break;
 
   case GLW_SIGNAL_DESTROY:
-    d = prop_tag_clear(w->glw_originating_prop, sc);
-    assert(d == c);
     sc->sc_entries--;
     if(TAILQ_NEXT(w, glw_parent_link) != NULL)
       sc->sc_positions_valid = 0;
@@ -3214,7 +3213,7 @@ glwf_strftime(glw_view_eval_context_t *ec, struct token *self,
 
   t = token2int(a);
   if(t != 0) {
-    localtime_r(&t, &tm);
+    my_localtime(&t, &tm);
     strftime(buf, sizeof(buf), rstr_get(b->t_rstring), &tm);
   } else {
     buf[0] = 0;
