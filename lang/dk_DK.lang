@@ -25,6 +25,9 @@ msg: Videoindstillinger
 id: Added by: %s
 msg: Tilføjet af: %s
 
+id: Played %d times
+msg: Afspillet %d gange
+
 #
 # ./glwthemes/mono/include/buttons.view
 #
@@ -199,9 +202,6 @@ msg: Fancy UI animationer
 id: Master volume: %d dB
 msg: Master volume: %d dB
 
-id: Starwars scroller tilt
-msg: Vis tekster som en Starwars scroller
-
 id: Top bar navigation buttons
 msg: Navigationsknapper i toppen af skærmen
 
@@ -262,6 +262,9 @@ msg: Ugyldig CD track
 id: Unable to open CD
 msg: Kan ikke åbne CD
 
+#
+# ./src/backend/dvd/dvd.c
+#
 id: DVD read error, restarting disc
 msg: DVD læsefejl, genstarter disk
 
@@ -336,6 +339,15 @@ msg: Medvirkende
 #
 id: Bookmarks
 msg: Bogmærker
+
+#
+# ./src/fileaccess/fa_backend.c
+#
+id: Can't handle content type %d
+msg: Kan ikke håndtere indholdstype %d
+
+id: Unable to open file: %s
+msg: Kan ikke åbne filen: %s
 
 #
 # ./src/fileaccess/fa_locatedb.c
@@ -562,6 +574,9 @@ msg: Centreret
 id: Color
 msg: Farve
 
+id: Controls if video playback should restart where last played
+msg: Bestemmer om videoafspilning skal fortsætte fra sidste afspilning
+
 id: Enable VDPAU
 msg: Aktiver VDPAU
 
@@ -577,11 +592,17 @@ msg: Ignorer indlejret stil
 id: Left
 msg: Venstre
 
+id: No
+msg: Nej
+
 id: Outline color
 msg: Farve på kontur
 
 id: Outline size
 msg: Størrelse på kontur
+
+id: Resume video playback
+msg: Fortsæt video afspilning
 
 id: Right
 msg: Højre
@@ -612,3 +633,6 @@ msg: Videoacceleration og skærmpræsentation
 
 id: Video playback
 msg: Videoafspilning
+
+id: Yes
+msg: Ja

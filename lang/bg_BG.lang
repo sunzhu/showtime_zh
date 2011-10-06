@@ -25,6 +25,8 @@ msg: Видео настройки
 id: Added by: %s
 msg: Добавено от: %s
 
+id: Played %d times
+msg: Възпроизведено %d пъти 
 #
 # ./glwthemes/mono/include/buttons.view
 #
@@ -339,6 +341,14 @@ msg: С висок рейтинг
 #
 id: Bookmarks
 msg: Маркери
+#
+# ./src/fileaccess/fa_backend.c
+#
+id: Can't handle content type %d
+msg: Не може да обработи вида съдържание %d
+
+id: Unable to open file: %s
+msg: Невъзможно отварянето на файла : %s
 
 #
 # ./src/fileaccess/fa_locatedb.c
@@ -404,7 +414,7 @@ id: Configure mapping of keyboard and remote controller keys
 msg: Настройка на бутоните на клавиатура и дистанционно управление
 
 id: Keymapper
-msg: Keymapper
+msg: Карта на бутоните
 
 #
 # ./src/media.c
@@ -434,7 +444,7 @@ msg: Няма handler за URL
 # ./src/plugins.c
 #
 id: Invalid URI
-msg: Невалиден URL 
+msg: Невалиден URI 
 
 id: Plugin ID %s does not exist
 msg: Plugin ID %s не съществува
@@ -565,6 +575,8 @@ msg: Център
 id: Color
 msg: Цвят
 
+id: Controls if video playback should restart where last played
+msg: Настройка дали видео възпроизвеждането трябва да продължи от където е спрян за последно файла
 id: Enable VDPAU
 msg: Включи VDPAU
 
@@ -580,12 +592,16 @@ msg: Игнорирай вградения стил
 id: Left
 msg: Ляво
 
+id: No
+msg: Не
 id: Outline color
 msg: Цвят на контура
 
 id: Outline size
 msg: Размер на контура
 
+id: Resume video playback
+msg: Възобнови видео възпроизвеждането
 id: Right
 msg: Дясно
 
@@ -616,3 +632,5 @@ msg: Видео ускорение и поведение на екрана
 id: Video playback
 msg: Видео възпроизвеждане
 
+id: Yes
+msg: Да 
