@@ -32,15 +32,13 @@ msg: 已播放%d次
 # ./glwthemes/mono/directoryviews/list2/center_directory.view
 #
 id: %d entries
-# Missing translation
-msg: 
+msg: 总数：%d
 
 #
 # ./glwthemes/mono/directoryviews/list2/center_playlist.view
 #
 id: %d tracks
-# Missing translation
-msg: 
+msg: 轨道数：%d
 
 #
 # ./glwthemes/mono/include/buttons.view
@@ -208,8 +206,7 @@ id: Adjust background tint based on daytime
 msg: 根据时间调整背景颜色
 
 id: Alternate list layout
-# Missing translation
-msg: 
+msg: 更改列表布局
 
 id: Audio muted
 msg: 已静音
@@ -299,8 +296,7 @@ id: Search
 msg: 搜索
 
 id: Search result for: %s
-# Missing translation
-msg: 
+msg: "%s"的查询结果
 
 #
 # ./src/backend/spotify/spotify.c
@@ -546,20 +542,16 @@ msg: 将鼠标滚轮映射到上/下按键
 # ./src/ui/linux/nvidia.c
 #
 id: Auto-switch to this mode
-# Missing translation
-msg: 
+msg: 自动切换到当前模式
 
 id: DVI-Video color range
-# Missing translation
-msg: 
+msg: DVI视频颜色范围
 
 id: Switch to this mode now
-# Missing translation
-msg: 
+msg: 立刻切换到当前模式
 
 id: Video modes
-# Missing translation
-msg: 
+msg: 视频模式
 
 #
 # ./src/upnp/upnp.c
@@ -619,8 +611,7 @@ id: Controls if video playback should restart where last played
 msg: 控制视频播放是否从上次播放位置开始
 
 id: Count video as played when reaching
-# Missing translation
-msg: 
+msg: 打开过的视频即视为已播放过
 
 id: Enable VDPAU
 msg: 启用VDPAU
