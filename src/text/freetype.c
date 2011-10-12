@@ -479,7 +479,7 @@ face_find(int uc, uint8_t style, int family_id)
   if(f != NULL)
     face_set_family(f, family_id);
 
-  return NULL;
+  return f;
 }
 
 
@@ -712,6 +712,19 @@ text_render0(const uint32_t *uc, const int len,
   pen_x = 0;
   pen_y = 0;
   style = 0;
+
+  if(flags & TR_RENDER_BOLD)
+    style |= TR_STYLE_BOLD;
+
+  if(flags & TR_RENDER_ITALIC)
+    style |= TR_STYLE_ITALIC;
+
+  if(flags & TR_RENDER_SHADOW)
+    current_shadow = 2;
+
+  if(flags & TR_RENDER_OUTLINE)
+    current_outline = 64;
+
   prev = 0;
   li = NULL;
 
