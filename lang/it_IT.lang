@@ -29,6 +29,20 @@ id: Played %d times
 msg: Riprodotto %d volte
 
 #
+# ./glwthemes/mono/directoryviews/list2/center_directory.view
+#
+id: %d entries
+# Missing translation
+msg: 
+
+#
+# ./glwthemes/mono/directoryviews/list2/center_playlist.view
+#
+id: %d tracks
+# Missing translation
+msg: 
+
+#
 # ./glwthemes/mono/include/buttons.view
 #
 id: Off
@@ -36,6 +50,24 @@ msg: Disattiva
 
 id: On
 msg: Attiva
+
+#
+# ./glwthemes/mono/include/infobox.view
+#
+id: Delete
+msg: Cancella
+
+id: Enqueue
+msg: Metti in coda
+
+#
+# ./glwthemes/mono/include/popup.view
+#
+id: Cancel
+msg: Annulla
+
+id: OK
+msg: OK
 
 #
 # ./glwthemes/mono/pages/about.view
@@ -149,28 +181,10 @@ id: Username
 msg: Nome Utente
 
 #
-# ./glwthemes/mono/popups/textDialog.view
-#
-id: Cancel
-msg: Annulla
-
-id: OK
-msg: OK
-
-#
 # ./glwthemes/mono/screensaver.view
 #
 id: No media loaded
 msg: Nessun media caricato
-
-#
-# ./glwthemes/mono/skins/grey/infobox.skin
-#
-id: Delete
-msg: Cancella
-
-id: Enqueue
-msg: Metti in coda
 
 #
 # ./glwthemes/mono/sysinfo.view
@@ -192,6 +206,10 @@ msg: Temperatura GPU: %d / %d °
 #
 id: Adjust background tint based on daytime
 msg: Modifica lo sfondo a seconda dell'ora 
+
+id: Alternate list layout
+# Missing translation
+msg: 
 
 id: Audio muted
 msg: Audio silenziato
@@ -217,7 +235,7 @@ msg: Utilizza opensubtitles.org
 #
 # ./src/arch/arch_ps3.c
 #
-id: System is low on memroy (%d kB RAM available)
+id: System is low on memory (%d kB RAM available)
 msg: Memoria in esaurimento (%d kB di RAM disponibile)
 
 #
@@ -279,6 +297,10 @@ msg: URL HTSP non valido
 #
 id: Search
 msg: Cerca
+
+id: Search result for: %s
+# Missing translation
+msg: 
 
 #
 # ./src/backend/spotify/spotify.c
@@ -521,6 +543,21 @@ id: Map mouse wheel to up/down
 msg: Usa rotellina del mouse per scorrere su/giù
 
 #
+# ./src/ui/linux/nvidia.c
+#
+id: Auto-switch to this mode
+msg: Passa automaticamente a questa modalità
+
+id: DVI-Video color range
+msg: Gamma di colori DVI-Video
+
+id: Switch to this mode now
+msg: Passa a questa modalità ora
+
+id: Video modes
+msg: Modalità video
+
+#
 # ./src/upnp/upnp.c
 #
 id: Enabled on home screen
@@ -576,6 +613,9 @@ msg: Colore
 
 id: Controls if video playback should restart where last played
 msg: Controlla se la riproduzione del video dovrebbe riprendere dall'ultima posizione
+
+id: Count video as played when reaching
+msg: Conteggia il video come riprodotto quando raggiunge
 
 id: Enable VDPAU
 msg: Attiva VDPAU

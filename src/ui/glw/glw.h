@@ -104,7 +104,7 @@ typedef enum {
   GLW_ATTRIB_INT_STEP,
   GLW_ATTRIB_INT_MIN,
   GLW_ATTRIB_INT_MAX,
-  GLW_ATTRIB_PROPROOTS,
+  GLW_ATTRIB_PROPROOTS3,
   GLW_ATTRIB_TRANSITION_EFFECT,
   GLW_ATTRIB_EXPANSION,
   GLW_ATTRIB_BIND_TO_ID,
@@ -130,6 +130,9 @@ typedef enum {
  */
 #define GTB_PASSWORD      0x1   /* Don't display real contents */
 #define GTB_ELLIPSIZE     0x2
+#define GTB_BOLD          0x4
+#define GTB_ITALIC        0x8
+#define GTB_OUTLINE       0x10
 
 typedef struct glw_vertex {
   float x, y, z;
@@ -842,7 +845,6 @@ typedef struct glw {
 
 #define GLW_FOCUS_ON_CLICK       0x4000000
 
-#define GLW_SHADOW               0x8000000
 
 #define GLW_CONSTRAINT_CONF_W    0x10000000
 #define GLW_CONSTRAINT_CONF_X    0x20000000
@@ -855,6 +857,7 @@ typedef struct glw {
 #define GLW2_ALWAYS_LAYOUT  0x4
 #define GLW2_ALWAYS_GRAB_KNOB 0x8
 #define GLW2_AUTOHIDE        0x10
+#define GLW2_SHADOW          0x20
 
 #define GLW2_LEFT_EDGE            0x10000000
 #define GLW2_TOP_EDGE             0x20000000
@@ -899,7 +902,7 @@ typedef struct glw {
  (((f) & GLW_CONSTRAINT_FLAGS) & ~(((f) >> 4) & GLW_CONSTRAINT_FLAGS))
 
 
-int glw_init(glw_root_t *gr, const char *theme, const char *skin,
+int glw_init(glw_root_t *gr, const char *theme,
 	     ui_t *ui, int primary,
 	     const char *instance, const char *instance_title );
 
@@ -989,7 +992,8 @@ void glw_clip_disable(glw_root_t *gr, glw_rctx_t *rc, int which);
  */
 glw_t *glw_view_create(glw_root_t *gr, const char *src, 
 		       glw_t *parent, struct prop *prop,
-		       struct prop *prop_parent, prop_t *args, int cache);
+		       struct prop *prop_parent, prop_t *args,
+		       struct prop *prop_clone, int cache);
 
 /**
  * Transitions
@@ -1015,7 +1019,8 @@ do {						\
     break;					\
   case GLW_ATTRIB_num ... UINT32_MAX:           \
     abort();                                    \
-  case GLW_ATTRIB_PROPROOTS:         		\
+  case GLW_ATTRIB_PROPROOTS3:         		\
+    (void)va_arg(ap, void *);			\
     (void)va_arg(ap, void *);			\
   case GLW_ATTRIB_ARGS:				\
   case GLW_ATTRIB_PROP_PARENT:			\

@@ -1089,28 +1089,28 @@ media_codec_create_lavc(media_codec_t *cw, enum CodecID id,
  *
  */
 media_codec_t *
-media_codec_create(enum CodecID id, int parser,
+media_codec_create(int codec_id, int parser,
 		   media_format_t *fw, AVCodecContext *ctx,
 		   media_codec_params_t *mcp, media_pipe_t *mp)
 {
   media_codec_t *mc = calloc(1, sizeof(media_codec_t));
 
 #if ENABLE_VDPAU
-  if(mcp && !vdpau_codec_create(mc, id, ctx, mcp, mp)) {
+  if(mcp && !vdpau_codec_create(mc, codec_id, ctx, mcp, mp)) {
     
   } else
 #endif
 #if ENABLE_PS3_VDEC
-  if(mcp && !video_ps3_vdec_codec_create(mc, id, ctx, mcp, mp)) {
+  if(mcp && !video_ps3_vdec_codec_create(mc, codec_id, ctx, mcp, mp)) {
 
   } else
 #endif
-  if(media_codec_create_lavc(mc, id, ctx, mcp)) {
+  if(media_codec_create_lavc(mc, codec_id, ctx, mcp)) {
     free(mc);
     return NULL;
   }
 
-  mc->parser_ctx = parser ? av_parser_init(id) : NULL;
+  mc->parser_ctx = parser ? av_parser_init(codec_id) : NULL;
   mc->refcount = 1;
   mc->fw = fw;
   
