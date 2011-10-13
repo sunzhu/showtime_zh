@@ -10565,7 +10565,7 @@ void GB2312StrToUtf8(
 
     while (i < nBytes)
     {
-        if(*(gbStr + i) >= 0)
+        if(*(gbStr + i) >=0 && *(gbStr + i)< 128)
         {
             utf8Str[j++] = gbStr[i++];
             //debug("GB2312Str[%d]=%c\n", i-1, gbStr[i-1]);
