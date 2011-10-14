@@ -611,7 +611,7 @@ id: Controls if video playback should restart where last played
 msg: 控制视频播放是否从上次播放位置开始
 
 id: Count video as played when reaching
-msg: 打开过的视频即视为已播放过
+msg: 将视频视为已播放当播放进度达到
 
 id: Enable VDPAU
 msg: 启用VDPAU
