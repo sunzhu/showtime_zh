@@ -79,4 +79,14 @@ const charset_t *charset_get_idx(unsigned int i);
 
 const char *charset_get_name(const void *ptr);
 
+//for GB2312
+const unsigned char *GBCodeToUnicode(unsigned char *gbCode);
+void UnicodeToUtf8(char* utf8, char *unicode);
+void GB2312StrToUtf8(
+        char *utf8Str,        /* Output Utf-8 chars */
+        const char* gbStr,        /* Input GB2312 chars */
+        int nBytes            /* size of input GB2312 chars */
+        );
+//GB2312
+
 #endif

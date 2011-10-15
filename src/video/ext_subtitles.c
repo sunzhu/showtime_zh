@@ -30,7 +30,6 @@
 #include "misc/string.h"
 #include "i18n.h"
 #include "video_overlay.h"
-#include "gb2utf8.h"
 
 /**
  *
@@ -237,13 +236,10 @@ load_srt(const char *url, const char *buf, size_t len, int force_utf8)
   if(force_utf8 || utf8_verify(buf)) {
     linereader_init(&lr, buf, len);
   } else {
-//    TRACE(TRACE_INFO, "Subtitles",
-//	  "%s is not valid UTF-8. Decoding it as %s",
-//	  url, charset_get_name(i18n_get_srt_charset()));
-//    tmp = utf8_from_bytes(buf, len, i18n_get_srt_charset());
-    TRACE(TRACE_INFO, "Subtitles","Decoding %s as GB2312",url);
-    tmp=malloc(len*3);
-    GB2312StrToUtf8(tmp,buf,len);
+    TRACE(TRACE_INFO, "Subtitles",
+	  "%s is not valid UTF-8. Decoding it as %s",
+	  url, charset_get_name(i18n_get_srt_charset()));
+    tmp = utf8_from_bytes(buf, len, i18n_get_srt_charset());
     linereader_init(&lr, tmp, strlen(tmp));
   }
 

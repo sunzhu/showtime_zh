@@ -216,7 +216,6 @@ SRCS += src/video/video_playback.c \
 	src/video/sub_ass.c \
 	src/video/ext_subtitles.c \
 	src/video/video_settings.c \
-	src/video/gb2utf8.c \
 
 SRCS-$(CONFIG_DVD) += src/video/video_dvdspu.c
 
