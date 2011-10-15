@@ -15,6 +15,10 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#include <libavformat/avio.h>
+#include <libavformat/avformat.h>
+
 #include "showtime.h"
 #include "fa_libav.h"
 
@@ -47,22 +51,25 @@ fa_libav_seek(void *opaque, int64_t offset, int whence)
  *
  */
 AVIOContext *
-fa_libav_reopen(fa_handle_t *fh, int buf_size)
+fa_libav_reopen(fa_handle_t *fh)
 {
   AVIOContext *avio;
 
-  if(buf_size == 0)
-    buf_size = 32768;
+  if(fa_seek(fh, 0, SEEK_SET) != 0)
+    return NULL;
+
+  int buf_size = 32768;
   void *buf = malloc(buf_size);
+
 
   avio = avio_alloc_context(buf, buf_size, 0, fh, fa_libav_read, NULL, 
 			    fa_libav_seek);
-  if(fa_fsize(fh) == -1)
+  if(avio != NULL && fa_fsize(fh) == -1)
     avio->seekable = 0;
   return avio;
 }
 
-
+#if 0
 /**
  *
  */
@@ -76,20 +83,7 @@ fa_libav_open(const char *url, int buf_size, char *errbuf, size_t errlen,
     return NULL;
   return fa_libav_reopen(fh, buf_size);
 }
-
-
-/**
- *
- */
-AVIOContext *
-fa_libav_open_vpaths(const char *url, int buf_size, const char **vpaths)
-{
-  fa_handle_t *fh;
-
-  if((fh = fa_open_vpaths(url, vpaths)) == NULL)
-    return NULL;
-  return fa_libav_reopen(fh, buf_size);
-}
+#endif
 
 
 /**
@@ -205,33 +199,4 @@ fa_libav_close_format(AVFormatContext *fctx)
   AVIOContext *avio = fctx->pb;
   av_close_input_stream(fctx);
   fa_libav_close(avio);
-}
-
-
-/**
- *
- */
-uint8_t *
-fa_libav_load_and_close(AVIOContext *avio, size_t *sizep)
-{
-  size_t r;
-  size_t size = avio_size(avio);
-  if(size == -1)
-    return NULL;
-
-  uint8_t *mem = malloc(size+1);
-
-  avio_seek(avio, 0, SEEK_SET);
-  r = avio_read(avio, mem, size);
-  fa_libav_close(avio);
-
-  if(r != size) {
-    free(mem);
-    return NULL;
-  }
-
-  if(sizep != NULL)
-    *sizep = size;
-  mem[size] = 0; 
-  return mem;
 }
