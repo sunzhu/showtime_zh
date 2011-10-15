@@ -181,6 +181,7 @@ typedef struct {
 
 
 typedef struct {
+  NBT_t nbt;
   SMB_t hdr;
   uint8_t wordcount;
   uint16_t bytecount;
@@ -215,6 +216,7 @@ typedef struct {
 
 
 typedef struct {
+  NBT_t nbt;
   SMB_t hdr;
   uint8_t wordcount;
   uint8_t andx_command;
@@ -259,6 +261,7 @@ typedef struct {
 
 
 typedef struct {
+  NBT_t nbt;
   SMB_t hdr;
   uint8_t wordcount;
   uint8_t andx_command;
@@ -283,6 +286,7 @@ typedef struct {
 
 
 typedef struct {
+  NBT_t nbt;
   SMB_t hdr;
   uint8_t wordcount;
 
@@ -403,6 +407,7 @@ typedef struct {
 
 
 typedef struct {
+  NBT_t nbt;
   SMB_t hdr;
   uint8_t wordcount;
   uint8_t andx_command;
@@ -455,6 +460,7 @@ typedef struct {
 
 
 typedef struct {
+  NBT_t nbt;
   SMB_t hdr;
   uint8_t wordcount;
   uint16_t fid;
@@ -464,6 +470,7 @@ typedef struct {
 
 
 typedef struct {
+  NBT_t nbt;
   SMB_t hdr;
 
   uint8_t wordcount;
@@ -532,6 +539,7 @@ typedef struct {
 } __attribute__((packed)) StandardFileInfo_t;
 
 typedef struct {
+  NBT_t nbt;
   SMB_t hdr;
   uint8_t wordcount;
   uint16_t echo_count;
@@ -570,16 +578,13 @@ typedef struct {
 
 #if defined(__BIG_ENDIAN__)
 
-#include <libavutil/bswap.h>
+#define htole_64(v) __builtin_bswap64(v)
+#define htole_32(v) __builtin_bswap32(v)
+#define htole_16(v) __builtin_bswap16(v)
 
-
-#define htole_64(v) av_bswap64(v)
-#define htole_32(v) av_bswap32(v)
-#define htole_16(v) av_bswap16(v)
-
-#define letoh_16(v) av_bswap16(v)
-#define letoh_32(v) av_bswap32(v)
-#define letoh_64(v) av_bswap64(v)
+#define letoh_16(v) __builtin_bswap16(v)
+#define letoh_32(v) __builtin_bswap32(v)
+#define letoh_64(v) __builtin_bswap64(v)
 
 #elif defined(__LITTLE_ENDIAN__) || (__BYTE_ORDER == __LITTLE_ENDIAN)
 
@@ -769,16 +774,23 @@ smb_init_t2_header(cifs_connection_t *cc, TRANS2_req_t *t2, int cmd,
 static int
 nbt_read(cifs_connection_t *cc, void **bufp, int *lenp)
 {
-  NBT_t nbt;
+  char data[4];
   int len;
   char *buf;
 
   do {
-    if(tcp_read_data(cc->cc_tc, (void *)&nbt, 4))
+    if(tcp_read_data(cc->cc_tc, data, 4))
       return -1;
     
-    len = ntohs(nbt.length);
+    if(data[0] == 0x85)
+      continue; // Keep alive
+
+    if(data[0] != 0)
+      return -1;
+
+    len = data[1] << 16 | data[2] << 8 | data[3];
   } while(len == 0);
+
 
   buf = malloc(len);
   if(tcp_read_data(cc->cc_tc, buf, len)) {
@@ -797,13 +809,11 @@ nbt_read(cifs_connection_t *cc, void **bufp, int *lenp)
 static int
 nbt_write(cifs_connection_t *cc, void *buf, int len)
 {
-  NBT_t nbt;
+  NBT_t *nbt = buf;
 
-  nbt.msg = NBT_SESSION_MSG;
-  nbt.flags = 0;
-  nbt.length = htons(len);
-
-  tcp_write_data(cc->cc_tc, &nbt, 4);
+  nbt->msg = NBT_SESSION_MSG;
+  nbt->flags = 0;
+  nbt->length = htons(len - 4);
   tcp_write_data(cc->cc_tc, buf, len);
   return 0;
 }
@@ -914,7 +924,7 @@ smb_neg_proto(cifs_connection_t *cc, char *errbuf, size_t errlen)
 
   if(reply->hdr.errorcode) {
     snprintf(errbuf, errlen, "Negotiation error 0x%08x",
-	     letoh_32(reply->hdr.errorcode));
+	     (int)letoh_32(reply->hdr.errorcode));
     free(rbuf);
     return -1;
   }
@@ -1081,7 +1091,7 @@ smb_setup_andX(cifs_connection_t *cc, char *errbuf, size_t errlen,
       goto again;
     }
     snprintf(errbuf, errlen, "Login failed (0x%x)",
-	     letoh_32(reply->hdr.errorcode));
+	     (int)letoh_32(reply->hdr.errorcode));
     free(rbuf);
     return -1;
   }
@@ -1131,6 +1141,11 @@ smb_dispatch(void *aux)
     h = buf;
     mid = letoh_16(h->mid);
 
+    if(h->pid == htole_16(1)) {
+      free(buf);
+      continue;
+    }
+
     hts_mutex_lock(&smb_global_mutex);
 
     LIST_FOREACH(nr, &cc->cc_pending_nbt_requests, nr_link)
@@ -1145,8 +1160,8 @@ smb_dispatch(void *aux)
       hts_cond_broadcast(&cc->cc_cond);
 
     } else {
-      SMBTRACE("%s:%d unexpected response mid=%d",
-	       cc->cc_hostname, cc->cc_port, mid);
+      SMBTRACE("%s:%d unexpected response pid=%d mid=%d",
+	       cc->cc_hostname, cc->cc_port, letoh_16(h->pid), mid);
       free(buf);
     }
     hts_mutex_unlock(&smb_global_mutex);
@@ -1268,7 +1283,7 @@ nbt_async_req_reply(cifs_connection_t *cc,
 		    void *request, int request_len,
 		    void **responsep, int *response_lenp)
 {
-  SMB_t *h = request;
+  SMB_t *h = request + 4;
   nbt_req_t *nr = malloc(sizeof(nbt_req_t));
   int r;
 
@@ -1894,8 +1909,6 @@ smb_close(fa_handle_t *fh)
 {
   smb_file_t *sf = (smb_file_t *)fh;
   SMB_CLOSE_req_t *req;
-  void *rbuf;
-  int rlen;
   cifs_tree_t *ct = sf->sf_ct;
 
   hts_mutex_lock(&smb_global_mutex);
@@ -1908,11 +1921,7 @@ smb_close(fa_handle_t *fh)
   
   req->fid = sf->sf_fid;
   req->wordcount = 3;
-
-  if(!nbt_async_req_reply(ct->ct_cc, req, sizeof(SMB_CLOSE_req_t),
-			  &rbuf, &rlen))
-    free(rbuf);
-
+  nbt_write(ct->ct_cc, req, sizeof(SMB_CLOSE_req_t));
   cifs_release_tree(sf->sf_ct);
   free(sf);
 }
@@ -1941,15 +1950,15 @@ smb_read(fa_handle_t *fh, void *buf, size_t size)
   hts_mutex_lock(&smb_global_mutex);
 
   while(size > 0) {
-
-    cnt = MIN(size, 32768);
+    cnt = MIN(size, 131072);
     smb_init_header(ct->ct_cc, &req->hdr, SMB_READ_ANDX,
 		    SMB_FLAGS_CANONICAL_PATHNAMES, 0, ct->ct_tid);
     
     req->fid = sf->sf_fid;
     req->offset_low = htole_32((uint32_t)sf->sf_pos);
     req->offset_high = htole_32((uint32_t)(sf->sf_pos >> 32));
-    req->max_count_low = htole_16(cnt);
+    req->max_count_low = htole_16(cnt & 0xffff);
+    req->max_count_high = htole_32(cnt >> 16);
     req->wordcount = 12;
     req->andx_command = 0xff;
 
@@ -1969,6 +1978,7 @@ smb_read(fa_handle_t *fh, void *buf, size_t size)
     }
 
     rcnt = letoh_16(resp->data_length_low);
+    rcnt += letoh_32(resp->data_length_high) << 16;
     memcpy(buf, rbuf + letoh_16(resp->data_offset), rcnt);
     free(rbuf);
 
@@ -2104,7 +2114,7 @@ smb_init(void)
  * Main SMB protocol dispatch
  */
 static fa_protocol_t fa_protocol_smb = {
-  .fap_flags = FAP_INCLUDE_PROTO_IN_URL,
+  .fap_flags = FAP_INCLUDE_PROTO_IN_URL | FAP_ALLOW_CACHE,
   .fap_init  = smb_init,
   .fap_name  = "smb",
   .fap_scan  = smb_scandir,
