@@ -22,7 +22,7 @@ include ${CURDIR}/config.default
 
 OPTFLAGS ?= -O2
 
-BUILDDIR = build.${PLATFORM}
+BUILDDIR = build.${BUILD}
 
 include ${BUILDDIR}/config.mak
 
@@ -75,6 +75,7 @@ endif
 SRCS-${CONFIG_EMU_THREAD_SPECIFICS} += src/arch/emu_thread_specifics.c
 
 BUNDLES += resources/metadb
+BUNDLES += resources/cachedb
 
 #
 # Misc support
@@ -328,11 +329,21 @@ SRCS-$(CONFIG_GLW_FRONTEND_X11)	  += src/ui/glw/glw_x11.c \
 				     src/ui/linux/x11_common.c
 
 SRCS-$(CONFIG_GLW_FRONTEND_COCOA) += src/ui/glw/glw_cocoa.m
-SRCS-$(CONFIG_GLW_BACKEND_OPENGL) += src/ui/glw/glw_opengl.c
-SRCS-$(CONFIG_GLW_BACKEND_OPENGL) += src/ui/glw/glw_opengl_glx.c
-SRCS-$(CONFIG_GLW_BACKEND_OPENGL) += src/ui/glw/glw_texture_opengl.c
-SRCS-$(CONFIG_GLW_BACKEND_OPENGL) += src/ui/glw/glw_video_opengl.c
-SRCS-$(CONFIG_GLW_BACKEND_OPENGL) += src/ui/glw/glw_video_vdpau.c
+
+SRCS-$(CONFIG_GLW_BACKEND_OPENGL) += src/ui/glw/glw_opengl_common.c \
+                                     src/ui/glw/glw_opengl_shaders.c \
+                                     src/ui/glw/glw_opengl_ff.c \
+                                     src/ui/glw/glw_opengl_ogl.c \
+                                     src/ui/glw/glw_opengl_glx.c \
+                                     src/ui/glw/glw_texture_opengl.c \
+                                     src/ui/glw/glw_video_opengl.c \
+                                     src/ui/glw/glw_video_vdpau.c \
+
+SRCS-$(CONFIG_GLW_BACKEND_OPENGL_ES) += src/ui/glw/glw_opengl_common.c \
+                                        src/ui/glw/glw_opengl_shaders.c \
+                                        src/ui/glw/glw_opengl_es.c \
+                                        src/ui/glw/glw_texture_opengl.c \
+
 
 SRCS-$(CONFIG_GLW_FRONTEND_PS3)   += src/ui/glw/glw_ps3.c
 SRCS-$(CONFIG_GLW_BACKEND_RSX)    += src/ui/glw/glw_rsx.c
@@ -624,7 +635,7 @@ distclean: clean
 	rm -rf build.*
 
 reconfigure:
-	$(CURDIR)/configure.${PLATFORM} $(CONFIGURE_ARGS)
+	$(CURDIR)/configure.${CONFIGURE_POSTFIX} $(CONFIGURE_ARGS)
 
 showconfig:
 	@echo $(CONFIGURE_ARGS)
