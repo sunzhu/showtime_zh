@@ -48,7 +48,7 @@ LIST_HEAD(glw_video_list, glw_video);
 
 // ------------------- Backends -----------------
 
-#if CONFIG_GLW_BACKEND_OPENGL
+#if CONFIG_GLW_BACKEND_OPENGL || CONFIG_GLW_BACKEND_OPENGL_ES
 #include "glw_opengl.h"
 #elif CONFIG_GLW_BACKEND_GX
 #include "glw_gx.h"
@@ -1203,5 +1203,7 @@ void glw_frontface(struct glw_root *gr, int how);
 // text bitmap semi-private stuff
 
 void glw_gtb_set_caption_raw(glw_t *w, uint32_t *uc, int len);
+
+extern const float glw_identitymtx[16];
 
 #endif /* GLW_H */

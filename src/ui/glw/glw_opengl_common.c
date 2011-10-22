@@ -1,6 +1,6 @@
 /*
- *  Blob cache
- *  Copyright (C) 2010 Andreas Öman
+ *  glw OpenGL interface
+ *  Copyright (C) 2008-2011 Andreas Öman
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -15,20 +15,37 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "glw.h"
 
 
-#ifndef BLOBCACHE_H__
-#define BLOBCACHE_H__
+/**
+ *
+ */
+void
+glw_frontface(struct glw_root *gr, int how)
+{
+  glFrontFace(how == GLW_CW ? GL_CW : GL_CCW);
+}
 
-void *blobcache_get(const char *key, const char *stash, size_t *sizep, int pad,
-		    int *is_expired, char **etag, time_t *mtime);
 
-int blobcache_get_meta(const char *key, const char *stash,
-		       char **etag, time_t *mtime);
 
-void blobcache_put(const char *key, const char *stash, const void *data,
-		   size_t size, int maxage, const char *etag, time_t mtime);
+/**
+ *
+ */
+void
+glw_blendmode(struct glw_root *gr, int mode)
+{
+  if(mode == gr->gr_be.be_blendmode)
+    return;
+  gr->gr_be.be_blendmode = mode;
 
-void blobcache_init(void);
+  switch(mode) {
+  case GLW_BLEND_NORMAL:
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    break;
 
-#endif // BLOBCACHE_H__
+  case GLW_BLEND_ADDITIVE:
+    glBlendFunc(GL_SRC_COLOR, GL_ONE);
+    break;
+  }
+}
