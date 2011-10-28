@@ -188,17 +188,30 @@ is_srt(const char *buf, size_t len)
   linereader_init(&lr, buf, len);
 
   if(linereader_next(&lr) < 0)
+  {
+    TRACE(TRACE_ERROR, "Subtitles", "Not able to get the first line.");
     return 0;
+  }
   if(get_int(&lr, &n))
+  {
+    TRACE(TRACE_ERROR, "Subtitles", "Can not read the int line.");
     return 0;
+  }
   if(linereader_next(&lr) < 0)
+  {
+    TRACE(TRACE_ERROR, "Subtitles", "Can not get the second line.");
     return 0;
+  }
   if(get_srt_timestamp(&lr, &start, &stop))
+  {
+    TRACE(TRACE_ERROR, "Subtitles", "Can not read timestamps.");
     return 0;
-
+  }
   if(stop < start)
+  {
+    TRACE(TRACE_ERROR, "Subtitles", "stop time is before start time.");
     return 0;
-
+  }
   return 1;
 }
 
@@ -420,6 +433,7 @@ subtitles_create(const char *path, char **bufp, size_t len)
   ext_subtitles_t *s = NULL;
 
   if(is_ttml(*bufp, len)) {
+    TRACE(TRACE_INFO, "Subtitles", "Trying to load %s as ttml...", path);
     s = load_ttml(path, bufp, len);
   } else {
 
@@ -433,8 +447,14 @@ subtitles_create(const char *path, char **bufp, size_t len)
       len -= 3;
     }
 
+    if(len > 2 && buf[0] == 0xfe && buf[1] == 0xff)
+      TRACE(TRACE_ERROR,"Subtitles", "Found UTF-16 BOM but UTF-16 is not supported.");
+
     if(is_srt(buf, len))
+    {
+      TRACE(TRACE_INFO, "Subtitles", "Trying to load %s as srt...",path);
       s = load_srt(path, buf, len, force_utf8);
+    }
   }
 
   //  if(s)dump_subtitles(s);
