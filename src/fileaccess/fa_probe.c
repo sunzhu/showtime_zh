@@ -567,7 +567,7 @@ fa_probe_metadata(const char *url, char *errbuf, size_t errsize)
 {
   AVFormatContext *fctx;
 
-  fa_handle_t *fh = fa_open_ex(url, errbuf, errsize, FA_BUFFERED, NULL);
+  fa_handle_t *fh = fa_open_ex(url, errbuf, errsize, FA_BUFFERED_SMALL, NULL);
 
   if(fh == NULL) 
     return NULL;
