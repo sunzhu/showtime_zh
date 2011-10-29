@@ -447,7 +447,7 @@ subtitles_create(const char *path, char **bufp, size_t len)
       len -= 3;
     }
 
-    if(len > 2 && buf[0] == 0xfe && buf[1] == 0xff)
+    if(len > 2 && buf[0] == 0xff && buf[1] == 0xfe)
       TRACE(TRACE_ERROR,"Subtitles", "Found UTF-16 BOM but UTF-16 is not supported.");
 
     if(is_srt(buf, len))
