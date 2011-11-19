@@ -127,7 +127,7 @@ fs_sub_scan_dir(prop_t *prop, const char *url, const char *video)
       int score = video && fs_sub_match(video, fde->fde_url);
 
       mp_add_track(prop, fde->fde_filename, fde->fde_url, "SRT", NULL, lang,
-		   "External file", score);
+		   NULL, _p("External file"), score);
     }
   }
   fa_dir_free(fd);
@@ -264,6 +264,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
      */
     if(mb == NULL) {
 
+      mp->mp_eof = 0;
       r = av_read_frame(fctx, &pkt);
 
       if(r == AVERROR(EAGAIN))
@@ -271,6 +272,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
       if(r == AVERROR_EOF) {
 	mb = MB_SPECIAL_EOF;
+	mp->mp_eof = 1;
 	continue;
       }
 
@@ -284,7 +286,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
       if(si == mp->mp_video.mq_stream) {
 	/* Current video stream */
-	mb = media_buf_alloc_unlocked(mp, pkt.size);
+	mb = media_buf_from_avpkt_unlocked(mp, &pkt);
 	mb->mb_data_type = MB_VIDEO;
 	mq = &mp->mp_video;
 
@@ -298,7 +300,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
       } else if(fctx->streams[si]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
 
-	mb = media_buf_alloc_unlocked(mp, pkt.size);
+	mb = media_buf_from_avpkt_unlocked(mp, &pkt);
 	mb->mb_data_type = MB_AUDIO;
 	mq = &mp->mp_audio;
 
@@ -306,7 +308,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
 	int duration = pkt.convergence_duration ?: pkt.duration;
 
-	mb = media_buf_alloc_unlocked(mp, pkt.size);
+	mb = media_buf_from_avpkt_unlocked(mp, &pkt);
 	mb->mb_codecid = fctx->streams[si]->codec->codec_id;
 	mb->mb_data_type = MB_SUBTITLE;
 	mq = &mp->mp_video;
@@ -338,15 +340,12 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
       mb->mb_stream = pkt.stream_index;
 
-      memcpy(mb->mb_data, pkt.data, pkt.size);
-
       if(mb->mb_pts != AV_NOPTS_VALUE && mb->mb_data_type == MB_AUDIO)
 	mb->mb_time = mb->mb_pts - fctx->start_time;
       else
 	mb->mb_time = AV_NOPTS_VALUE;
 
       mb->mb_keyframe = !!(pkt.flags & AV_PKT_FLAG_KEY);
-      av_free_packet(&pkt);
     }
 
     /*

@@ -24,7 +24,6 @@ widget(container_x, {
 
     .shadow = true;
     .sizeScale = 2;
-    .hqScaling = true;
   });
 
   widget(container_y, {
@@ -32,6 +31,7 @@ widget(container_x, {
       .caption = $self.model.metadata.title;
       .sizeScale = 1.2;
       .color = select(isFocused() || isHovered(), 1, 0.4);
+      .shadow = true;
     });
 
     widget(label, {
@@ -39,6 +39,7 @@ widget(container_x, {
       .sizeScale = 0.8;
       .color = select(isFocused() || isHovered(), 1, 0.4);
       .alpha = select(isFocused() || isHovered(), 1, 0.5);
+      .shadow = true;
     });
   });
 });

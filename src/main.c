@@ -51,7 +51,7 @@
 #include "misc/string.h"
 #include "text/text.h"
 #include "video/video_settings.h"
-#include "metadata.h"
+#include "metadata/metadata.h"
 #include "ext/sqlite/sqlite3.h"
 
 #if ENABLE_HTTPSERVER
@@ -532,6 +532,8 @@ finalize(void)
   audio_fini();
   backend_fini();
   shutdown_hook_run(0);
+  blobcache_fini();
+  metadb_fini();
   arch_exit(showtime_retcode);
 }
 

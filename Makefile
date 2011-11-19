@@ -55,13 +55,14 @@ SRCS += src/main.c \
 	src/plugins.c \
 	src/blobcache.c \
 	src/i18n.c \
-	src/metadata.c \
 	src/prop/prop_core.c \
 	src/prop/prop_nodefilter.c \
 	src/prop/prop_tags.c \
 	src/prop/prop_vector.c \
 	src/prop/prop_grouper.c \
 	src/prop/prop_concat.c \
+	src/metadata/metadata.c \
+	src/metadata/metadb.c \
 
 ifeq ($(PLATFORM), linux)
 SRCS += src/arch/linux.c

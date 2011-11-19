@@ -44,6 +44,7 @@ const char *content2type(contenttype_t ctype);
 TAILQ_HEAD(metadata_stream_queue, metadata_stream);
 
 
+
 /**
  *
  */
@@ -52,6 +53,7 @@ typedef struct metadata_stream {
 
   int ms_streamindex;
 
+  rstr_t *ms_title;
   rstr_t *ms_info;
   rstr_t *ms_isolang;
   rstr_t *ms_codec;
@@ -61,6 +63,7 @@ typedef struct metadata_stream {
   int ms_disposition;
 
 } metadata_stream_t;
+
 
 
 /**
@@ -91,6 +94,7 @@ void metadata_destroy(metadata_t *md);
 
 void metadata_add_stream(metadata_t *md, const char *codec,
 			 int type, int streamindex,
+			 const char *title,
 			 const char *info, const char *isolang,
 			 int disposition);
 
@@ -102,6 +106,8 @@ void metadata_to_proptree(const metadata_t *md, struct prop *proproot,
 
 
 void metadb_init(void);
+
+void metadb_fini(void);
 
 void *metadb_get(void);
 

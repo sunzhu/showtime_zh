@@ -32,15 +32,28 @@ msg: Riprodotto %d volte
 # ./glwthemes/mono/directoryviews/list2/center_directory.view
 #
 id: %d entries
-# Missing translation
 msg: %d voci
 
 #
 # ./glwthemes/mono/directoryviews/list2/center_playlist.view
 #
 id: %d tracks
-# Missing translation
 msg: %d tracce
+
+#
+# ./glwthemes/mono/directoryviews/list2/options_audio.view
+#
+id: Delete
+msg: Cancella
+
+id: Queue
+msg: In coda
+
+id: Star
+msg: Segna
+
+id: Unstar
+msg: Non segnare
 
 #
 # ./glwthemes/mono/include/buttons.view
@@ -54,9 +67,6 @@ msg: Attiva
 #
 # ./glwthemes/mono/include/infobox.view
 #
-id: Delete
-msg: Cancella
-
 id: Enqueue
 msg: Metti in coda
 
@@ -72,6 +82,12 @@ msg: OK
 #
 # ./glwthemes/mono/pages/about.view
 #
+id: Allocated by application: %d kB
+msg: Allocati dall'applicazione: %d kB
+
+id: Allocated by malloc: %d kB
+msg: Allocati da malloc: %d kB
+
 id: Avail system RAM: %d kB
 msg: RAM disponibile: %d kB
 
@@ -84,11 +100,17 @@ msg: Informazioni di visualizzazione
 id: Framerate: %.2f Hz
 msg: Framerate: %.2f Hz
 
+id: Free chunks: %d
+msg: Chunks disponibili: %d
+
 id: GPU: %s
 msg: GPU: %s
 
 id: Height: %d px
 msg: Altezza: %d px
+
+id: Memory status
+msg: Stato della Memoria
 
 id: Renderer: %s
 msg: Renderer: %s
@@ -98,6 +120,9 @@ msg: Informazioni di sistema
 
 id: Total system RAM: %d kB
 msg: RAM totale: %d kB
+
+id: Unused memory: %d kB
+msg: Memoria inutilizzata: %d kB
 
 id: Version: %s
 msg: Versione: %s
@@ -208,7 +233,6 @@ id: Adjust background tint based on daytime
 msg: Modifica lo sfondo a seconda dell'ora 
 
 id: Alternate list layout
-# Missing translation
 msg: Alterna il layout della lista
 
 id: Audio muted
@@ -283,6 +307,9 @@ msg: Impossibile aprire il CD
 #
 # ./src/backend/dvd/dvd.c
 #
+id: DVD
+msg: DVD
+
 id: DVD read error, restarting disc
 msg: Errore nella lettura DVD, riavvio del disco in corso
 
@@ -299,7 +326,6 @@ id: Search
 msg: Cerca
 
 id: Search result for: %s
-# Missing translation
 msg: Risultati della ricerca per: %s
 
 #
@@ -307,6 +333,9 @@ msg: Risultati della ricerca per: %s
 #
 id: Automatic login when Showtime starts
 msg: Login automatico all'avvio di Showtime
+
+id: Collaborative
+msg: Collaborativo
 
 id: Enable Spotify
 msg: Attiva Spotify
@@ -328,6 +357,12 @@ msg: Nuovi album su Spotify
 
 id: New releases
 msg: Nuovi rilasci
+
+id: Offline
+msg: Offline
+
+id: Offline sync in 96kbps
+msg: Sync offline in 96kbps
 
 id: Playlists
 msg: Playlist
@@ -382,6 +417,12 @@ msg: Cerca usando il locatedb Unix
 #
 id: Search using spotlight
 msg: Cerca usando spotlight
+
+#
+# ./src/fileaccess/fa_video.c
+#
+id: External file
+msg: File esterno
 
 #
 # ./src/i18n.c
@@ -454,6 +495,12 @@ msg: Dimensione dei sottotitoli
 
 id: Video zoom
 msg: Zoom video
+
+#
+# ./src/metadata.c
+#
+id: Embedded in file
+msg: Incorporato nel file
 
 #
 # ./src/navigator.c

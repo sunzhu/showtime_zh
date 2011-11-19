@@ -74,67 +74,6 @@ static int http_tokenize(char *buf, char **vec, int vecsize, int delimiter);
   } while(0)
 
 
-static const char *http_months[12] = {
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-
-static const char *http_weekdays[7] = {
-  "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-
-/**
- *
- */
-static int 
-http_ctime(time_t *tp, const char *d)
-{
-  struct tm tm = {0};
-  char wday[4];
-  char month[4];
-  int i;
-  char dummy;
-
-  if(sscanf(d, "%3s, %d%c%3s%c%d %d:%d:%d",
-	    wday, &tm.tm_mday, &dummy, month, &dummy, &tm.tm_year,
-	    &tm.tm_hour, &tm.tm_min, &tm.tm_sec) != 9)
-    return -1;
-
-  tm.tm_year -= 1900;
-  tm.tm_isdst = -1;
-	      
-  for(i = 0; i < 12; i++)
-    if(!strcasecmp(http_months[i], month)) {
-      tm.tm_mon = i;
-      break;
-    }
-  
-#if ENABLE_TIMEGM
-  *tp = timegm(&tm);
-#else
-  *tp = mktime(&tm);
-#endif
-  return 0;
-}
-
-/**
- *
- */
-static const char *
-http_asctime(time_t tp, char *out, size_t outlen)
-{
-  struct tm tm = {0};
-
-  gmtime_r(&tp, &tm);
-
-  snprintf(out, outlen, "%s, %02d %s %04d %02d:%02d:%02d GMT",
-	   http_weekdays[tm.tm_wday],
-	   tm.tm_mday,
-	   http_months[tm.tm_mon],
-	   tm.tm_year + 1900,
-	   tm.tm_hour,
-	   tm.tm_min,
-	   tm.tm_sec);
-  return out;
-}
 
 
 /**
@@ -849,10 +788,16 @@ static void
 http_headers_init(struct http_header_list *l, const http_file_t *hf)
 {
   char str[200];
+  const http_connection_t *hc = hf->hf_connection;
 
   LIST_INIT(l);
 
-  http_header_add(l, "Host", hf->hf_connection->hc_hostname);
+  if(hc->hc_port != 80) {
+    snprintf(str, sizeof(str), "%s:%d", hc->hc_hostname, hc->hc_port);
+    http_header_add(l, "Host", str);
+  } else {
+    http_header_add(l, "Host", hf->hf_connection->hc_hostname);
+  }
   http_header_add(l, "Accept-Encoding", "identity");
   http_header_add(l, "Connection", hf->hf_want_close ? "close" : "keep-alive");
   snprintf(str, sizeof(str), "Showtime %s %s",
@@ -2636,7 +2581,9 @@ http_request(const char *url, const char **arguments,
 
   const char *m = method ?: postdata ? "POST": (result ? "GET" : "HEAD");
 
-  htsbuf_qprintf(&q, "%s %s", m, hf->hf_path);
+  htsbuf_append(&q, m, strlen(m));
+  htsbuf_append(&q, " ", 1);
+  htsbuf_append(&q, hf->hf_path, strlen(hf->hf_path));
 
   if(arguments != NULL) {
     const char **args = arguments;
@@ -2690,7 +2637,7 @@ http_request(const char *url, const char **arguments,
   int no_content = method == NULL && postdata == NULL && result == NULL;
 
   switch(code) {
-  case 200:
+  case 200 ... 205:
     if(no_content) {
       hf->hf_rsize = 0;
       http_destroy(hf);

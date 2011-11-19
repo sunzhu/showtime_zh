@@ -304,6 +304,9 @@ msg: Søgeresultat for: %s
 id: Automatic login when Showtime starts
 msg: Automatisk login når Showtime starter
 
+id: Collaborative
+msg: Samarbejde
+
 id: Enable Spotify
 msg: Anvend Spotify
 
@@ -324,6 +327,12 @@ msg: Nye album på Spotify
 
 id: New releases
 msg: Nye opdateringer
+
+id: Offline
+msg: Offline
+
+id: Offline sync in 96kbps
+msg: Offline sync i 96 kbps
 
 id: Playlists
 msg: Afspilningslister

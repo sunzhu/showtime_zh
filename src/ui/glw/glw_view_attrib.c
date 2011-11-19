@@ -734,10 +734,6 @@ set_source(glw_view_eval_context_t *ec, const token_attrib_t *a,
       w->glw_class->gc_set_source(w, rstr_get(t->t_rstring));
     break;
 
-  case TOKEN_PIXMAP:
-    glw_set(ec->w, GLW_ATTRIB_PIXMAP, t->t_pixmap, NULL);
-    break;
-
   default:
     return glw_view_seterr(ec->ei, t, 
 			    "Attribute '%s' expects a string or scalar not %s",
@@ -808,7 +804,6 @@ static const token_attrib_t attribtab[] = {
   {"autohide",                mod_flag, GLW2_AUTOHIDE, mod_flags2},
   {"shadow",                  mod_flag, GLW2_SHADOW, mod_flags2},
 
-  {"hqScaling",       mod_flag, GLW_IMAGE_HQ_SCALING, mod_img_flags},
   {"fixedSize",       mod_flag, GLW_IMAGE_FIXED_SIZE, mod_img_flags},
   {"bevelLeft",       mod_flag, GLW_IMAGE_BEVEL_LEFT, mod_img_flags},
   {"bevelTop",        mod_flag, GLW_IMAGE_BEVEL_TOP, mod_img_flags},
