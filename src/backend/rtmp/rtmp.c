@@ -30,7 +30,7 @@
 #include "misc/isolang.h"
 #include "video/video_playback.h"
 #include "video/video_settings.h"
-#include "metadata.h"
+#include "metadata/metadata.h"
 
 typedef struct {
 
@@ -492,6 +492,7 @@ get_packet_a(rtmp_t *r, uint8_t *data, size_t size, int64_t dts,
 		 fmt,
 		 NULL, 
 		 NULL,
+		 NULL,
 		 0);
 
     prop_set_string(mp->mp_prop_audio_track_current, "rtmp:1");
@@ -555,10 +556,12 @@ rtmp_loop(rtmp_t *r, media_pipe_t *mp, char *url, char *errbuf, size_t errlen)
 
     if(pos == -1) {
 
+      mp->mp_eof = 0;
       ret = RTMP_GetNextMediaPacket(r->r, &p);
 
       if(ret == 2) {
 	/* Wait for queues to drain */
+	mp->mp_eof = 1;
       again:
 	e = mp_wait_for_empty_queues(mp);
 

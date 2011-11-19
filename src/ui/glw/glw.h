@@ -108,7 +108,6 @@ typedef enum {
   GLW_ATTRIB_TRANSITION_EFFECT,
   GLW_ATTRIB_EXPANSION,
   GLW_ATTRIB_BIND_TO_ID,
-  GLW_ATTRIB_PIXMAP,
   GLW_ATTRIB_CHILD_ASPECT,
   GLW_ATTRIB_CHILD_HEIGHT,
   GLW_ATTRIB_CHILD_WIDTH,
@@ -145,7 +144,6 @@ typedef struct glw_rgb {
 /**
  * Image flags
  */
-#define GLW_IMAGE_HQ_SCALING    0x1
 #define GLW_IMAGE_FIXED_SIZE    0x2
 #define GLW_IMAGE_BEVEL_LEFT    0x8
 #define GLW_IMAGE_BEVEL_TOP     0x10
@@ -173,11 +171,15 @@ typedef enum {
   GLW_POINTER_FOCUS_MOTION,
   GLW_POINTER_SCROLL,
   GLW_POINTER_GONE,
+  GLW_POINTER_TOUCH_PRESS,
+  GLW_POINTER_TOUCH_RELEASE,
+  GLW_POINTER_TOUCH_MOTION,
 } glw_pointer_event_type_t;
 
 typedef struct glw_pointer_event {
   float x, y;
   float delta_y;
+  float vel_x, vel_y;
   glw_pointer_event_type_t type;
   int flags;
 } glw_pointer_event_t;
@@ -541,6 +543,11 @@ typedef struct glw_class {
   void (*gc_set_max_lines)(struct glw *w, int lines);
 
   /**
+   *
+   */
+  const char *(*gc_get_identity)(struct glw *w);
+
+  /**
    * Registration link
    */
   LIST_ENTRY(glw_class) gc_link;
@@ -644,6 +651,7 @@ typedef struct glw_root {
   struct glw *gr_current_focus;
   prop_t *gr_last_focused_interactive;
   prop_t *gr_pointer_visible;
+  int gr_focus_work;
 
   /**
    * Backend specifics
@@ -1025,7 +1033,6 @@ do {						\
   case GLW_ATTRIB_ARGS:				\
   case GLW_ATTRIB_PROP_PARENT:			\
   case GLW_ATTRIB_BIND_TO_ID: 			\
-  case GLW_ATTRIB_PIXMAP: 			\
     (void)va_arg(ap, void *);			\
     break;					\
   case GLW_ATTRIB_MODE:                         \
