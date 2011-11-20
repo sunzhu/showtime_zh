@@ -41,6 +41,21 @@ id: %d tracks
 msg: %d тракове
 
 #
+# ./glwthemes/mono/directoryviews/list2/options_audio.view
+#
+id: Delete
+msg: Изтрий
+
+id: Queue
+msg: Опашка за възпроизвеждане
+
+id: Star
+msg: Маркирай
+
+id: Unstar
+msg: Отмаркирай
+
+#
 # ./glwthemes/mono/include/buttons.view
 #
 id: Off
@@ -52,9 +67,6 @@ msg: Вкл.
 #
 # ./glwthemes/mono/include/infobox.view
 #
-id: Delete
-msg: Изтрий
-
 id: Enqueue
 msg: Добави към опашката за възпроизвеждане
 
@@ -70,6 +82,12 @@ msg: OK
 #
 # ./glwthemes/mono/pages/about.view
 #
+id: Allocated by application: %d kB
+msg: Заета РАМ памет от апликацията: %d kB
+
+id: Allocated by malloc: %d kB
+msg: Заета РАМ памет от malloc: %d kB
+
 id: Avail system RAM: %d kB
 msg: Налична системна РАМ памет: %d КБ
 
@@ -82,11 +100,17 @@ msg: Информация за екрана
 id: Framerate: %.2f Hz
 msg: Честота на кадрите %.2f Hz
 
+id: Free chunks: %d
+msg: Свободни chunks: %d
+
 id: GPU: %s
 msg: GPU: %s
 
 id: Height: %d px
 msg: Височина: %d px
+
+id: Memory status
+msg: Статус на паметта
 
 id: Renderer: %s
 msg: Рендератор: %s
@@ -96,6 +120,9 @@ msg: Системна информация
 
 id: Total system RAM: %d kB
 msg: Обща системна РАМ памет: %d КБ
+
+id: Unused memory: %d kB
+msg: Неизползвана РАМ памет: %d kB
 
 id: Version: %s
 msg: Версия: %s
@@ -280,6 +307,9 @@ msg: Невъзможно отварянето на CD
 #
 # ./src/backend/dvd/dvd.c
 #
+id: DVD
+msg: DVD
+
 id: DVD read error, restarting disc
 msg: Грешка при четенето на DVD, рестартиране на диска
 
@@ -389,6 +419,12 @@ id: Search using spotlight
 msg: Търсене с изполването на spotlight
 
 #
+# ./src/fileaccess/fa_video.c
+#
+id: External file
+msg: Външен файл
+
+#
 # ./src/i18n.c
 #
 id: Language
@@ -459,6 +495,12 @@ msg: Мащаб на субтитрите
 
 id: Video zoom
 msg: Мащаб на видеото
+
+#
+# ./src/metadata/metadata.c
+#
+id: Embedded in file
+msg: Вградено във файла
 
 #
 # ./src/navigator.c
