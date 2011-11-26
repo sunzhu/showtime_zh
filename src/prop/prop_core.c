@@ -24,7 +24,7 @@
 #include <unistd.h>
 #include <math.h>
 
-#include <arch/atomic.h>
+#include "arch/atomic.h"
 
 #include "showtime.h"
 #include "prop_i.h"
@@ -514,6 +514,27 @@ trampoline_string(prop_sub_t *s, prop_event_t event, ...)
     cb(s->hps_opaque, va_arg(ap, const char *));
   } else if(event == PROP_SET_RLINK) {
     cb(s->hps_opaque, rstr_get(va_arg(ap, const rstr_t *)));
+  } else {
+    cb(s->hps_opaque, NULL);
+  }
+}
+
+
+/**
+ *
+ */
+static void 
+trampoline_rstr(prop_sub_t *s, prop_event_t event, ...)
+{
+  prop_callback_rstr_t *cb = s->hps_callback;
+
+  va_list ap;
+  va_start(ap, event);
+
+  if(event == PROP_SET_RSTRING) {
+    cb(s->hps_opaque, va_arg(ap, rstr_t *));
+  } else if(event == PROP_SET_RLINK) {
+    cb(s->hps_opaque, va_arg(ap, rstr_t *));
   } else {
     cb(s->hps_opaque, NULL);
   }
@@ -2031,6 +2052,12 @@ prop_subscribe(int flags, ...)
       opaque = va_arg(ap, void *);
       break;
 
+    case PROP_TAG_CALLBACK_RSTR:
+      cb = va_arg(ap, void *);
+      trampoline = trampoline_rstr;
+      opaque = va_arg(ap, void *);
+      break;
+
     case PROP_TAG_CALLBACK_INT:
       cb = va_arg(ap, void *);
       trampoline = trampoline_int;
@@ -3337,20 +3364,28 @@ prop_courier_create_waitable(void)
 /**
  *
  */
-void
+int
 prop_courier_wait(prop_courier_t *pc,
 		  struct prop_notify_queue *exp,
-		  struct prop_notify_queue *nor)
+		  struct prop_notify_queue *nor,
+		  int timeout)
 {
+  int r = 0;
   hts_mutex_lock(&prop_mutex);
   if(TAILQ_FIRST(&pc->pc_queue_exp) == NULL &&
-     TAILQ_FIRST(&pc->pc_queue_nor) == NULL)
-    hts_cond_wait(&pc->pc_cond, &prop_mutex);
+     TAILQ_FIRST(&pc->pc_queue_nor) == NULL) {
+    if(timeout)
+      r = hts_cond_wait_timeout(&pc->pc_cond, &prop_mutex, timeout);
+    else
+      hts_cond_wait(&pc->pc_cond, &prop_mutex);
+  }
+
   TAILQ_MOVE(exp, &pc->pc_queue_exp, hpn_link);
   TAILQ_INIT(&pc->pc_queue_exp);
   TAILQ_MOVE(nor, &pc->pc_queue_nor, hpn_link);
   TAILQ_INIT(&pc->pc_queue_nor);
   hts_mutex_unlock(&prop_mutex);
+  return r;
 }
 
 
@@ -3361,7 +3396,7 @@ void
 prop_courier_wait_and_dispatch(prop_courier_t *pc)
 {
   struct prop_notify_queue exp, nor;
-  prop_courier_wait(pc, &nor, &exp);
+  prop_courier_wait(pc, &nor, &exp, 0);
   prop_notify_dispatch(&exp);
   prop_notify_dispatch(&nor);
 }

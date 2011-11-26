@@ -68,6 +68,8 @@ typedef struct deco_item {
   TAILQ_ENTRY(deco_item) di_link;
   deco_browse_t *di_db;
 
+  rstr_t *di_url;
+
   LIST_ENTRY(deco_item) di_stem_link;
   deco_stem_t *di_ds;
 
@@ -80,7 +82,7 @@ typedef struct deco_item {
   contenttype_t di_type;
 
   prop_sub_t *di_sub_album;
-  char *di_album;
+  rstr_t *di_album;
 
 } deco_item_t;
 
@@ -106,10 +108,7 @@ stem_analysis(deco_browse_t *db, deco_stem_t *ds)
 
   if(video && image) {
     prop_t *icon = prop_create(prop_create(video->di_root, "metadata"), "icon");
-    prop_set_stringf(icon, "%s%s%s", ds->ds_stem,
-		     image->di_postfix ? "." : "",
-		     image->di_postfix ?: "");
-
+    prop_set_rstring(icon, image->di_url);
     prop_set_int(prop_create(image->di_root, "hidden"), 1);
   }
 
@@ -120,13 +119,41 @@ stem_analysis(deco_browse_t *db, deco_stem_t *ds)
  *
  */
 static void
-full_analysis(deco_browse_t *db)
+type_analysis(deco_browse_t *db)
 {
   if(db->db_types[CONTENT_IMAGE] * 4 > db->db_total * 3) {
     prop_set_string(db->db_prop_contents, "images");
     return;
   }
-  
+}
+
+static void
+album_analysis(deco_browse_t *db)
+{
+  deco_item_t *di;
+  rstr_t *v = NULL;
+
+  if(db->db_types[CONTENT_AUDIO] > 1 && 
+     db->db_types[CONTENT_VIDEO] == 0 &&
+     db->db_types[CONTENT_ARCHIVE] == 0 &&
+     db->db_types[CONTENT_DIR] == 0 &&
+     db->db_types[CONTENT_ALBUM] == 0 &&
+     db->db_types[CONTENT_PLUGIN] == 0) {
+
+    TAILQ_FOREACH(di, &db->db_items, di_link) {
+      if(di->di_type != CONTENT_AUDIO)
+	continue;
+      if(di->di_album == NULL)
+	return;
+      
+      if(v == NULL)
+	v = di->di_album;
+      else
+	if(strcmp(rstr_get(v), rstr_get(di->di_album)))
+	  return;
+    }
+    prop_set_string(db->db_prop_contents, "album");
+  }
 }
 
 
@@ -154,13 +181,31 @@ stem_get(deco_browse_t *db, const char *str)
  *
  */
 static void
-di_set_url(deco_item_t *di, const char *str)
+stem_release(deco_stem_t *ds)
+{
+  if(LIST_FIRST(&ds->ds_items) != NULL)
+    return;
+  LIST_REMOVE(ds, ds_link);
+  free(ds->ds_stem);
+  free(ds);
+}
+
+
+
+/**
+ *
+ */
+static void
+di_set_url(deco_item_t *di, rstr_t *str)
 {
   char *s, *p;
   deco_browse_t *db = di->di_db;
 
+  rstr_set(&di->di_url, str);
+
   if(di->di_ds != NULL) {
     LIST_REMOVE(di, di_stem_link);
+    stem_release(di->di_ds);
     di->di_ds = NULL;
     free(di->di_postfix);
     di->di_postfix = NULL;
@@ -169,7 +214,7 @@ di_set_url(deco_item_t *di, const char *str)
   if(str == NULL)
     return;
 
-  s = strdup(str);
+  s = strdup(rstr_get(str));
   
   p = strrchr(s, '.');
   if(p != NULL) {
@@ -183,7 +228,6 @@ di_set_url(deco_item_t *di, const char *str)
   
   LIST_INSERT_HEAD(&ds->ds_items, di, di_stem_link);
   di->di_ds = ds;
-
   di->di_postfix = p ? strdup(p) : NULL;
   free(s);
   
@@ -195,9 +239,10 @@ di_set_url(deco_item_t *di, const char *str)
  *
  */
 static void
-di_set_album(deco_item_t *di, const char *str)
+di_set_album(deco_item_t *di, rstr_t *str)
 {
-  mystrset(&di->di_album, str);
+  rstr_set(&di->di_album, str);
+  album_analysis(di->di_db);
 }
 
 
@@ -211,8 +256,8 @@ di_set_type(deco_item_t *di, const char *str)
 
   if(di->di_sub_album != NULL) {
     prop_unsubscribe(di->di_sub_album);
-    free(di->di_album);
-    di->di_album = NULL;
+    rstr_set(&di->di_album, NULL);
+    di->di_sub_album = NULL;
   }
 
   db->db_types[di->di_type]--;
@@ -223,11 +268,12 @@ di_set_type(deco_item_t *di, const char *str)
     di->di_sub_album = 
       prop_subscribe(0,
 		     PROP_TAG_NAME("node", "metadata", "album"),
-		     PROP_TAG_CALLBACK_STRING, di_set_album, di,
+		     PROP_TAG_CALLBACK_RSTR, di_set_album, di,
 		     PROP_TAG_NAMED_ROOT, di->di_root, "node",
+		     PROP_TAG_COURIER, deco_courier,
 		     NULL);
 
-  full_analysis(db);
+  type_analysis(db);
   if(di->di_ds != NULL)
     stem_analysis(db, di->di_ds);
 }
@@ -259,8 +305,9 @@ deco_browse_add_node(deco_browse_t *db, prop_t *p, deco_item_t *before)
   di->di_sub_url = 
     prop_subscribe(0,
 		   PROP_TAG_NAME("node", "url"),
-		   PROP_TAG_CALLBACK_STRING, di_set_url, di,
+		   PROP_TAG_CALLBACK_RSTR, di_set_url, di,
 		   PROP_TAG_NAMED_ROOT, p, "node",
+		   PROP_TAG_COURIER, deco_courier,
 		   NULL);
 
   di->di_sub_type = 
@@ -268,6 +315,7 @@ deco_browse_add_node(deco_browse_t *db, prop_t *p, deco_item_t *before)
 		   PROP_TAG_NAME("node", "type"),
 		   PROP_TAG_CALLBACK_STRING, di_set_type, di,
 		   PROP_TAG_NAMED_ROOT, p, "node",
+		   PROP_TAG_COURIER, deco_courier,
 		   NULL);
 }
 
@@ -295,15 +343,9 @@ deco_browse_add_nodes(deco_browse_t *db, prop_vec_t *pv, deco_item_t *before)
 static void
 deco_item_destroy(deco_browse_t *db, deco_item_t *di)
 {
-  deco_stem_t *ds = di->di_ds;
-
-  if(ds != NULL) {
+  if(di->di_ds != NULL) {
     LIST_REMOVE(di, di_stem_link);
-    if(LIST_FIRST(&ds->ds_items) == NULL) {
-      LIST_REMOVE(ds, ds_link);
-      free(ds->ds_stem);
-      free(ds);
-    }
+    stem_release(di->di_ds);
   }
   
   db->db_types[di->di_type]--;
@@ -316,8 +358,8 @@ deco_item_destroy(deco_browse_t *db, deco_item_t *di)
 
   TAILQ_REMOVE(&db->db_items, di, di_link);
   free(di->di_postfix);
-  free(di->di_album);
-
+  rstr_release(di->di_album);
+  rstr_release(di->di_url);
   free(di);
 }
 
@@ -445,10 +487,37 @@ decorated_browse_create(prop_t *model)
 }
 
 
+/**
+ *
+ */
+static void *
+deco_thread(void *aux)
+{
+  hts_mutex_lock(&deco_mutex);
 
+  while(1) {
+    struct prop_notify_queue exp, nor;
+
+    hts_mutex_unlock(&deco_mutex);
+    prop_courier_wait(deco_courier, &nor, &exp, 0);
+    hts_mutex_lock(&deco_mutex);
+
+    prop_notify_dispatch(&exp);
+    prop_notify_dispatch(&nor);
+
+  }
+  return NULL;
+}
+
+
+/**
+ *
+ */
 void
 decoration_init(void)
 {
   hts_mutex_init(&deco_mutex);
-  deco_courier = prop_courier_create_thread(&deco_mutex, "deco");
+  deco_courier = prop_courier_create_waitable();
+
+  hts_thread_create_detached("deco", deco_thread, NULL, THREAD_PRIO_LOW);
 }
