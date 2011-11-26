@@ -31,20 +31,17 @@
 #define LQ_THEME     1
 #define LQ_THUMBS    2
 
-static void glw_tex_deref_locked(glw_root_t *gr, glw_loadable_texture_t *glt);
-
-static int glw_tex_load(glw_root_t *gr, glw_loadable_texture_t *glt);
-
 
 void
 glw_tex_autoflush(glw_root_t *gr)
 {
   glw_loadable_texture_t *glt;
 
-  hts_mutex_lock(&gr->gr_tex_mutex);
-
   while((glt = LIST_FIRST(&gr->gr_tex_flush_list)) != NULL) {
     assert(glt->glt_filename != NULL);
+    assert(glt->glt_state != GLT_STATE_LOADING);
+    assert(glt->glt_state != GLT_STATE_ERROR);
+
     LIST_REMOVE(glt, glt_flush_link);
     glw_tex_backend_free_render_resources(gr, glt);
 
@@ -56,8 +53,6 @@ glw_tex_autoflush(glw_root_t *gr)
 
   LIST_MOVE(&gr->gr_tex_flush_list, &gr->gr_tex_active_list, glt_flush_link);
   LIST_INIT(&gr->gr_tex_active_list);
-
-  hts_mutex_unlock(&gr->gr_tex_mutex);
 }
 
 
@@ -81,32 +76,55 @@ loader_thread(void *aux)
   loaderaux_t *la = aux;
   glw_root_t *gr = la->gr;
   glw_loadable_texture_t *glt;
-  int r;
+  pixmap_t *pm;
+  char errbuf[128];
+  image_meta_t im = {0};
 
-  hts_mutex_lock(&gr->gr_tex_mutex);
+  glw_lock(gr);
 
   while(1) {
     
     if((glt = TAILQ_FIRST(la->q)) == NULL) {
-      hts_cond_wait(la->cond, &gr->gr_tex_mutex);
+      hts_cond_wait(la->cond, &gr->gr_mutex);
       continue;
     }
 
     TAILQ_REMOVE(la->q, glt, glt_work_link);
     glt->glt_state = GLT_STATE_LOADING;
+    LIST_REMOVE(glt, glt_flush_link);
 
     if(glt->glt_refcnt > 1) {
-      hts_mutex_unlock(&gr->gr_tex_mutex);
-      r = glw_tex_load(gr, glt);
-      hts_mutex_lock(&gr->gr_tex_mutex);
-    } else {
-      r = 0;
-    }
-    
-    if(glt->glt_state != GLT_STATE_INACTIVE)
-      glt->glt_state =  r < 0 ? GLT_STATE_ERROR : GLT_STATE_VALID;
+      char *url = strdup(glt->glt_filename);
 
-    glw_tex_deref_locked(gr, glt);
+      im.im_req_width  = glt->glt_req_xs;
+      im.im_req_height = glt->glt_req_ys;
+      im.im_max_width  = gr->gr_width;
+      im.im_max_height = gr->gr_height;
+      im.im_can_mono = 1;
+
+      glw_unlock(gr);
+      pm = backend_imageloader(url, &im, gr->gr_vpaths, errbuf, sizeof(errbuf));
+      assert(!pixmap_is_coded(pm));
+      glw_lock(gr);
+      
+      if(pm == NULL) {
+	TRACE(TRACE_ERROR, "GLW", "Unable to load %s -- %s", url, errbuf);
+	glt->glt_state = GLT_STATE_ERROR;
+
+      } else {
+
+	if(glt->glt_state == GLT_STATE_LOADING) {
+	  LIST_INSERT_HEAD(&gr->gr_tex_active_list, glt, glt_flush_link);
+	  glt->glt_state = GLT_STATE_VALID;
+
+	  glt->glt_orientation = pm->pm_orientation;
+	  glt->glt_aspect = pm->pm_aspect;
+	  glw_tex_backend_load(gr, glt, pm);
+	}
+	pixmap_release(pm);
+      }
+    }
+    glw_tex_deref(gr, glt);
   }
  
   return NULL;
@@ -122,7 +140,7 @@ lacreate(glw_root_t *gr, int i)
   TAILQ_INIT(la->q);
 
   la->cond = &gr->gr_tex_load_cond[i];
-  hts_cond_init(la->cond, &gr->gr_tex_mutex);
+  hts_cond_init(la->cond, &gr->gr_mutex);
   return la;
 }
 
@@ -136,7 +154,6 @@ glw_tex_init(glw_root_t *gr)
   extern int concurrency;
   loaderaux_t *la;
 
-  hts_mutex_init(&gr->gr_tex_mutex);
   TAILQ_INIT(&gr->gr_tex_rel_queue);
 
   la = lacreate(gr, LQ_ALL_OTHER);
@@ -164,7 +181,6 @@ void
 glw_tex_flush_all(glw_root_t *gr)
 {
   glw_loadable_texture_t *glt;
-  hts_mutex_lock(&gr->gr_tex_mutex);
 
   LIST_FOREACH(glt, &gr->gr_tex_list, glt_global_link) {
     if(glt->glt_state == GLT_STATE_INACTIVE)
@@ -176,195 +192,6 @@ glw_tex_flush_all(glw_root_t *gr)
       TAILQ_REMOVE(glt->glt_q, glt, glt_work_link);
     glt->glt_state = GLT_STATE_INACTIVE;
   }
-  hts_mutex_unlock(&gr->gr_tex_mutex);
-}
-
-/**
- *
- */
-static enum PixelFormat 
-pixmapfmt_to_libav(pixmap_type_t t)
-{
-  switch(t) {
-  case PIXMAP_I:
-    return PIX_FMT_GRAY8;
-  case PIXMAP_IA:
-    return PIX_FMT_Y400A;
-  case PIXMAP_RGB24:
-    return PIX_FMT_RGB24;
-  case PIXMAP_BGR32:
-    return PIX_FMT_BGR32;
-  default:
-    return -1;
-  }
-}
-
-/**
- *
- */
-static int
-glw_tex_load(glw_root_t *gr, glw_loadable_texture_t *glt)
-{
-  AVCodecContext *ctx;
-  AVCodec *codec;
-  AVFrame *frame;
-  int r, got_pic, w, h;
-  const char *url;
-  char errbuf[128];
-
-  if(glt->glt_filename == NULL)
-    return -1;
-
-  url = glt->glt_filename;
-  image_meta_t im = {0};
-
-  if(!strncmp(url, "thumb://", 8)) {
-    url = url + 8;
-    im.want_thumb = 1;
-  }
-  im.req_width  = glt->glt_req_xs;
-  im.req_height = glt->glt_req_ys;
-
-  pixmap_t *pm = backend_imageloader(url, &im, gr->gr_vpaths, errbuf, 
-				     sizeof(errbuf));
-  if(pm == NULL) {
-    TRACE(TRACE_ERROR, "GLW", "Unable to load %s -- %s", url, errbuf);
-    return -1;
-  }
-
-  glt->glt_orientation = pm->pm_orientation;
-
-  if(!pixmap_is_coded(pm)) {
-    glt->glt_aspect = (float)pm->pm_width / (float)pm->pm_height;
-
-    AVPicture pict;
-    pict.data[0] = pm->pm_pixels;
-    pict.linesize[0] = pm->pm_linesize;
-
-    r = glw_tex_backend_load(gr, glt, &pict,
-			     pixmapfmt_to_libav(pm->pm_type),
-			     pm->pm_width, pm->pm_height,
-			     pm->pm_width, pm->pm_height);
-    pixmap_release(pm);
-    return r;
-  }
-
-
-  switch(pm->pm_type) {
-  case PIXMAP_PNG:
-    codec = avcodec_find_decoder(CODEC_ID_PNG);
-    break;
-  case PIXMAP_JPEG:
-    codec = avcodec_find_decoder(CODEC_ID_MJPEG);
-    break;
-  case PIXMAP_GIF:
-    codec = avcodec_find_decoder(CODEC_ID_GIF);
-    break;
-  default:
-    codec = NULL;
-    break;
-  }
-
-  if(codec == NULL) {
-    pixmap_release(pm);
-    TRACE(TRACE_ERROR, "glw", "%s: No codec for image format", url);
-    return -1;
-  }
-  ctx = avcodec_alloc_context();
-  ctx->codec_id   = codec->id;
-  ctx->codec_type = codec->type;
-
-  if(avcodec_open(ctx, codec) < 0) {
-    av_free(ctx);
-    pixmap_release(pm);
-    TRACE(TRACE_ERROR, "glw", "%s: unable to open codec", url);
-    return -1;
-  }
-  
-  frame = avcodec_alloc_frame();
-
-#ifdef WII
-  if(pm->pm_width > 1280 || pm->pm_height > 960)
-    ctx->lowres = 1;
-  if(pm->pm_width > 2560  || pm->pm_height > 1920)
-    ctx->lowres = 2;
-#endif
-
-  if(ctx->lowres)
-    TRACE(TRACE_DEBUG, "GLW", "%s: DCT-Scaling image down by factor %d",
-	  url, 1 << ctx->lowres);
-
-  AVPacket avpkt;
-  av_init_packet(&avpkt);
-  avpkt.data = pm->pm_data;
-  avpkt.size = pm->pm_size;
-
-  r = avcodec_decode_video2(ctx, frame, &got_pic, &avpkt);
-
-  if(ctx->width == 0 || ctx->height == 0) {
-    av_free(ctx);
-    pixmap_release(pm);
-    avcodec_close(ctx);
-    av_free(frame);
-    TRACE(TRACE_INFO, "glw", "%s: invalid picture dimensions", url);
-    return -1;
-  }
-
-
-  if(im.want_thumb && pm->pm_flags & PIXMAP_THUMBNAIL) {
-    w = 160;
-    h = 160 * ctx->height / ctx->width;
-  } else {
-    w = ctx->width;
-    h = ctx->height;
-  }
-
-  pixmap_release(pm);
-
-  if(glt->glt_req_xs != -1 && glt->glt_req_ys != -1) {
-    w = glt->glt_req_xs;
-    h = glt->glt_req_ys;
-
-  } else if(glt->glt_req_xs != -1) {
-    w = glt->glt_req_xs;
-    h = glt->glt_req_xs * ctx->height / ctx->width;
-
-  } else if(glt->glt_req_ys != -1) {
-    w = glt->glt_req_ys * ctx->width / ctx->height;
-    h = glt->glt_req_ys;
-
-  } else if(w > 64 && h > 64) {
-    if(w > gr->gr_width) {
-      h = h * gr->gr_width / w;
-      w = gr->gr_width;
-    }
-
-    if(h > gr->gr_height) {
-      w = w * gr->gr_height / h;
-      h = gr->gr_height;
-    }
-  }
-
-  // Compute correct aspect ratio based on orientation
-  // See pixmap.h for the secret constant '5'
-  if(glt->glt_orientation < 5) {
-    glt->glt_aspect = (float)w / (float)h;
-  } else {
-    glt->glt_aspect = (float)h / (float)w;
-  }
-
-
-
-  r = glw_tex_backend_load(gr, glt, (AVPicture *)frame, 
-			   ctx->pix_fmt, ctx->width, ctx->height, w, h);
-  if(r)
-    TRACE(TRACE_INFO, "GLW", "Unable to load %s", url);
-  av_free(frame);
-
-  avcodec_close(ctx);
-  av_free(ctx);
-
-  return r;
 }
 
 
@@ -375,21 +202,19 @@ void
 glw_tex_purge(glw_root_t *gr)
 {
   glw_loadable_texture_t *glt; 
-  hts_mutex_lock(&gr->gr_tex_mutex);
 
   while((glt = TAILQ_FIRST(&gr->gr_tex_rel_queue)) != NULL) {
     TAILQ_REMOVE(&gr->gr_tex_rel_queue, glt, glt_work_link);
     glw_tex_backend_free_render_resources(gr, glt);
     free(glt);
   }
-  hts_mutex_unlock(&gr->gr_tex_mutex);
 }
 
 /**
  *
  */
-static void
-glw_tex_deref_locked(glw_root_t *gr, glw_loadable_texture_t *glt)
+void
+glw_tex_deref(glw_root_t *gr, glw_loadable_texture_t *glt)
 {
   glt->glt_refcnt--;
 
@@ -414,25 +239,12 @@ glw_tex_deref_locked(glw_root_t *gr, glw_loadable_texture_t *glt)
 /**
  *
  */
-void
-glw_tex_deref(glw_root_t *gr, glw_loadable_texture_t *glt)
-{
-  hts_mutex_lock(&gr->gr_tex_mutex);
-  glw_tex_deref_locked(gr, glt);
-  hts_mutex_unlock(&gr->gr_tex_mutex);
-}
-
-
-/**
- *
- */
 glw_loadable_texture_t *
 glw_tex_create(glw_root_t *gr, const char *filename, int flags, int xs,
 	       int ys)
 {
   glw_loadable_texture_t *glt;
 
-  hts_mutex_lock(&gr->gr_tex_mutex);
   assert(xs != 0);
   assert(ys != 0);
 
@@ -454,8 +266,6 @@ glw_tex_create(glw_root_t *gr, const char *filename, int flags, int xs,
   }
 
   glt->glt_refcnt++;
-
-  hts_mutex_unlock(&gr->gr_tex_mutex);
   return glt;
 }
 
@@ -495,26 +305,21 @@ gl_tex_req_load(glw_root_t *gr, glw_loadable_texture_t *glt)
 void
 glw_tex_layout(glw_root_t *gr, glw_loadable_texture_t *glt)
 {
-  hts_mutex_lock(&gr->gr_tex_mutex);
-
   switch(glt->glt_state) {
   case GLT_STATE_INACTIVE:
     gl_tex_req_load(gr, glt);
     break;
-    
-  case GLT_STATE_LOADING:
-  case GLT_STATE_QUEUED:
-    break;
 
   case GLT_STATE_VALID:
     glw_tex_backend_layout(gr, glt);
+    // FALLTHRU
+  case GLT_STATE_QUEUED:
+    LIST_REMOVE(glt, glt_flush_link);
+    LIST_INSERT_HEAD(&gr->gr_tex_active_list, glt, glt_flush_link);
     break;
 
+  case GLT_STATE_LOADING:
   case GLT_STATE_ERROR:
     break;
   }
-
-  LIST_REMOVE(glt, glt_flush_link);
-  LIST_INSERT_HEAD(&gr->gr_tex_active_list, glt, glt_flush_link);
-  hts_mutex_unlock(&gr->gr_tex_mutex);
 }
