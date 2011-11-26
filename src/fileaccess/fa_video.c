@@ -100,6 +100,7 @@ fs_sub_scan_dir(prop_t *prop, const char *url, const char *video)
   fa_dir_t *fd;
   fa_dir_entry_t *fde;
   char errbuf[256];
+  char* subname;
 
   if((fd = fa_scandir(url, errbuf, sizeof(errbuf))) == NULL) {
     TRACE(TRACE_DEBUG, "Video", "Unable to scan %s for subtitles: %s",
@@ -113,6 +114,21 @@ fs_sub_scan_dir(prop_t *prop, const char *url, const char *video)
       fs_sub_scan_dir(prop, fde->fde_url, video);
       continue;
     }
+
+    /**
+     * get actual sub file name
+     */
+    subname=strrchr(fde->fde_filename, '/');
+    if(subname==NULL)
+	subname=fde->fde_filename;
+    else
+	subname++;
+
+    /**
+     * compare video and sub name
+     */
+    if(strncmp(video,subname,strlen(video))!=0)
+	continue;
 
     postfix = strrchr(fde->fde_filename, '.');
     if(postfix != NULL && !strcasecmp(postfix, ".srt")) {
