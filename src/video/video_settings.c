@@ -131,6 +131,12 @@ set_stretch_horizontal(void *opaque, int on)
 }
 
 static void
+set_stretch_fullscreen(void *opaque, int on)
+{
+  video_settings.stretch_fullscreen = on;
+}
+
+static void
 set_vzoom(void *opaque, int v)
 {
   video_settings.vzoom = v;
@@ -175,6 +181,13 @@ video_settings_init(void)
 		       settings_generic_save_settings, 
 		       (void *)"videoplayback");
 
+  settings_create_bool(s, "stretch_fullscreen",
+		       _p("Stretch video to fullscreen"), 0,
+		       store, set_stretch_fullscreen, NULL, 
+		       SETTINGS_INITIAL_UPDATE, NULL,
+		       settings_generic_save_settings, 
+		       (void *)"videoplayback");
+
   settings_create_int(s, "vzoom",
 		      _p("Video zoom"), 100, store, 50, 200,
 		      1, set_vzoom, NULL,
@@ -187,7 +200,7 @@ video_settings_init(void)
   x = settings_create_multiopt(s, "resumemode",
 			       _p("Resume video playback"),
 			       set_video_resumemode,
-			       _p("Controls if video playback should restart where last played"));
+			       _p("Controls if video playback should restart where last played"), NULL);
 
   settings_multiopt_add_opt(x, "1", _p("Yes"), 1);
   settings_multiopt_add_opt(x, "0", _p("No"), 0);
@@ -236,7 +249,7 @@ video_settings_init(void)
 		       (void *)"subtitles");
 
   x = settings_create_multiopt(s, "align", _p("Subtitle position"),
-			       set_subtitle_alignment, NULL);
+			       set_subtitle_alignment, NULL, NULL);
 
   settings_multiopt_add_opt(x, "2", _p("Center"), 1);
   settings_multiopt_add_opt(x, "1", _p("Left"), 0);

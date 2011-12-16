@@ -28,6 +28,7 @@ typedef enum {
   PIXMAP_PNG,
   PIXMAP_JPEG,
   PIXMAP_GIF,
+  PIXMAP_SVG,
   PIXMAP_coded,
   PIXMAP_BGR32,
   PIXMAP_RGB24,
@@ -74,7 +75,7 @@ typedef struct pixmap {
 
 #define PIXMAP_THUMBNAIL 0x1       // This is a thumbnail
 #define PIXMAP_TEXT_WRAPPED 0x2    // Contains wrapped text
-#define PIXMAP_TEXT_ELLIPSIZED 0x4 // Contains ellipsized text
+#define PIXMAP_TEXT_TRUNCATED 0x4 // Contains truncated text
 
   pixmap_type_t pm_type;
 
@@ -129,5 +130,12 @@ void pixmap_box_blur(pixmap_t *pm, int boxw, int boxh);
 
 pixmap_t *pixmap_decode(pixmap_t *pm, const image_meta_t *im,
 			char *errbuf, size_t errlen);
+
+pixmap_t *svg_decode(pixmap_t *pm, const image_meta_t *im,
+		     char *errbuf, size_t errlen);
+
+void svg_init(void);
+
+int color_is_not_gray(uint32_t rgb);
 
 #endif
