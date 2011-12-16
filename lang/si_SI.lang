@@ -47,16 +47,13 @@ id: Delete
 msg: Izbriši
 
 id: Queue
-# Missing translation
-msg: 
+msg: Vrsta
 
 id: Star
-# Missing translation
-msg: 
+msg: Star
 
 id: Unstar
-# Missing translation
-msg: 
+msg: Unstar
 
 #
 # ./glwthemes/mono/include/buttons.view
@@ -86,12 +83,10 @@ msg: OK
 # ./glwthemes/mono/pages/about.view
 #
 id: Allocated by application: %d kB
-# Missing translation
-msg: 
+msg: Dodeljeno iz aplikacije: %d kB
 
 id: Allocated by malloc: %d kB
-# Missing translation
-msg: 
+msg: Dodeljeno iz malloc: %d kB
 
 id: Avail system RAM: %d kB
 msg: Na voljo sistemskega pomnilnika: %d kB
@@ -106,8 +101,7 @@ id: Framerate: %.2f Hz
 msg: Hitrost slik %.2f Hz
 
 id: Free chunks: %d
-# Missing translation
-msg: 
+msg: Zastonj koščki: %d
 
 id: GPU: %s
 msg: GPU: %s
@@ -116,8 +110,7 @@ id: Height: %d px
 msg: Višina: %d px
 
 id: Memory status
-# Missing translation
-msg: 
+msg: Status pomnilnika
 
 id: Renderer: %s
 msg: Renderer: %s
@@ -129,8 +122,7 @@ id: Total system RAM: %d kB
 msg: Celoten sistemski pomnilnik: %d kB
 
 id: Unused memory: %d kB
-# Missing translation
-msg: 
+msg: Neuporabljen pomnilnik: %d kB
 
 id: Version: %s
 msg: Verzija: %s
@@ -217,7 +209,7 @@ msg: Uporabniško ime
 # ./glwthemes/mono/screensaver.view
 #
 id: No media loaded
-msg: Medij ni zagnan
+msg: Medij ni naložen
 
 #
 # ./glwthemes/mono/sysinfo.view
@@ -247,13 +239,13 @@ id: Audio muted
 msg: Izklop zvoka
 
 id: Fancy UI animations
-msg: Lepe UI animacije
+msg: Animacije UI vmesnika
 
 id: Master volume: %d dB
 msg: Glasnost: %d dB
 
 id: Top bar navigation buttons
-msg: Navigacijske tipke v vrhnji vrstici
+msg: Navigacijske tipke v zgornji vrstici
 
 #
 # ./src/api/opensubtitles.c
@@ -316,8 +308,7 @@ msg: Napaka pri odpiranju CD-ja
 # ./src/backend/dvd/dvd.c
 #
 id: DVD
-# Missing translation
-msg: 
+msg: DVD
 
 id: DVD read error, restarting disc
 msg: Napaka pri branju DVD-ja, disk bo ponovno zagnan
@@ -344,8 +335,7 @@ id: Automatic login when Showtime starts
 msg: Samodejna prijava pri zagonu Showtime-a
 
 id: Collaborative
-# Missing translation
-msg: 
+msg: Kolaborativno
 
 id: Enable Spotify
 msg: Omogoči Spotify
@@ -369,12 +359,10 @@ id: New releases
 msg: Nove objave
 
 id: Offline
-# Missing translation
-msg: 
+msg: Offline
 
 id: Offline sync in 96kbps
-# Missing translation
-msg: 
+msg: Offline sinhronizacija v 96kbps
 
 id: Playlists
 msg: Lista predvajanj
@@ -383,7 +371,7 @@ id: Relogin (switch user)
 msg: Ponovno logiranje (menjava uporabnika)
 
 id: Search result
-msg: rezultati iskanja
+msg: Rezultati iskanja
 
 id: Spotify friends
 msg: Spotify Prijatelji
@@ -434,8 +422,7 @@ msg: Za iskanje uporabi Spotlight
 # ./src/fileaccess/fa_video.c
 #
 id: External file
-# Missing translation
-msg: 
+msg: Zunanja datoteka
 
 #
 # ./src/i18n.c
@@ -444,8 +431,7 @@ id: Language
 msg: Jezik
 
 id: Language codes should be configured as three character ISO codes, example (eng, swe, fra)
-# Missing translation
-msg: 
+msg: Koda jezika mora biti konfigurirana s tremi znaki ISO kode, primer (eng, swe, slo)
 
 id: Preferred languages
 msg: Prednostni jezik
@@ -505,7 +491,7 @@ id: Subtitle delay
 msg: Zamik podnapisov
 
 id: Subtitle scaling
-msg: skaliranje podnapisov
+msg: Velikost podnapisov
 
 id: Video zoom
 msg: Video približevanje
@@ -514,12 +500,10 @@ msg: Video približevanje
 # ./src/metadata/metadata.c
 #
 id: Embedded in file
-# Missing translation
-msg: 
+msg: Vgrajeni v datotki
 
 id: Track %d
-# Missing translation
-msg: 
+msg: Track %d
 
 #
 # ./src/navigator.c
@@ -546,13 +530,13 @@ id: Unable to load plugin.json: Malformed JSON
 msg: Dodatek.json nemorem naložit: Nepravilen JSON
 
 id: Unable to request plugin repository: %s
-msg: Nemogoč dostop do baze dodatkov: %s
+msg: Neuspešen dostop do baze dodatkov: %s
 
 #
 # ./src/runcontrol.c
 #
 id: Automatic standby
-msg: Avtomazsko mirovanje
+msg: Avtomatsko mirovanje
 
 id: Run control
 msg: Run control
@@ -573,10 +557,10 @@ msg: Tip
 # ./src/settings.c
 #
 id: Applications and installed plugins
-msg: Isšalacija aplikacij in vtičnikov
+msg: Naložene aplikacije in vtičniki
 
 id: Discovered media sources
-msg: Gefundene Medienquellen
+msg: Najdeni medija viri
 
 id: Global settings
 msg: Glavne nastavitve
@@ -687,7 +671,7 @@ id: Enable VDPAU
 msg: Omogočiti VDPAU
 
 id: Force subtitles to reside on video frame
-msg: Prisiliti podnapise da so na video okvirju
+msg: Prisiliti podnapise v video okvir
 
 id: Generic settings for video subtitles
 msg: Generične nastavitve za video podnapise

@@ -603,15 +603,6 @@ draw_glyph(pixmap_t *pm, int left, int top, FT_Bitmap *bmp, int color)
 }
 
 
-static int
-is_not_gray(uint32_t rgb)
-{
-  uint8_t r = rgb;
-  uint8_t g = rgb >> 8;
-  uint8_t b = rgb >> 16;
-  return (r != g) || (g != b);
-}
-
 /**
  *
  */
@@ -1004,17 +995,17 @@ text_render0(const uint32_t *uc, const int len,
 
     case TR_CODE_COLOR ... TR_CODE_COLOR + 0xffffff:
       current_color = uc[i] & 0xffffff; // BGR host order
-      color_output |= is_not_gray(current_color);
+      color_output |= color_is_not_gray(current_color);
       break;
 
     case TR_CODE_SHADOW_COLOR ... TR_CODE_SHADOW_COLOR + 0xffffff:
       current_shadow_color = uc[i] & 0xffffff; // BGR host order
-      color_output |= is_not_gray(current_shadow_color);
+      color_output |= color_is_not_gray(current_shadow_color);
       break;
 
     case TR_CODE_OUTLINE_COLOR ... TR_CODE_OUTLINE_COLOR + 0xffffff:
       current_outline_color = uc[i] & 0xffffff; // BGR host order
-      color_output |= is_not_gray(current_outline_color);
+      color_output |= color_is_not_gray(current_outline_color);
       break;
 
     case  TR_CODE_FONT_FAMILY ...  TR_CODE_FONT_FAMILY + 0xffffff:
@@ -1143,12 +1134,12 @@ text_render0(const uint32_t *uc, const int len,
       }
 
 
-      if(lines == max_lines - 1 && (flags & TR_RENDER_ELLIPSIZE) && g != NULL) {
-	glyph_t *eg = glyph_get(HORIZONTAL_ELLIPSIS_UNICODE, g->size, 0,
-				g->face->family_id_vec[0]);
-	if(eg != NULL) {
-	  int ellipsize_width = g->adv_x;
-	  if(w >= max_width - ellipsize_width) {
+      if(lines == max_lines - 1 && g != NULL && max_width) {
+	
+	if(flags & TR_RENDER_ELLIPSIZE) {
+	  glyph_t *eg = glyph_get(HORIZONTAL_ELLIPSIS_UNICODE, g->size, 0,
+			 g->face->family_id_vec[0]);
+	  if(w >= max_width - eg->adv_x) {
 
 	    while(j > 0 && items[li->start + j - 1].code == ' ') {
 	      j--;
@@ -1158,10 +1149,17 @@ text_render0(const uint32_t *uc, const int len,
 	    
 	    items[li->start + j].g = eg;
 	    items[li->start + j].kerning = 0;
-	    pmflags |= PIXMAP_TEXT_ELLIPSIZED;
+	    pmflags |= PIXMAP_TEXT_TRUNCATED;
 	    
-	    w += ellipsize_width;
+	    w += eg->adv_x;
 	    li->count = j + 1;
+	    break;
+	  }
+	} else {
+
+	  if(w >= max_width) {
+	    pmflags |= PIXMAP_TEXT_TRUNCATED;
+	    li->count = j;
 	    break;
 	  }
 	}
