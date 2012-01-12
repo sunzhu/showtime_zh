@@ -26,6 +26,9 @@
 #include "htsmsg/htsmsg_store.h"
 #include "arch/threads.h"
 
+#define HTS_GLUE(a, b) a ## b
+#define HTS_JOIN(a, b) HTS_GLUE(a, b)
+
 #define DISABLE_CACHE ((int *)-1)
 #define NOT_MODIFIED  ((void *)-1)
 
@@ -42,6 +45,9 @@ struct rstr *nls_get_rstring(const char *string);
 
 struct prop;
 struct prop *nls_get_prop(const char *string);
+
+struct rstr *nls_get_rstringp(const char *string, const char *singularis,
+			      int val);
 
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
