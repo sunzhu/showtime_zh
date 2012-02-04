@@ -248,8 +248,7 @@ id: Master volume: %d dB
 msg: Huvudvolym: %d dB
 
 id: Multilingual 'No media loaded'
-# Missing translation
-msg: 
+msg: Flerspråkig 'No media loaded'
 
 id: Top bar navigation buttons
 msg: Knappar för navigation i toppen av skärmen
@@ -683,6 +682,9 @@ msg: Generella inställningar för undertexter
 id: Ignore embedded styling
 msg: Ignorera inbäddade stilkoder
 
+id: Include all subtitle files from movie directory
+msg: Inkludera alla undertexterfiler från filmens katalog
+
 id: Left
 msg: Vänster
 
@@ -708,8 +710,7 @@ id: Shadow offset
 msg: Skuggoffset
 
 id: Stretch video to fullscreen
-# Missing translation
-msg: 
+msg: Sträck ut videon över hela skärmen
 
 id: Stretch video to widescreen
 msg: Sträck ut videon horisontellt 
@@ -719,6 +720,9 @@ msg: Position på undertexter
 
 id: Subtitle size
 msg: Storlek på undertexter
+
+id: Subtitle size and positioning
+msg: Storlek och position för undertexter
 
 id: Subtitle styling
 msg: Stil på undertexter

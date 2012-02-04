@@ -248,8 +248,7 @@ id: Master volume: %d dB
 msg: Volume principale: %d dB
 
 id: Multilingual 'No media loaded'
-# Missing translation
-msg: 
+msg: 'Nessun media caricato' plurilingue
 
 id: Top bar navigation buttons
 msg: Pulsanti nella barra di navigazione in alto
@@ -683,6 +682,9 @@ msg: Impostazioni generiche per i sottotitoli
 id: Ignore embedded styling
 msg: Ignora i codici di stile incorporati
 
+id: Include all subtitle files from movie directory
+msg: Includi tutti i file di sottotitoli presenti nella cartella del filmato
+
 id: Left
 msg: Sinistra
 
@@ -718,6 +720,9 @@ msg: Posizione sottotitoli
 
 id: Subtitle size
 msg: Dimensione sottotitoli
+
+id: Subtitle size and positioning
+msg: Dimensione e posizione dei sottotitoli
 
 id: Subtitle styling
 msg: Stile sottotitoli
