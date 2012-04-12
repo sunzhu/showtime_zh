@@ -58,7 +58,8 @@ typedef struct media_format {
 typedef struct media_codec {
   int refcount;
   media_format_t *fw;
-  struct AVCodec *codec;
+  int codec_id;
+  struct AVCodec *codec; // This may be NULL for HW accelerated decoders
   struct AVCodecContext *codec_ctx;
   struct AVCodecParserContext *parser_ctx;
 
@@ -329,6 +330,7 @@ typedef struct media_pipe {
   struct setting *mp_setting_sub_scale;  // Subtitle scaling
   struct setting *mp_setting_sub_on_video; // Subtitle always on video
   struct setting *mp_setting_vzoom;      // Video zoom in %
+  struct setting *mp_setting_vdpau_deinterlace;      // Deinterlace interlaced content
 
 } media_pipe_t;
 
