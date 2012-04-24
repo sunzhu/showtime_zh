@@ -226,7 +226,8 @@ video_deliver_frame(video_decoder_t *vd,
   fi.color_space = ctx->colorspace;
   fi.color_range = ctx->color_range;
 
-  vd->vd_frame_deliver(frame->data, frame->linesize, &fi, vd->vd_opaque);
+  vd->vd_frame_deliver(FRAME_BUFFER_TYPE_LIBAV_FRAME, frame,
+		       &fi, vd->vd_opaque);
 
   video_decoder_scan_ext_sub(vd, fi.pts);
 }
@@ -289,7 +290,6 @@ vd_thread(void *aux)
     }
 
     TAILQ_REMOVE(&mq->mq_q, mb, mb_link);
-    mq->mq_freeze_tail = 1;
     mq->mq_packets_current--;
     mp->mp_buffer_current -= mb->mb_size;
     mq_update_stats(mp, mq);
@@ -370,7 +370,8 @@ vd_thread(void *aux)
       if(vd->vd_accelerator_blackout)
 	vd->vd_accelerator_blackout(vd->vd_accelerator_opaque);
       else
-	vd->vd_frame_deliver(NULL, NULL, NULL, vd->vd_opaque);
+	vd->vd_frame_deliver(FRAME_BUFFER_TYPE_BLACKOUT, NULL, NULL,
+			     vd->vd_opaque);
       break;
 
     case MB_FLUSH_SUBTITLES:
@@ -392,7 +393,6 @@ vd_thread(void *aux)
     }
 
     hts_mutex_lock(&mp->mp_mutex);
-    mq->mq_freeze_tail = 0;
     media_buf_free_locked(mp, mb);
   }
 

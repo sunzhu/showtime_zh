@@ -463,17 +463,15 @@ arch_cache_avail_bytes(void)
 void
 hts_mutex_init(hts_mutex_t *m)
 {
-  sys_mutex_attribute_t attr;
+  sys_lwmutex_attribute_t attr;
   s32 r;
   memset(&attr, 0, sizeof(attr));
-  attr.attr_protocol = MUTEX_PROTOCOL_FIFO;
+  attr.attr_protocol = MUTEX_PROTOCOL_PRIORITY;
   attr.attr_recursive = MUTEX_NOT_RECURSIVE;
-  attr.attr_pshared  = 0x00200;
-  attr.attr_adaptive = 0x02000;
 
   strcpy(attr.name, "mutex");
 
-  if((r = sys_mutex_create(m, &attr)) != 0) {
+  if((r = sys_lwmutex_create(m, &attr)) != 0) {
     my_trace("Failed to create mutex: error: 0x%x", r);
     exit(0);
   }
@@ -484,17 +482,15 @@ hts_mutex_init(hts_mutex_t *m)
 void
 hts_mutex_init_recursive(hts_mutex_t *m)
 {
-  sys_mutex_attribute_t attr;
+  sys_lwmutex_attribute_t attr;
   s32 r;
   memset(&attr, 0, sizeof(attr));
-  attr.attr_protocol = MUTEX_PROTOCOL_FIFO;
+  attr.attr_protocol = MUTEX_PROTOCOL_PRIORITY;
   attr.attr_recursive = MUTEX_RECURSIVE;
-  attr.attr_pshared  = 0x00200;
-  attr.attr_adaptive = 0x02000;
 
   strcpy(attr.name, "mutex");
 
-  if((r = sys_mutex_create(m, &attr)) != 0) {
+  if((r = sys_lwmutex_create(m, &attr)) != 0) {
     my_trace("Failed to create mutex: error: 0x%x", r);
     exit(0);
   }
@@ -556,12 +552,11 @@ hts_mutex_destroyx(hts_mutex_t *m, const char *file, int line)
 void
 hts_cond_init(hts_cond_t *c, hts_mutex_t *m)
 {
-  sys_cond_attribute_t attr;
+  sys_lwcond_attribute_t attr;
   s32 r;
   memset(&attr, 0, sizeof(attr));
-  attr.attr_pshared = 0x00200;
   strcpy(attr.name, "cond");
-  if((r = sys_cond_create(c, *m, &attr) != 0)) {
+  if((r = sys_lwcond_create(c, m, &attr) != 0)) {
     my_trace("Failed to create cond: error: 0x%x", r);
     exit(0);
   }
@@ -572,7 +567,7 @@ hts_cond_init(hts_cond_t *c, hts_mutex_t *m)
 int
 hts_cond_wait_timeout(hts_cond_t *c, hts_mutex_t *m, int delay)
 {
-  return !!sys_cond_wait(*c, delay * 1000LL);
+  return !!sys_lwcond_wait(c, delay * 1000LL);
 }
 
 
@@ -583,11 +578,10 @@ void
 hts_cond_initx(hts_cond_t *c, hts_mutex_t *m, const char *file, int line)
 {
   my_trace("%s:%d: Init cond @ %p,%p by %ld", file, line, c, m, hts_thread_current());
-  sys_cond_attribute_t attr;
+  sys_lwcond_attribute_t attr;
   memset(&attr, 0, sizeof(attr));
-  attr.attr_pshared = 0x00200;
   strcpy(attr.name, "cond");
-  s32 r = sys_cond_create(c, *m, &attr);
+  s32 r = sys_lwcond_create(c, m, &attr);
   if(r) {
     my_trace("%s:%d: Failed to create cond: error: 0x%x", file, line, r);
     exit(0);
@@ -598,32 +592,32 @@ hts_cond_initx(hts_cond_t *c, hts_mutex_t *m, const char *file, int line)
 void hts_cond_destroyx(hts_cond_t *c, const char *file, int line)
 {
   my_trace("%s:%d: Destroy cond @ %p by %ld", file, line, c, hts_thread_current());
-  sys_cond_destroy(*c);
+  sys_lwcond_destroy(c);
 }
 
 void hts_cond_signalx(hts_cond_t *c, const char *file, int line)
 {
   my_trace("%s:%d: Signal cond @ %p by %ld", file, line, c, hts_thread_current());
-  sys_cond_signal(*c);
+  sys_lwcond_signal(c);
 }
 
 void hts_cond_broadcastx(hts_cond_t *c, const char *file, int line)
 {
   my_trace("%s:%d: Broadcast cond @ %p by %ld", file, line, c, hts_thread_current());
-  sys_cond_signal_all(*c);
+  sys_lwcond_signal_all(c);
 }
 
 void hts_cond_waitx(hts_cond_t *c, hts_mutex_t *m, const char *file, int line)
 {
   my_trace("%s:%d: Wait cond @ %p %p by %ld", file, line, c, m, hts_thread_current());
-  sys_cond_wait(*c, 0);
+  sys_lwcond_wait(c, 0);
   my_trace("%s:%d: Wait cond @ %p %p by %ld => done", file, line, c, m, hts_thread_current());
 }
 
 int hts_cond_wait_timeoutx(hts_cond_t *c, hts_mutex_t *m, int delay, const char *file, int line)
 {
   my_trace("%s:%d: Wait cond @ %p %p %dms by %ld", file, line, c, m, delay, hts_thread_current());
-  s32 v = sys_cond_wait(*c, delay * 1000LL);
+  s32 v = sys_lwcond_wait(c, delay * 1000LL);
   my_trace("%s:%d: Wait cond @ %p %p %dms by %ld => %d", file, line, c, m, delay, hts_thread_current(), v);
   return !!v;
 }
@@ -714,6 +708,100 @@ my_localtime(const time_t *now, struct tm *tm)
 }
 
 
+#define BT_MAX    64
+#define BT_IGNORE 1
+static void
+backtrace(void)
+{
+
+#define	BT_FRAME(i)							\
+  if ((i) < BT_IGNORE + BT_MAX) {					\
+    void *p;								\
+    if (__builtin_frame_address(i) == 0)				\
+      return;								\
+    p = __builtin_return_address(i);					\
+    if (p == NULL || (intptr_t)p < 0x11000)				\
+      return;								\
+    if (i >= BT_IGNORE) {						\
+      trace(TRACE_NO_PROP, TRACE_ERROR, "BT", "%p", p);			\
+    }									\
+  } else								\
+    return;
+
+	BT_FRAME(0)
+	BT_FRAME(1)
+	BT_FRAME(2)
+	BT_FRAME(3)
+	BT_FRAME(4)
+	BT_FRAME(5)
+	BT_FRAME(6)
+	BT_FRAME(7)
+	BT_FRAME(8)
+	BT_FRAME(9)
+
+	BT_FRAME(10)
+	BT_FRAME(11)
+	BT_FRAME(12)
+	BT_FRAME(13)
+	BT_FRAME(14)
+	BT_FRAME(15)
+	BT_FRAME(16)
+	BT_FRAME(17)
+	BT_FRAME(18)
+	BT_FRAME(19)
+
+	BT_FRAME(20)
+	BT_FRAME(21)
+	BT_FRAME(22)
+	BT_FRAME(23)
+	BT_FRAME(24)
+	BT_FRAME(25)
+	BT_FRAME(26)
+	BT_FRAME(27)
+	BT_FRAME(28)
+	BT_FRAME(29)
+
+	BT_FRAME(30)
+	BT_FRAME(31)
+	BT_FRAME(32)
+	BT_FRAME(33)
+	BT_FRAME(34)
+	BT_FRAME(35)
+	BT_FRAME(36)
+	BT_FRAME(37)
+	BT_FRAME(38)
+	BT_FRAME(39)
+
+	BT_FRAME(40)
+	BT_FRAME(41)
+	BT_FRAME(42)
+	BT_FRAME(43)
+	BT_FRAME(44)
+	BT_FRAME(45)
+	BT_FRAME(46)
+	BT_FRAME(47)
+	BT_FRAME(48)
+	BT_FRAME(49)
+
+	BT_FRAME(50)
+	BT_FRAME(51)
+	BT_FRAME(52)
+	BT_FRAME(53)
+	BT_FRAME(54)
+	BT_FRAME(55)
+	BT_FRAME(56)
+	BT_FRAME(57)
+	BT_FRAME(58)
+	BT_FRAME(59)
+
+	BT_FRAME(60)
+	BT_FRAME(61)
+	BT_FRAME(62)
+	BT_FRAME(63)
+	BT_FRAME(64)
+}
+
+
 void
 __assert_func(const char *file, int line,
 	      const char *func, const char *failedexpr);
@@ -722,7 +810,8 @@ void
 __assert_func(const char *file, int line,
 	      const char *func, const char *failedexpr)
 {
-  TRACE(TRACE_ERROR, "ASSERT",
+  trace(TRACE_NO_PROP, TRACE_ERROR, "ASSERT",
 	"%s:%d %s %s", file, line, func, failedexpr);
+  backtrace();
   exit(1);
 }

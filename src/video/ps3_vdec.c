@@ -467,11 +467,14 @@ picture_out(vdec_decoder_t *vdd)
 	  vp->order, vp->fi.duration, vp->fi.pts, vp->fi.pts - last, vp->age);
     last = vp->fi.pts;
 #endif
-    int linesizes[4] = {vp->fi.width, vp->fi.width / 2, vp->fi.width / 2, 0};
+    AVFrame frame;
+    frame.linesize[0] = vp->fi.width;
+    frame.linesize[1] = vp->fi.width / 2;
+    frame.linesize[2] = vp->fi.width / 2;
 
-    uint8_t *data[4] = {vp->buf, vp->buf + lumasize,
-			vp->buf + lumasize + lumasize / 4, 0};
-
+    frame.data[0] = vp->buf;
+    frame.data[1] = vp->buf + lumasize;
+    frame.data[2] = vp->buf + lumasize + lumasize / 4;
 
     if(vp->fi.pts != AV_NOPTS_VALUE) {
       event_ts_t *ets = event_create(EVENT_CURRENT_PTS, sizeof(event_ts_t));
@@ -481,7 +484,8 @@ picture_out(vdec_decoder_t *vdd)
     }
 
     if(vd) {
-      vd->vd_frame_deliver(data, linesizes, &vp->fi, vd->vd_opaque);
+      vd->vd_frame_deliver(FRAME_BUFFER_TYPE_LIBAV_FRAME, &frame,
+			   &vp->fi, vd->vd_opaque);
       video_decoder_scan_ext_sub(vd, vp->fi.pts);
     }
 
@@ -548,7 +552,6 @@ decoder_callback(uint32_t handle, uint32_t msg_type, int32_t err_code,
     hts_mutex_lock(&vdd->mtx);
     if(!vdd->submitted_au)
       TRACE(TRACE_ERROR, "VDEC", "AUDONE but no buffers pending");
-    hts_mutex_unlock(&vdd->mtx);
     vdd->submitted_au = 0;
     hts_cond_signal(&vdd->audone);
     hts_mutex_unlock(&vdd->mtx);
