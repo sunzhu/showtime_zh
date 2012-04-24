@@ -33,7 +33,7 @@
 static glw_video_engine_t glw_video_blank;
 
 
-static void  glw_video_input(uint8_t * const data[], const int pitch[],
+static void  glw_video_input(frame_buffer_type_t type, void *frame,
 			     const frame_info_t *info, void *opaque);
 
 
@@ -290,9 +290,9 @@ glw_video_newframe(glw_t *w, int flags)
   if(memcmp(&gv->gv_cfg_cur, &gv->gv_cfg_req, sizeof(glw_video_config_t)))
     glw_video_surface_reconfigure(gv);
 
-  hts_mutex_unlock(&gv->gv_surface_mutex);
-
   pts = gv->gv_cfg_cur.gvc_engine->gve_newframe(gv, vd, flags);
+
+  hts_mutex_unlock(&gv->gv_surface_mutex);
 
   if(pts != AV_NOPTS_VALUE)
     glw_video_overlay_set_pts(gv, pts);
@@ -325,7 +325,10 @@ glw_video_widget_callback(glw_t *w, void *opaque, glw_signal_t signal,
     return glw_video_widget_event(extra, gv->gv_mp, vd->vd_spu_in_menu);
 
   case GLW_SIGNAL_DESTROY:
+    hts_mutex_lock(&gv->gv_surface_mutex);
+    hts_cond_signal(&gv->gv_reconf_cond);
     hts_cond_signal(&gv->gv_avail_queue_cond);
+    hts_mutex_unlock(&gv->gv_surface_mutex);
     video_playback_destroy(gv->gv_mp);
     video_decoder_stop(vd);
     mp_ref_dec(gv->gv_mp);
@@ -611,6 +614,7 @@ glw_video_get_surface(glw_video_t *gv)
   }
 
   TAILQ_REMOVE(&gv->gv_avail_queue, s, gvs_link);
+  hts_mutex_assert(&gv->gv_surface_mutex);
   return s;
 }
 
@@ -627,6 +631,7 @@ glw_video_put_surface(glw_video_t *gv, glw_video_surface_t *s,
   s->gvs_duration = duration;
   s->gvs_yshift = yshift;
   TAILQ_INSERT_TAIL(&gv->gv_decoded_queue, s, gvs_link);
+  hts_mutex_assert(&gv->gv_surface_mutex);
 }
 
 
@@ -634,10 +639,11 @@ glw_video_put_surface(glw_video_t *gv, glw_video_surface_t *s,
  * Frame delivery from video decoder
  */
 static void 
-glw_video_input(uint8_t * const data[], const int pitch[],
+glw_video_input(frame_buffer_type_t type, void *frame,
 		const frame_info_t *fi, void *opaque)
 {
   glw_video_t *gv = opaque;
+  const AVFrame *avframe;
 
   if(fi) {
     gv->gv_dar = fi->dar;
@@ -645,44 +651,56 @@ glw_video_input(uint8_t * const data[], const int pitch[],
   }
   hts_mutex_lock(&gv->gv_surface_mutex);
 
-  if(data == NULL) {
+  if(frame == NULL) {
     // Blackout
     glw_video_configure(gv, &glw_video_blank, NULL, NULL, 0, 0);
     hts_mutex_unlock(&gv->gv_surface_mutex);
     return;
   }
   
-  switch(fi->pix_fmt) {
-  case PIX_FMT_YUV420P:
-  case PIX_FMT_YUV422P:
-  case PIX_FMT_YUV444P:
-  case PIX_FMT_YUV410P:
-  case PIX_FMT_YUV411P:
-  case PIX_FMT_YUV440P:
+  switch(type) {
+  case FRAME_BUFFER_TYPE_LIBAV_FRAME:
+    avframe = frame;
 
-  case PIX_FMT_YUVJ420P:
-  case PIX_FMT_YUVJ422P:
-  case PIX_FMT_YUVJ444P:
-  case PIX_FMT_YUVJ440P:
-    glw_video_input_yuvp(gv, data, pitch, fi);
-    break;
+    switch(fi->pix_fmt) {
+    case PIX_FMT_YUV420P:
+    case PIX_FMT_YUV422P:
+    case PIX_FMT_YUV444P:
+    case PIX_FMT_YUV410P:
+    case PIX_FMT_YUV411P:
+    case PIX_FMT_YUV440P:
 
+    case PIX_FMT_YUVJ420P:
+    case PIX_FMT_YUVJ422P:
+    case PIX_FMT_YUVJ444P:
+    case PIX_FMT_YUVJ440P:
+      glw_video_input_yuvp(gv, avframe->data, avframe->linesize, fi);
+      break;
+      
 #if ENABLE_VDPAU
-  case PIX_FMT_VDPAU_H264:
-  case PIX_FMT_VDPAU_MPEG1:
-  case PIX_FMT_VDPAU_MPEG2:
-  case PIX_FMT_VDPAU_WMV3:
-  case PIX_FMT_VDPAU_VC1:
-  case PIX_FMT_VDPAU_MPEG4:
-    glw_video_input_vdpau(gv, data, pitch, fi);
-    break;
+    case PIX_FMT_VDPAU_H264:
+    case PIX_FMT_VDPAU_MPEG1:
+    case PIX_FMT_VDPAU_MPEG2:
+    case PIX_FMT_VDPAU_WMV3:
+    case PIX_FMT_VDPAU_VC1:
+    case PIX_FMT_VDPAU_MPEG4:
+      glw_video_input_vdpau(gv, avframe->data, avframe->linesize, fi);
+      break;
 #endif
-
-  default:
-    TRACE(TRACE_ERROR, "GLW", 
+      
+    default:
+      TRACE(TRACE_ERROR, "GLW", 
 	  "PIX_FMT %s (0x%x) does not have a video engine",
 	   av_pix_fmt_descriptors[fi->pix_fmt].name, fi->pix_fmt);
+      break;
+    }
     break;
+
+  default:
+      TRACE(TRACE_ERROR, "GLW", 
+	    "buffer type %d  does not have a video engine",
+	    type);
+      break;
   }
 
   hts_mutex_unlock(&gv->gv_surface_mutex);

@@ -121,7 +121,8 @@ pixmap_create(int width, int height, pixmap_type_t type, int rowalign)
   pm->pm_height = height;
   pm->pm_linesize = ((pm->pm_width * bpp) + rowalign) & ~rowalign;
   pm->pm_type = type;
-  pm->pm_data = calloc(1, pm->pm_linesize * pm->pm_height);
+  pm->pm_data = av_malloc(pm->pm_linesize * pm->pm_height);
+  memset(pm->pm_data, 0, pm->pm_linesize * pm->pm_height);
   pm->pm_aspect = (float)width / (float)height;
   return pm;
 }

@@ -1124,7 +1124,7 @@ charset_get(const char *id)
     return &charsets[0];
 
   for(i = 0; i < sizeof(charsets) / sizeof(charsets[0]); i++)
-    if(!strcmp(id, charsets[i].id)) 
+    if(!strcasecmp(id, charsets[i].id)) 
       return &charsets[i];
   return NULL;
 }
