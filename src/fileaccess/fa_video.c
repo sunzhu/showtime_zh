@@ -370,9 +370,6 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
 
       if(e == NULL) {
-	if(!(flags & BACKEND_VIDEO_NO_AUTOSTOP))
-	  mp_set_playstatus_stop(mp);
-	
 	e = event_create_type(EVENT_EOF);
 	break;
       }
@@ -380,7 +377,6 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
       mb = NULL; /* Enqueue succeeded */
       continue;
     }
-
 
     if(event_is_action(e, ACTION_PLAYPAUSE) ||
        event_is_action(e, ACTION_PLAY) ||
@@ -603,6 +599,14 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
     }
   }
 
+
+  char tmp[1024];
+  fa_url_get_last_component(tmp, sizeof(tmp), canonical_url);
+  char *x = strrchr(tmp, '.');
+  if(x)
+    *x = 0;
+  prop_set_string(prop_create(mp->mp_prop_metadata, "title"), tmp);
+
   int seek_is_fast = fa_seek_is_fast(fh);
 
   if(seek_is_fast && mimetype == NULL) {
@@ -646,7 +650,7 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
    */
   metadata_t *md = fa_metadata_from_fctx(fctx, url);
   if(md != NULL) {
-    metadata_to_proptree(md, mp->mp_prop_metadata, 0, 0);
+    metadata_to_proptree(md, mp->mp_prop_metadata, 0);
     metadata_destroy(md);
   }
 
@@ -807,7 +811,7 @@ playlist_play(fa_handle_t *fh, media_pipe_t *mp, int flags,
       if(strcmp(f->hmf_name, "url") ||
 	 (c = htsmsg_get_map_by_field(f)) == NULL)
 	continue;
-      int flags2 = flags | BACKEND_VIDEO_NO_AUTOSTOP;
+      int flags2 = flags;
 
       s = htsmsg_get_str_multi(c, "attrib", "noaudio", NULL);
 
