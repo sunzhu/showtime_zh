@@ -199,6 +199,9 @@ msg: CPU ist zu langsam um das Video zu dekodieren
 #
 # ./glwthemes/mono/popups/auth.view
 #
+id: Domain
+msg: Domain
+
 id: Password
 msg: Passwort
 
@@ -437,7 +440,7 @@ id: Language
 msg: Sprache
 
 id: Language codes should be configured as three character ISO codes, example (eng, swe, fra)
-msg: Sprachwahl als 3-stelligen ISO-Code, z.B.: eng,swe,ger
+msg: Sprachwahl als 3-stelligen ISO-Code, z.B.: deu,eng,swe
 
 id: Preferred languages
 msg: Bevorzugte Sprachen
@@ -655,11 +658,23 @@ msg: Kann Cell-Codec nicht abfragen. Fehler 0x%x
 #
 # ./src/video/video_settings.c
 #
+id: 1080
+msg: 1080
+
+id: 576
+msg: 576
+
+id: 720
+msg: 720
+
 id: Always try to select a subtitle
 msg: Immer versuchen Untertitel auszuwählen
 
 id: Auto
 msg: Auto
+
+id: Automatically play next video in list
+msg: Nächstes Video in der Liste automatisch starten 
 
 id: Center
 msg: Zentriert
@@ -688,14 +703,23 @@ msg: Alle Untertitel im Verzeichnis anzeigen
 id: Left
 msg: Links
 
+id: Maximum resolution for deinterlacer
+msg: Maximale Auflösung für Deinterlacer
+
 id: No
 msg: Nein
+
+id: No limit
+msg: Keine Begrenzung
 
 id: Outline color
 msg: Rahmenfarbe
 
 id: Outline size
 msg: Rahmengröße
+
+id: Preferred VDPAU deinterlacer method
+msg: Bevorzugte VDPAU Deinterlacer-Methode
 
 id: Resume video playback
 msg: Wiedergabe von letzter Position
@@ -729,6 +753,12 @@ msg: Untertitelstil
 
 id: Subtitles
 msg: Untertitel
+
+id: Temporal
+msg: Temporal
+
+id: Temporal/Spatial
+msg: Temporal/Spatial
 
 id: Video acceleration and display behaviour
 msg: Videobeschleunigungs- und Wiedergabeeinstellungen
