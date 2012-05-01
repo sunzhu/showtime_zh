@@ -199,6 +199,9 @@ msg: CPUn är för långsam för att spela upp videon
 #
 # ./glwthemes/mono/popups/auth.view
 #
+id: Domain
+msg: Domän
+
 id: Password
 msg: Lösenord
 
@@ -655,11 +658,23 @@ msg: Kan ej fråga Cell codec. Fel 0x%x
 #
 # ./src/video/video_settings.c
 #
+id: 1080
+msg: 1080
+
+id: 576
+msg: 576
+
+id: 720
+msg: 720
+
 id: Always try to select a subtitle
 msg: Försök alltid välja en undertext
 
 id: Auto
 msg: Auto
+
+id: Automatically play next video in list
+msg: Spela nästa video i listan automatiskt
 
 id: Center
 msg: Centrerad
@@ -688,14 +703,23 @@ msg: Inkludera alla undertexterfiler från filmens katalog
 id: Left
 msg: Vänster
 
+id: Maximum resolution for deinterlacer
+msg: Maximal upplösning för deinterlacing
+
 id: No
 msg: Nej
+
+id: No limit
+msg: Ingen begränsning
 
 id: Outline color
 msg: Färg på konturer
 
 id: Outline size
 msg: Storlek på konturer
+
+id: Preferred VDPAU deinterlacer method
+msg: Föredragen metod för VDPAU deinterlacing
 
 id: Resume video playback
 msg: Återuppta videouppspelning
@@ -729,6 +753,12 @@ msg: Stil på undertexter
 
 id: Subtitles
 msg: Undertexter
+
+id: Temporal
+msg: Temporär
+
+id: Temporal/Spatial
+msg: Temporär/Spatiell
 
 id: Video acceleration and display behaviour
 msg: Videoacceleration och inställningar för videopresentation
