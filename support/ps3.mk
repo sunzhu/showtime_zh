@@ -3,6 +3,7 @@ VERSION := $(shell support/getver.sh)
 SFO := $(PSL1GHT)/host/bin/sfo.py
 PKG := $(PSL1GHT)/host/bin/pkg.py
 ICON0 := $(TOPDIR)/support/ps3icon.png
+FONT := $(TOPDIR)/support/ps3font.TTF
 APPID		:=	HTSS00003
 CONTENTID	:=	UP0001-$(APPID)_00-0000000000000000
 
@@ -44,6 +45,7 @@ $(BUILDDIR)/pkg/USRDIR/EBOOT.BIN: ${EBOOT}  support/ps3.mk
 
 $(BUILDDIR)/showtime.pkg: $(BUILDDIR)/pkg/USRDIR/EBOOT.BIN $(BUILDDIR)/pkg/USRDIR/showtime.self
 	cp $(ICON0) $(BUILDDIR)/pkg/ICON0.PNG
+	cp $(FONT) $(BUILDDIR)/pkg/USRDIR/FONT.TTF
 	$(SFO) --title "$(TITLE)" --appid "$(APPID)" -f $(SFOXML) $(BUILDDIR)/pkg/PARAM.SFO
 	$(PKG) --contentid $(CONTENTID) $(BUILDDIR)/pkg/ $@
 
