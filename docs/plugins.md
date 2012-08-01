@@ -290,6 +290,7 @@ page.type == 'directory'
 
 * metadata - Additional information about the item
 
+Return an item object
 
 #### appendPassiveItem(String type, [Variable data], [Object metadata])
 
@@ -316,6 +317,38 @@ page to the console.
 
 
 
+## The item object
+
+### Functions
+
+#### onEvent(String event, Function handler)
+
+Install an event handler for the specific item.
+If event is 'null' all events will be passed to the handler.
+The first argument to the handler is a string with the event name
+
+*Available from 3.99.357*
+
+#### destroy()
+
+Remove the item from the page
+
+*Available from 3.99.357*
+
+#### addOptURL(String title, String URL)
+
+Add an additional URL for the item. This URL can be reached from the
+item's context-menu.
+
+*Available from 3.99.357*
+
+#### addOptAction(String title, String event)
+
+Add an additional event for the item.
+When trigged by the user it can be intercepted using an event handler
+registered using the item's onEvent() method.
+
+*Available from 3.99.357*
 
 
 ## The plugin object
@@ -547,6 +580,17 @@ Shows a multioption field (combobox style)
   option is default.
 * Function - Function that handles the current value saving it (e.g. function(v){somevalue = v})
 
+
+#### createAction(String ID, String Title, Function Func)
+
+*Available from 3.99.47*
+
+Shows an Action Button that executes a given function when clicked.
+
+* ID - String that identifies the setting. (e.g. boolean)
+* Title - Synopsis of the setting. (e.g. Boolean test)
+* Function - Function that is executed when button is clicked (e.g. function(){ showtime.trace("Button clicked!"); })
+
    
 
 ## The service object
@@ -700,6 +744,12 @@ JSON decodes the String and return a JSON Object.
 
 Decode HTML ententies in string s and return the new string
 *Available from 3.5.174*
+
+#### notify(String s, Int i, String icon)
+
+Create a Popup thar shows the string s during i seconds.
+Optionally with the icon being displaced next to the notification
+*Available from 3.99.48*
 
 
 #### time()

@@ -31,6 +31,7 @@
 #include "playqueue.h"
 #include "misc/strtab.h"
 #include "prop/prop_nodefilter.h"
+#include "plugins.h"
 
 extern int media_buffer_hungry;
 
@@ -55,6 +56,8 @@ typedef struct scanner {
   void *s_metadb;
 
 } scanner_t;
+
+static void rescan(scanner_t *s);
 
 
 /**
@@ -102,54 +105,38 @@ set_type(prop_t *proproot, unsigned int type)
 /**
  *
  */
-static rstr_t *
-make_filename(const char *filename)
-{
-  char *s = mystrdupa(filename);
-  char *p = strrchr(s, '.');
-  if(p != NULL)
-    *p = 0;
-
-  return rstr_alloc(s);
-}
-
-
-
-/**
- *
- */
 static void
 make_prop(fa_dir_entry_t *fde)
 {
   prop_t *p = prop_create_root(NULL);
   prop_t *metadata;
-  rstr_t *fname;
 
-  if(fde->fde_type == CONTENT_DIR) {
-    fname = rstr_alloc(fde->fde_filename);
-  } else {
-    fname = make_filename(fde->fde_filename);
-  }
-
-  prop_set_string(prop_create(p, "url"), fde->fde_url);
+  prop_set_rstring(prop_create(p, "url"), fde->fde_url);
+  prop_set_rstring(prop_create(p, "filename"), fde->fde_filename);
   set_type(p, fde->fde_type);
-
-  prop_set_rstring(prop_create(p, "filename"), fname);
 
   if(fde->fde_metadata != NULL) {
 
     metadata = fde->fde_metadata;
-
+    
     if(prop_set_parent(metadata, p))
       abort();
 
     fde->fde_metadata = NULL;
   } else {
+
+    rstr_t *title;
+    if(fde->fde_type == CONTENT_DIR) {
+      title = rstr_dup(fde->fde_filename);
+    } else {
+      title = metadata_remove_postfix(rstr_get(fde->fde_filename), '.');
+    }
+    
     metadata = prop_create(p, "metadata");
-    prop_set_rstring(prop_create(metadata, "title"), fname);
+    prop_set_rstring(prop_create(metadata, "title"), title);
+    rstr_release(title);
   }
 
-  rstr_release(fname);
   assert(fde->fde_prop == NULL);
   fde->fde_prop = prop_ref_inc(p);
 }
@@ -181,6 +168,8 @@ static struct strtab postfixtab[] = {
   { "ts",              CONTENT_VIDEO },
   { "mpg",             CONTENT_VIDEO },
   { "wmv",             CONTENT_VIDEO },
+  { "mp4",             CONTENT_VIDEO },
+  { "mts",             CONTENT_VIDEO },
 
   { "sid",             CONTENT_ALBUM },
 
@@ -234,25 +223,31 @@ deep_probe(fa_dir_entry_t *fde, scanner_t *s)
     if(!fde->fde_ignore_cache && !fa_dir_entry_stat(fde)) {
       if(fde->fde_md != NULL)
 	metadata_destroy(fde->fde_md);
-      fde->fde_md = metadb_metadata_get(getdb(s), fde->fde_url,
+      fde->fde_md = metadb_metadata_get(getdb(s), rstr_get(fde->fde_url),
 					fde->fde_stat.fs_mtime);
     }
 
     if(fde->fde_md == NULL) {
 
       if(fde->fde_type == CONTENT_DIR)
-        fde->fde_md = fa_probe_dir(fde->fde_url);
+        fde->fde_md = fa_probe_dir(rstr_get(fde->fde_url));
       else
-	fde->fde_md = fa_probe_metadata(fde->fde_url, NULL, 0);
+	fde->fde_md = fa_probe_metadata(rstr_get(fde->fde_url), NULL, 0);
     }
     
     if(fde->fde_md != NULL) {
       fde->fde_type = fde->fde_md->md_contenttype;
       fde->fde_ignore_cache = 0;
-      metadata_to_proptree(fde->fde_md, meta, 1);
+
+
+      if(fde->fde_type == CONTENT_PLUGIN) {
+	plugin_props_from_file(fde->fde_prop, rstr_get(fde->fde_url));
+      } else {
+	metadata_to_proptree(fde->fde_md, meta, 1);
+      }
       
       if(fde->fde_md->md_cached == 0) {
-	metadb_metadata_write(getdb(s), fde->fde_url,
+	metadb_metadata_write(getdb(s), rstr_get(fde->fde_url),
 			      fde->fde_stat.fs_mtime,
 			      fde->fde_md, s->s_url, s->s_mtime);
       }
@@ -261,7 +256,7 @@ deep_probe(fa_dir_entry_t *fde, scanner_t *s)
 
     if(!fde->fde_bound_to_metadb) {
       fde->fde_bound_to_metadb = 1;
-      metadb_bind_url_to_prop(getdb(s), fde->fde_url, fde->fde_prop);
+      metadb_bind_url_to_prop(getdb(s), rstr_get(fde->fde_url), fde->fde_prop);
     }
   }
   set_type(fde->fde_prop, fde->fde_type);
@@ -280,7 +275,7 @@ tryplay(scanner_t *s)
     return;
 
   TAILQ_FOREACH(fde, &s->s_fd->fd_entries, fde_link) {
-    if(!strcmp(s->s_playme, fde->fde_url)) {
+    if(!strcmp(s->s_playme, rstr_get(fde->fde_url))) {
       playqueue_load_with_source(fde->fde_prop, s->s_root, 0);
       free(s->s_playme);
       s->s_playme = NULL;
@@ -297,7 +292,6 @@ static void
 analyzer(scanner_t *s, int probe)
 {
   fa_dir_entry_t *fde;
-  int images = 0;
 
   /* Empty */
   if(s->s_fd->fd_count == 0)
@@ -317,16 +311,13 @@ analyzer(scanner_t *s, int probe)
 
     if(fde->fde_probestatus == FDE_PROBE_NONE) {
       if(fde->fde_type == CONTENT_FILE)
-	fde->fde_type = type_from_filename(fde->fde_filename);
+	fde->fde_type = type_from_filename(rstr_get(fde->fde_filename));
 
       fde->fde_probestatus = FDE_PROBE_FILENAME;
     }
 
     if(fde->fde_probestatus == FDE_PROBE_FILENAME && probe)
       deep_probe(fde, s);
-
-    if(fde->fde_type == CONTENT_IMAGE)
-      images++;
   }
 }
 
@@ -360,25 +351,25 @@ scanner_checkstop(void *opaque)
 /**
  *
  */
-static void
+static int
 scanner_entry_setup(scanner_t *s, fa_dir_entry_t *fde, const char *src)
 {
   TRACE(TRACE_DEBUG, "FA", "%s: File %s added by %s",
-	s->s_url, fde->fde_url, src);
+	s->s_url, rstr_get(fde->fde_url), src);
 
   if(fde->fde_type == CONTENT_FILE)
-    fde->fde_type = type_from_filename(fde->fde_filename);
+    fde->fde_type = type_from_filename(rstr_get(fde->fde_filename));
 
   make_prop(fde);
 
-  deep_probe(fde, s);
-
   if(!prop_set_parent(fde->fde_prop, s->s_nodes))
-    return; // OK
+    return 1; // OK
   
   prop_destroy(fde->fde_prop);
   fde->fde_prop = NULL;
+  return 0;
 }
+
 
 /**
  *
@@ -387,8 +378,8 @@ static void
 scanner_entry_destroy(scanner_t *s, fa_dir_entry_t *fde, const char *src)
 {
   TRACE(TRACE_DEBUG, "FA", "%s: File %s removed by %s",
-	s->s_url, fde->fde_url, src);
-  metadb_unparent_item(getdb(s), fde->fde_url);
+	s->s_url, rstr_get(fde->fde_url), src);
+  metadb_unparent_item(getdb(s), rstr_get(fde->fde_url));
   if(fde->fde_prop != NULL)
     prop_destroy(fde->fde_prop);
   fa_dir_entry_free(s->s_fd, fde);
@@ -404,13 +395,13 @@ scanner_notification(void *opaque, fa_notify_op_t op, const char *filename,
   scanner_t *s = opaque;
   fa_dir_entry_t *fde;
 
-  if(filename[0] == '.')
+  if(filename && filename[0] == '.')
     return; /* Skip all dot-filenames */
 
   switch(op) {
   case FA_NOTIFY_DEL:
     TAILQ_FOREACH(fde, &s->s_fd->fd_entries, fde_link)
-      if(!strcmp(filename, fde->fde_filename))
+      if(!strcmp(filename, rstr_get(fde->fde_filename)))
 	break;
 
     if(fde != NULL)
@@ -421,6 +412,10 @@ scanner_notification(void *opaque, fa_notify_op_t op, const char *filename,
     scanner_entry_setup(s, fa_dir_add(s->s_fd, url, filename, type),
 			"notification");
     break;
+
+  case FA_NOTIFY_DIR_CHANGE:
+    rescan(s);
+    return;
   }
   analyzer(s, 1);
 }
@@ -447,7 +442,7 @@ rescan(scanner_t *s)
   for(a = TAILQ_FIRST(&s->s_fd->fd_entries); a != NULL; a = n) {
     n = TAILQ_NEXT(a, fde_link);
     TAILQ_FOREACH(b, &fd->fd_entries, fde_link)
-      if(!strcmp(a->fde_url, b->fde_url))
+      if(!strcmp(rstr_get(a->fde_url), rstr_get(b->fde_url)))
 	break;
 
     if(b != NULL) {
@@ -477,8 +472,7 @@ rescan(scanner_t *s)
     TAILQ_INSERT_TAIL(&s->s_fd->fd_entries, b, fde_link);
     s->s_fd->fd_count++;
 
-    scanner_entry_setup(s, b, "rescan");
-    changed = 1;
+    changed |= scanner_entry_setup(s, b, "rescan");
   }
 
   if(changed)
@@ -596,6 +590,12 @@ scanner_stop(void *opaque, prop_event_t event, ...)
 }
 
 
+static const prop_nf_sort_strmap_t typemap[] = {
+  { "directory", 0},
+  { NULL, 1}
+};
+
+
 /**
  *
  */
@@ -612,8 +612,12 @@ fa_scanner(const char *url, time_t url_mtime,
   pnf = prop_nf_create(prop_create(model, "nodes"),
 		       source,
 		       prop_create(model, "filter"),
-		       "node.filename", PROP_NF_AUTODESTROY);
+		       PROP_NF_AUTODESTROY);
   
+  prop_nf_sort(pnf, "node.type", 0, 0, typemap, 1);
+
+  prop_nf_sort(pnf, "node.metadata.title", 0, 2, NULL, 1);
+
   prop_nf_pred_str_add(pnf, "node.type",
 		       PROP_NF_CMP_EQ, "unknown", NULL, 
 		       PROP_NF_MODE_EXCLUDE);
@@ -622,11 +626,9 @@ fa_scanner(const char *url, time_t url_mtime,
 		       PROP_NF_CMP_EQ, 1, NULL, 
 		       PROP_NF_MODE_EXCLUDE);
 
-  prop_nf_release(pnf);
-
   prop_set_int(prop_create(model, "canFilter"), 1);
 
-  decorated_browse_create(model);
+  decorated_browse_create(model, pnf);
 
   s->s_url = strdup(url);
   s->s_mtime = url_mtime;

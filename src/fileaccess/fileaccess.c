@@ -31,6 +31,7 @@
 #include <string.h>
 #include <errno.h>
 #include <dirent.h>
+#include <limits.h>
 
 #include "showtime.h"
 #include "fileaccess.h"
@@ -42,6 +43,7 @@
 #include "fa_probe.h"
 #include "fa_imageloader.h"
 #include "blobcache.h"
+#include "htsmsg/htsbuf.h"
 
 struct fa_protocol_list fileaccess_all_protocols;
 
@@ -78,6 +80,13 @@ fa_resolve_proto(const char *url, fa_protocol_t **p,
 
   url += 3;
 
+  if(!strcmp("dataroot", buf)) {
+    const char *pfx = showtime_dataroot();
+    snprintf(buf, sizeof(buf), "%s%s%s", 
+	     pfx, pfx[strlen(pfx) - 1] == '/' ? "" : "/", url);
+    return fa_resolve_proto(buf, p, NULL, errbuf, errsize);
+  }
+
   if(vpaths != NULL) {
     
     while(*vpaths != NULL) {
@@ -113,13 +122,29 @@ fa_can_handle(const char *url, char *errbuf, size_t errsize)
   // XXX: Not good, should send vpaths in here instead
   if(!strncmp(url, "theme://", strlen("theme://")))
     return 1;
-  if(!strncmp(url, "skin://", strlen("skin://")))
-    return 1;
 
   if((filename = fa_resolve_proto(url, &fap, NULL, errbuf, errsize)) == NULL)
     return 0;
   free(filename);
   return 1;
+}
+
+
+/**
+ *
+ */
+rstr_t *
+fa_absolute_path(rstr_t *filename, rstr_t *at)
+{
+  char *b = strrchr(rstr_get(at), '/');
+  const char *f = rstr_get(filename);
+  char buf[PATH_MAX];
+  if(strchr(f, ':') || *f == 0 || *f == '/' || b == NULL || !memcmp(f, "./", 2))
+    return rstr_dup(filename);
+
+  snprintf(buf, sizeof(buf), "%.*s%s", (int)(b - rstr_get(at)) + 1,
+	   rstr_get(at), rstr_get(filename));
+  return rstr_alloc(buf);
 }
 
 
@@ -339,10 +364,10 @@ fa_findfile(const char *path, const char *file,
     return -2;
 
   TAILQ_FOREACH(fde, &fd->fd_entries, fde_link)
-    if(!strcasecmp(fde->fde_filename, file)) {
+    if(!strcasecmp(rstr_get(fde->fde_filename), file)) {
       snprintf(fullpath, fullpathlen, "%s%s%s", path, 
 	       path[strlen(path)-1] == '/' ? "" : "/",
-	       fde->fde_filename);
+	       rstr_get(fde->fde_filename));
       fa_dir_free(fd);
       return 0;
     }
@@ -442,8 +467,8 @@ fa_dir_entry_free(fa_dir_t *fd, fa_dir_entry_t *fde)
 
   fd->fd_count--;
   TAILQ_REMOVE(&fd->fd_entries, fde, fde_link);
-  free(fde->fde_filename);
-  free(fde->fde_url);
+  rstr_release(fde->fde_filename);
+  rstr_release(fde->fde_url);
   free(fde);
 }
 
@@ -475,8 +500,8 @@ fde_create(fa_dir_t *fd, const char *url, const char *filename, int type)
 
   fde = calloc(1, sizeof(fa_dir_entry_t));
  
-  fde->fde_url      = strdup(url);
-  fde->fde_filename = strdup(filename);
+  fde->fde_url      = rstr_alloc(url);
+  fde->fde_filename = rstr_alloc(filename);
   fde->fde_type     = type;
 
   TAILQ_INSERT_TAIL(&fd->fd_entries, fde, fde_link);
@@ -504,7 +529,7 @@ fa_dir_entry_stat(fa_dir_entry_t *fde)
   if(fde->fde_statdone)
     return 0;
 
-  if(!fa_stat(fde->fde_url, &fde->fde_stat, NULL, 0))
+  if(!fa_stat(rstr_get(fde->fde_url), &fde->fde_stat, NULL, 0))
     fde->fde_statdone = 1;
   return !fde->fde_statdone;
 }
@@ -544,7 +569,8 @@ fileaccess_init(void)
  */
 void *
 fa_load(const char *url, size_t *sizep, const char **vpaths,
-	char *errbuf, size_t errlen, int *cache_control)
+	char *errbuf, size_t errlen, int *cache_control, int flags,
+	fa_load_cb_t *cb, void *opaque)
 {
   fa_protocol_t *fap;
   fa_handle_t *fh;
@@ -597,7 +623,7 @@ fa_load(const char *url, size_t *sizep, const char **vpaths,
       blobcache_get_meta(url, "fa_load", &etag, &mtime);
     
     data2 = fap->fap_load(fap, filename, &size2, errbuf, errlen,
-			  &etag, &mtime, &max_age);
+			  &etag, &mtime, &max_age, flags, cb, opaque);
     
     free(filename);
     if(data2 == NOT_MODIFIED) {
@@ -822,4 +848,41 @@ fa_load_and_close(fa_handle_t *fh, size_t *sizep)
     *sizep = size;
   mem[size] = 0; 
   return mem;
+}
+
+
+/**
+ *
+ */
+void *
+fa_load_query(const char *url0, size_t *sizep,
+	      char *errbuf, size_t errlen, int *cache_control,
+	      const char **arguments, int flags)
+{
+  htsbuf_queue_t q;
+  void *r;
+  htsbuf_queue_init(&q, 0);
+
+  htsbuf_append(&q, url0, strlen(url0));
+  if(arguments != NULL) {
+    const char **args = arguments;
+    char prefix = '?';
+    
+    while(args[0] != NULL) {
+      htsbuf_append(&q, &prefix, 1);
+      htsbuf_append_and_escape_url(&q, args[0]);
+      htsbuf_append(&q, "=", 1);
+      htsbuf_append_and_escape_url(&q, args[1]);
+      args += 2;
+      prefix = '&';
+    }
+  }
+  
+  char *url = htsbuf_to_string(&q);
+
+  r = fa_load(url, sizep, NULL, errbuf, errlen, cache_control, flags,
+	      NULL, NULL);
+  free(url);
+  htsbuf_queue_flush(&q);
+  return r;
 }

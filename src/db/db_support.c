@@ -16,6 +16,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -78,6 +79,8 @@ db_step(sqlite3_stmt *pStmt)
     if( rc!=SQLITE_OK ) break;
     sqlite3_reset(pStmt);
   }
+  if(rc == SQLITE_LOCKED)
+    TRACE(TRACE_DEBUG, "DB", "Deadlock detected");
   return rc;
 }
 
@@ -183,6 +186,15 @@ db_rollback0(sqlite3 *db, const char *src)
   return  db == NULL || db_one_statement(db, "ROLLBACK;", src);
 }
 
+int
+db_rollback_deadlock0(sqlite3 *db, const char *src)
+{
+  int r = db == NULL || db_one_statement(db, "ROLLBACK;", src);
+  TRACE(TRACE_DEBUG, "DB", "Rollback due to deadlock, and retrying");
+  usleep(100000);
+  return r;
+}
+
 
 
 /**
@@ -214,9 +226,9 @@ db_upgrade_schema(sqlite3 *db, const char *schemadir, const char *dbname)
   }
 
   TAILQ_FOREACH(fde, &fd->fd_entries, fde_link) {
-    if(fde->fde_type != CONTENT_FILE || strchr(fde->fde_filename, '~'))
+    if(fde->fde_type != CONTENT_FILE || strchr(rstr_get(fde->fde_filename), '~'))
       continue;
-    tgtver = MAX(tgtver, atoi(fde->fde_filename));
+    tgtver = MAX(tgtver, atoi(rstr_get(fde->fde_filename)));
   }
 
   fa_dir_free(fd);
@@ -238,7 +250,8 @@ db_upgrade_schema(sqlite3 *db, const char *schemadir, const char *dbname)
     snprintf(path, sizeof(path), "%s/%03d.sql", schemadir, ver);
 
     size_t size;
-    char *sql = fa_load(path, &size, NULL, buf, sizeof(buf), NULL);
+    char *sql = fa_load(path, &size, NULL, buf, sizeof(buf), NULL, 0,
+			NULL, NULL);
     if(sql == NULL) {
       TRACE(TRACE_ERROR, "DB",
 	    "%s: Unable to upgrade db schema to version %d using %s -- %s",
@@ -415,4 +428,14 @@ db_pool_close(db_pool_t *dp)
     if(dp->dp_pool[i] != NULL)
       sqlite3_close(dp->dp_pool[i]);
   hts_mutex_unlock(&dp->dp_mutex);
+}
+
+
+/**
+ *
+ */
+rstr_t *
+db_rstr(sqlite3_stmt *stmt, int col)
+{
+  return rstr_alloc((const char *)sqlite3_column_text(stmt, col));
 }

@@ -37,6 +37,7 @@
 #include "i18n.h"
 #include "video/ext_subtitles.h"
 #include "video/video_settings.h"
+#include "video/video_overlay.h"
 #include "settings.h"
 
 // -- Video accelerators ---------
@@ -450,6 +451,22 @@ mp_create(const char *name, int flags, const char *type)
 }
 
 
+/**
+ *
+ */
+void
+mp_reinit_streams(media_pipe_t *mp)
+{
+  prop_destroy_childs(mp->mp_prop_audio_tracks);
+  prop_destroy_childs(mp->mp_prop_subtitle_tracks);
+
+  mp_add_track_off(mp->mp_prop_audio_tracks, "audio:off");
+  prop_set_string(mp->mp_prop_audio_track_current, "audio:off");
+
+  mp_add_track_off(mp->mp_prop_subtitle_tracks, "sub:off");
+  prop_set_string(mp->mp_prop_subtitle_track_current, "sub:off");
+}
+
 
 /**
  * Must be called with mp locked
@@ -803,6 +820,18 @@ mb_enqueue_always(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb)
 /**
  *
  */
+void
+mb_enqueue_always_head(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb)
+{
+  hts_mutex_lock(&mp->mp_mutex);
+  mb_enq_head(mp, mq, mb);
+  hts_mutex_unlock(&mp->mp_mutex);
+}
+
+
+/**
+ *
+ */
 int
 mp_seek_in_queues(media_pipe_t *mp, int64_t pos)
 {
@@ -1146,6 +1175,10 @@ media_codec_create(int codec_id, int parser,
 
   } else
 #endif
+  if(!video_overlay_codec_create(mc, codec_id, ctx, mp)) {
+
+  } else
+
   if(media_codec_create_lavc(mc, codec_id, ctx, mcp)) {
     free(mc);
     return NULL;
@@ -2095,7 +2128,7 @@ mp_load_ext_sub(media_pipe_t *mp, const char *url)
   mb->mb_data_type = MB_EXT_SUBTITLE;
   
   if(url != NULL)
-    mb->mb_data = subtitles_load(url);
+    mb->mb_data = subtitles_load(mp, url);
   
   mb->mb_dtor = ext_sub_dtor;
   mb_enq_head(mp, &mp->mp_video, mb);

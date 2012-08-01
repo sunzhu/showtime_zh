@@ -27,9 +27,26 @@
 #include "keyring.h"
 #include "prop/prop.h"
 #include "notifications.h"
+#include "settings.h"
 
 static htsmsg_t *persistent_keyring, *temporary_keyring;
 static hts_mutex_t keyring_mutex;
+
+static void
+keyring_clear(void *opaque, prop_event_t event, ...)
+{
+  hts_mutex_lock(&keyring_mutex);
+  htsmsg_destroy(persistent_keyring);
+  htsmsg_destroy(temporary_keyring);
+
+  persistent_keyring = htsmsg_create_map();
+  temporary_keyring = htsmsg_create_map();
+
+  htsmsg_store_save(persistent_keyring, "keyring");
+  hts_mutex_unlock(&keyring_mutex);
+
+  notify_add(NULL, NOTIFY_WARNING, NULL, 3, _("Rembered passwords erased"));
+}
 
 
 /**
@@ -42,6 +59,9 @@ keyring_init(void)
   if((persistent_keyring = htsmsg_store_load("keyring")) == NULL)
     persistent_keyring = htsmsg_create_map();
   temporary_keyring = htsmsg_create_map();
+
+  settings_create_action(settings_general, _p("Forget remembered passwords"),
+			 keyring_clear, NULL, NULL);
 }
 
 
@@ -149,20 +169,20 @@ keyring_lookup(const char *id, char **username, char **password,
       m = htsmsg_create_map();
 
       if(username != NULL) {
-	r = prop_get_string(user);
+	r = prop_get_string(user, NULL);
 	htsmsg_add_str(m, "username", r ? rstr_get(r) : "");
 	*username = strdup(r ? rstr_get(r) : "");
 	rstr_release(r);
       }
 
       if(domain != NULL) {
-	r = prop_get_string(dom);
+	r = prop_get_string(dom, NULL);
 	htsmsg_add_str(m, "domain", r ? rstr_get(r) : "");
 	*domain = strdup(r ? rstr_get(r) : "");
 	rstr_release(r);
       }
 
-      r = prop_get_string(pass);
+      r = prop_get_string(pass, NULL);
       htsmsg_add_str(m, "password", r ? rstr_get(r) : "");
       *password = strdup(r ? rstr_get(r) : "");
       rstr_release(r);

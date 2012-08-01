@@ -75,7 +75,7 @@ typedef struct glw_program {
   GLint  gp_uniform_colormtx;
   GLint  gp_uniform_blend;
   GLint  gp_uniform_color_offset;
-  GLint  gp_uniform_blur_amount;
+  GLint  gp_uniform_blur;
 
   GLint  gp_uniform_t[6];
 
@@ -113,12 +113,26 @@ typedef struct glw_backend_root {
 #endif
 
   struct glw_program *gbr_renderer_tex;
+  struct glw_program *gbr_renderer_tex_stencil;
   struct glw_program *gbr_renderer_tex_blur;
+  struct glw_program *gbr_renderer_tex_stencil_blur;
   struct glw_program *gbr_renderer_flat;
+  struct glw_program *gbr_renderer_flat_stencil;
 
-  int gbr_culling;
+  int gbr_blendmode;
+  int gbr_frontface;
+  int gbr_delayed_rendering;
 
-  int be_blendmode;
+  /**
+   * Delayed rendering (For rendering without holding glw_mutex)
+   */
+  int gbr_num_render_jobs;
+  int gbr_render_jobs_capacity;
+  struct render_job *gbr_render_jobs;
+
+  float *gbr_vertex_buffer;
+  int gbr_vertex_buffer_capacity;
+  int gbr_vertex_offset;
 
 } glw_backend_root_t;
 
@@ -135,7 +149,8 @@ typedef struct glw_backend_texture {
 #define GLW_TEXTURE_TYPE_NO_ALPHA 1
 } glw_backend_texture_t;
 
-
+#define glw_tex_width(gbt) ((gbt)->width)
+#define glw_tex_height(gbt) ((gbt)->height)
 
 #define glw_can_tnpo2(gr) (gr->gr_be.gbr_texmode != GLW_OPENGL_TEXTURE_SIMPLE)
 
@@ -178,9 +193,10 @@ GLuint glw_compile_shader(const char *url, int type);
 glw_program_t *glw_make_program(glw_backend_root_t *gbr,
 				const char *title, GLuint vs, GLuint fs);
 
-void glw_load_program(glw_backend_root_t *gbr, glw_program_t *gp);
+int glw_load_program(glw_backend_root_t *gbr, glw_program_t *gp);
 
-void glw_program_set_modelview(glw_backend_root_t *gbr, struct glw_rctx *rc);
+void glw_program_set_modelview(glw_backend_root_t *gbr,
+			       const struct glw_rctx *rc);
 
 void glw_program_set_uniform_color(glw_backend_root_t *gbr,
 				   float r, float g, float b, float a);

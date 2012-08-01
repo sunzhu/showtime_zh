@@ -60,7 +60,8 @@ load_vp(const char *filename)
   snprintf(url, sizeof(url), "%s/src/ui/glw/rsx/%s", 
 	   showtime_dataroot(), filename);
 
-  if((vp = fa_load(url, NULL, NULL, errmsg, sizeof(errmsg), NULL)) == NULL) {
+  if((vp = fa_load(url, NULL, NULL, errmsg, sizeof(errmsg), NULL,
+		   0, NULL, NULL)) == NULL) {
     TRACE(TRACE_ERROR, "glw", "Unable to load shader %s -- %s\n",
 	  url, log);
     return NULL;
@@ -107,7 +108,8 @@ load_vp(const char *filename)
   rvp->rvp_u_modelview = realityVertexProgramGetConstant(vp, "u_modelview");
   rvp->rvp_u_color     = vp_get_vector_const(vp, "u_color");
   rvp->rvp_u_color_offset = vp_get_vector_const(vp, "u_color_offset");
-  rvp->rvp_u_blur_amount = vp_get_vector_const(vp, "u_blur_amount");
+  rvp->rvp_u_blur = vp_get_vector_const(vp, "u_blur");
+
   TRACE(TRACE_DEBUG, "glw", "%d %d", rvp->rvp_u_modelview, rvp->rvp_u_color);
 
   rvp->rvp_a_position = realityVertexProgramGetAttribute(vp, "a_position");
@@ -134,7 +136,8 @@ load_fp(glw_root_t *gr, const char *filename)
   snprintf(url, sizeof(url), "%s/src/ui/glw/rsx/%s", 
 	   showtime_dataroot(), filename);
 
-  if((fp = fa_load(url, NULL, NULL, errmsg, sizeof(errmsg), NULL)) == NULL) {
+  if((fp = fa_load(url, NULL, NULL, errmsg, sizeof(errmsg), NULL,
+		   0, NULL, NULL)) == NULL) {
     TRACE(TRACE_ERROR, "glw", "Unable to load shader %s -- %s\n",
 	  url, log);
     return NULL;
@@ -213,7 +216,7 @@ load_fp(glw_root_t *gr, const char *filename)
  *
  */
 void
-glw_wirebox(glw_root_t *gr, glw_rctx_t *rc)
+glw_wirebox(glw_root_t *gr, const glw_rctx_t *rc)
 {
 
 }
@@ -223,7 +226,7 @@ glw_wirebox(glw_root_t *gr, glw_rctx_t *rc)
  *
  */
 void
-glw_wirecube(glw_root_t *gr, glw_rctx_t *rc)
+glw_wirecube(glw_root_t *gr, const glw_rctx_t *rc)
 {
 
 }
@@ -261,8 +264,9 @@ rsx_set_fp(glw_root_t *root, rsx_fp_t *rfp, int force)
  */
 static void
 rsx_render(struct glw_root *gr,
-	   Mtx m,
-	   struct glw_backend_texture *tex,
+	   const Mtx m,
+	   const struct glw_backend_texture *t0,
+	   const struct glw_backend_texture *t1,
 	   const struct glw_rgb *rgb_mul,
 	   const struct glw_rgb *rgb_off,
 	   float alpha, float blur,
@@ -277,20 +281,40 @@ rsx_render(struct glw_root *gr,
   rsx_fp_t *rfp;
   float rgba[4];
 
-  if(tex == NULL) {
+  if(t0 == NULL) {
 
-    rfp = gr->gr_be.be_fp_flat;
+    if(t1 != NULL) {
+      rfp = gr->gr_be.be_fp_flat_stencil;
+
+      if(t1->tex.offset == 0 || t1->size == 0)
+	return;
+
+      realitySetTexture(ctx, 0, &t1->tex);
+    } else {
+      rfp = gr->gr_be.be_fp_flat;
+
+    }
 
   } else {
 
-    if(tex->tex.offset == 0 || tex->size == 0)
+    if(t0->tex.offset == 0 || t0->size == 0)
       return;
 
-    realitySetTexture(ctx, 0, &tex->tex);
-    if(blur > 0.05) {
-      rfp = gr->gr_be.be_fp_tex_blur;
+    const int doblur = blur > 0.05 || flags & GLW_RENDER_BLUR_ATTRIBUTE;
+
+    realitySetTexture(ctx, 0, &t0->tex);
+
+    if(t1 != NULL) {
+      rfp = doblur ? gr->gr_be.be_fp_tex_stencil_blur :
+	gr->gr_be.be_fp_tex_stencil;
+
+      if(t1->tex.offset == 0 || t1->size == 0)
+	 return;
+
+     realitySetTexture(ctx, 1, &t1->tex);
+
     } else {
-      rfp = gr->gr_be.be_fp_tex;
+      rfp = doblur ? gr->gr_be.be_fp_tex_blur : gr->gr_be.be_fp_tex;
     }
   }
 
@@ -333,14 +357,13 @@ rsx_render(struct glw_root *gr,
     realitySetVertexProgramConstant4f(ctx, rvp->rvp_u_color_offset, rgba);
   }
 
-  if(blur > 0.05 && tex != NULL) {
+  if(rfp == gr->gr_be.be_fp_tex_blur) {
     float v[4];
-    v[0] = 1.5 * blur / tex->tex.width;
-    v[1] = 1.5 * blur / tex->tex.height;
-    v[2] = 0;
+    v[0] = blur;
+    v[1] = 1.5 / t0->tex.width;
+    v[2] = 1.5 / t0->tex.height;
     v[3] = 0;
-
-    realitySetVertexProgramConstant4f(ctx,  rvp->rvp_u_blur_amount, v);
+    realitySetVertexProgramConstant4f(ctx,  rvp->rvp_u_blur, v);
   }
 
   rsx_set_fp(gr, rfp, 0);
@@ -353,16 +376,16 @@ rsx_render(struct glw_root *gr,
   if(indices != NULL) {
     for(i = 0; i < num_triangles * 3; i++) {
       const float *v = &vertices[indices[i] * VERTEX_SIZE];
-      realityAttr2f(ctx,  rvp->rvp_a_texcoord,  v[3], v[4]);
-      realityAttr4f(ctx, rvp->rvp_a_color, v[5], v[6], v[7], v[8]);
-      realityVertex4f(ctx, v[0], v[1], v[2], 1);
+      realityAttr4f(ctx,  rvp->rvp_a_texcoord,  v[8], v[9], v[10], v[11]);
+      realityAttr4f(ctx, rvp->rvp_a_color, v[4], v[5], v[6], v[7]);
+      realityVertex4f(ctx, v[0], v[1], v[2], v[3]);
     }
   } else {
     for(i = 0; i < num_vertices; i++) {
       const float *v = &vertices[i * VERTEX_SIZE];
-      realityAttr2f(ctx,  rvp->rvp_a_texcoord,  v[3], v[4]);
-      realityAttr4f(ctx, rvp->rvp_a_color, v[5], v[6], v[7], v[8]);
-      realityVertex4f(ctx, v[0], v[1], v[2], 1);
+      realityAttr4f(ctx,  rvp->rvp_a_texcoord,  v[8], v[9], v[10], v[11]);
+      realityAttr4f(ctx, rvp->rvp_a_color, v[4], v[5], v[6], v[7]);
+      realityVertex4f(ctx, v[0], v[1], v[2], v[3]);
     }
   }
   realityVertexEnd(ctx);
@@ -385,6 +408,9 @@ glw_rsx_init_context(glw_root_t *gr)
   be->be_fp_tex        = load_fp(gr, "f_tex.fp");
   be->be_fp_flat       = load_fp(gr, "f_flat.fp");
   be->be_fp_tex_blur   = load_fp(gr, "f_tex_blur.fp");
+  be->be_fp_tex_stencil  = load_fp(gr, "f_tex_stencil.fp");
+  be->be_fp_flat_stencil = load_fp(gr, "f_flat_stencil.fp");
+  be->be_fp_tex_stencil_blur = load_fp(gr, "f_tex_stencil_blur.fp");
   
   be->be_vp_yuv2rgb    = load_vp("yuv2rgb_v.vp");
   be->be_fp_yuv2rgb_1f = load_fp(gr, "yuv2rgb_1f_norm.fp");

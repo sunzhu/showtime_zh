@@ -40,7 +40,7 @@ typedef struct glw_slideshow {
  *
  */
 static void
-glw_slideshow_render(glw_t *w, glw_rctx_t *rc)
+glw_slideshow_render(glw_t *w, const glw_rctx_t *rc)
 {
   glw_t *c, *p, *n;
   glw_rctx_t rc0;
@@ -100,10 +100,12 @@ glw_slideshow_layout(glw_slideshow_t *s, glw_rctx_t *rc)
     return;
 
   if(s->timer >= s->displaytime) {
-    c = s->w.glw_focused = glw_next_widget(c);
+    c = glw_next_widget(c);
     if(c == NULL)
-      c = s->w.glw_focused = glw_first_widget(&s->w);
+      c = glw_first_widget(&s->w);
     s->timer = 0;
+    if(c != NULL)
+      glw_focus_set(s->w.glw_root, c, GLW_FOCUS_SET_INTERACTIVE);
   }
   
   if(!s->hold)
@@ -151,7 +153,7 @@ glw_slideshow_event(glw_slideshow_t *s, event_t *e)
 {
   glw_t *c;
 
-  if(event_is_action(e, ACTION_NEXT_TRACK)) {
+  if(event_is_action(e, ACTION_SKIP_FORWARD)) {
 
     c = s->w.glw_focused ? glw_next_widget(s->w.glw_focused) : NULL;
     if(c == NULL)
@@ -159,7 +161,7 @@ glw_slideshow_event(glw_slideshow_t *s, event_t *e)
     s->w.glw_focused = c;
     s->timer = 0;
 
-  } else if(event_is_action(e, ACTION_PREV_TRACK)) {
+  } else if(event_is_action(e, ACTION_SKIP_BACKWARD)) {
 
     c = s->w.glw_focused ? glw_prev_widget(s->w.glw_focused) : NULL;
     if(c == NULL)
@@ -196,6 +198,7 @@ glw_slideshow_callback(glw_t *w, void *opaque, glw_signal_t signal,
 
   switch(signal) {
    case GLW_SIGNAL_LAYOUT:
+     w->glw_root->gr_screensaver_counter = 0;
     glw_slideshow_layout(s, extra);
     return 0;
 

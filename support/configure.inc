@@ -14,10 +14,10 @@
 TOPDIR=`pwd`
 BUILD=${CONFIGURE_POSTFIX}
 TMPDIR=${TOPDIR}/tmp
-GLW_DEFAULT_THEME="mono"
+GLW_DEFAULT_THEME="default"
 DEFAULT_LOGTARGET=""
 JARGS=""
-LIBSPOTIFY_VERSION="11.1.60"
+LIBSPOTIFY_VERSION="12.1.51"
 
 CONFIG_LIST="
  libasound
@@ -52,7 +52,6 @@ CONFIG_LIST="
  appleremote
  bonjour
  nvctrl
- libopenspc
  libgme
  libxss
  libxv
@@ -73,11 +72,11 @@ CONFIG_LIST="
  psl1ght
  timegm
  inotify
+ fsevents
  realpath
  trex
  emu_thread_specifics
  ps3_vdec
- font_liberation
  libfontconfig
  binreplace
  readahead_cache
@@ -100,6 +99,11 @@ die() {
 
 die_invalid_opt() {
     echo "Invalid option: $1"
+    die
+}
+
+die_cause() {
+    echo "$1"
     die
 }
 
@@ -165,10 +169,13 @@ cp_if_changed(){
 download_file() {
     local __resultvar=$2
     local URL_HASH=`echo "$1" | shasum  | awk '{print $1}'`
-    mkdir -p ${TOPDIR}/downloadcache
-    local DLPATH=${TOPDIR}/downloadcache/${URL_HASH}
+    mkdir -p ${TOPDIR}/.downloadcache
+    local DLPATH=${TOPDIR}/.downloadcache/${URL_HASH}
     if [ ! -f "${DLPATH}" ]; then
-	curl -L -o "${DLPATH}" "$1"
+	echo "Downloading $1"
+	curl -f -L -o "${DLPATH}" "$1" || die_cause "Unable to download file" 
+    else
+	echo "Found in cache: $1"
     fi
     eval $__resultvar="$DLPATH"
 }
@@ -188,6 +195,8 @@ common_help(){
   echo "  --release                Stage for release"
   echo "  --cleanbuild             Erase builddir before configuring"
   echo "  --ccache                 Enable use of ccache"
+  echo "  --extra-cflags           Extra cflags"
+  echo "  --extra-ldflags          Extra ldflags"
   echo ""
   echo "Platform specific options:"
 }
@@ -202,6 +211,10 @@ common_opt(){
   ;;
 
   --build=*) BUILD="$2"
+  ;;
+  --extra-cflags=*) EXTRA_CFLAGS="$2"
+  ;;
+  --extra-ldflags=*) EXTRA_LDFLAGS="$2"
   ;;
 
   --enable-?*|--disable-?*)
@@ -258,6 +271,8 @@ CONFIGURE_ARGS=$@
 TOPDIR=$TOPDIR
 PLATFORM=$PLATFORM
 CONFIGURE_POSTFIX=$CONFIGURE_POSTFIX
+CFLAGS_cfg += ${EXTRA_CFLAGS}
+LDFLAGS_cfg += ${EXTRA_LDFLAGS}
 EOF
    
     # Create config.h
@@ -302,12 +317,50 @@ libav_setup() {
 
     LIBAV_COMMON_FLAGS="--disable-encoders --disable-bsfs --disable-filters --disable-muxers --disable-devices --disable-protocols --disable-network --disable-shared --enable-static --disable-bzlib --disable-decoder=twinvq --disable-decoder=snow --disable-decoder=cavs --enable-encoder=png --disable-ffmpeg --disable-demuxer=applehttp --disable-avconv --disable-avprobe"
 
-    (cd ${LIBAV_BUILD_DIR} && ${TOPDIR}/ext/libav/configure ${LIBAV_ARCH_FLAGS} ${LIBAV_COMMON_FLAGS} --prefix=${LIBAV_INSTALL_DIR} --extra-cflags="${LIBAV_CFLAGS}" --extra-ldflags="${LIBAV_LDFLAGS}" --cc="${CC}") || die
+    (cd ${LIBAV_BUILD_DIR} && ${TOPDIR}/ext/libav/configure ${LIBAV_ARCH_FLAGS} ${LIBAV_COMMON_FLAGS} --prefix=${LIBAV_INSTALL_DIR} --extra-cflags="${LIBAV_CFLAGS} ${EXTRA_CFLAGS}" --extra-ldflags="${LIBAV_LDFLAGS} ${EXTRA_LDFLAGS}" --cc="${CC}") || die
 
     (cd ${LIBAV_BUILD_DIR} && make ${JARGS}) || die
     (cd ${LIBAV_BUILD_DIR} && make ${JARGS} install) || die
     LIBAV_PATH=${LIBAV_INSTALL_DIR}
 }
+
+
+
+#
+#
+#
+freetype_setup()
+{
+    FREETYPE_VER="2.4.9"
+
+    download_file http://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VER}.tar.gz freetypetarball
+
+    FREETYPE_SRC_DIR=${BUILDDIR}/freetype-${FREETYPE_VER}
+
+    FREETYPE_BUILD_DIR=${BUILDDIR}/freetype/build
+    FREETYPE_INSTALL_DIR=${BUILDDIR}/freetype/install
+
+    tar -x -C "${BUILDDIR}" -f "${freetypetarball}"
+
+    mkdir -p "${FREETYPE_BUILD_DIR}"
+    mkdir -p "${FREETYPE_INSTALL_DIR}"
+
+    (cd ${FREETYPE_BUILD_DIR} && ${FREETYPE_SRC_DIR}/configure \
+	--prefix=${FREETYPE_INSTALL_DIR} \
+	--enable-static=yes \
+	--enable-shared=no)
+
+    (cd ${FREETYPE_BUILD_DIR} && make ${JARGS}) || die
+    (cd ${FREETYPE_BUILD_DIR} && make ${JARGS} install) || die
+
+    echo >>${CONFIG_MAK} "CFLAGS_cfg += -I${FREETYPE_INSTALL_DIR}/include -I${FREETYPE_INSTALL_DIR}/include/freetype2"
+    echo >>${CONFIG_MAK} "LDFLAGS_cfg += -L${FREETYPE_INSTALL_DIR}/lib -lfreetype -lbz2"
+}
+
+
+
+
+
 
 #
 # Do final common stuff
@@ -337,9 +390,10 @@ finalize() {
     fi
 
     # Fonts
-    if enabled font_liberation; then
-	echo >>${CONFIG_MAK} "BUNDLES+=resources/fonts/liberation"
-    fi
+    echo >>${CONFIG_MAK} "BUNDLES+=resources/fonts"
+    
+    # SVG icons
+    echo >>${CONFIG_MAK} "BUNDLES+=resources/svg"
 
     # Languages
     echo >>${CONFIG_MAK} "BUNDLES+=lang"

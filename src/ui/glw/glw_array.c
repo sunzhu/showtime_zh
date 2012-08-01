@@ -289,7 +289,7 @@ glw_array_layout(glw_array_t *a, glw_rctx_t *rc)
  *
  */
 static void
-glw_array_render(glw_t *w, glw_rctx_t *rc)
+glw_array_render(glw_t *w, const glw_rctx_t *rc)
 {
   glw_array_t *a = (glw_array_t *)w;
   glw_t *c;
@@ -350,9 +350,9 @@ glw_array_render(glw_t *w, glw_rctx_t *rc)
     glw_render0(c, &rc3);
 
     if(t != -1)
-      glw_clip_disable(w->glw_root, &rc0, t);
+      glw_clip_disable(w->glw_root, t);
     if(b != -1)
-      glw_clip_disable(w->glw_root, &rc0, b);
+      glw_clip_disable(w->glw_root, b);
 
   }
 }

@@ -17,32 +17,30 @@
  */
 #pragma once
 
+#include <assert.h>
 #include "arch/atomic.h"
 #include "misc/redblack.h"
+#include "video_overlay.h"
 
 struct video_decoder;
 
-RB_HEAD(ext_subtitle_entry_tree, ext_subtitle_entry);
-
-typedef struct ext_subtitle_entry {
-  char *ese_text;
-  int64_t ese_start;
-  int64_t ese_stop;
-  RB_ENTRY(ext_subtitle_entry) ese_link;
-} ext_subtitle_entry_t;
-
-
 typedef struct ext_subtitles {
-  struct ext_subtitle_entry_tree es_entries;
-  ext_subtitle_entry_t *es_cur;
-  void (*es_decode)(struct video_decoder *vd, struct ext_subtitles *es,
-		    ext_subtitle_entry_t *ese);
+  struct video_overlay_queue es_entries;
+  video_overlay_t *es_cur;
+
+  void (*es_dtor)(struct ext_subtitles *es);
+  void (*es_picker)(struct ext_subtitles *es, int64_t pts,
+		    struct video_decoder *vd);
+
 } ext_subtitles_t;
 
 void subtitles_destroy(ext_subtitles_t *sub);
 
 ext_subtitles_t *subtitles_test(const char *fname);
 
-ext_subtitle_entry_t *subtitles_pick(ext_subtitles_t *sub, int64_t pts);
+ext_subtitles_t *subtitles_load(struct media_pipe *mp, const char *url);
 
-ext_subtitles_t *subtitles_load(const char *url);
+ext_subtitles_t *load_ssa(const char *url, char *buf, size_t len);
+
+void subtitles_pick(ext_subtitles_t *es, int64_t pts,
+		    struct video_decoder *vd);

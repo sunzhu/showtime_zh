@@ -60,7 +60,8 @@ be_sid2player_play(const char *url0, media_pipe_t *mp,
   *p++= 0;
   subsong = atoi(p);
 
-  if((data = fa_load(url, &size, NULL, errbuf, errlen, NULL)) == NULL)
+  if((data = fa_load(url, &size, NULL, errbuf, errlen, NULL, 0,
+		     NULL, NULL)) == NULL)
     return NULL;
 
   player = sidcxx_load(data, size, subsong, errbuf, errlen);
@@ -146,8 +147,8 @@ be_sid2player_play(const char *url0, media_pipe_t *mp,
       mp_send_cmd_head(mp, mq, MB_CTRL_PAUSE);
       mp_set_playstatus_by_hold(mp, hold, e->e_payload);
 
-    } else if(event_is_action(e, ACTION_PREV_TRACK) ||
-	      event_is_action(e, ACTION_NEXT_TRACK) ||
+    } else if(event_is_action(e, ACTION_SKIP_BACKWARD) ||
+	      event_is_action(e, ACTION_SKIP_FORWARD) ||
 	      event_is_action(e, ACTION_STOP)) {
       mp_flush(mp, 0);
       break;

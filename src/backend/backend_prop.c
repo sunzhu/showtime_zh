@@ -26,6 +26,7 @@
 
 
 LIST_HEAD(proppage_list, proppage);
+LIST_HEAD(openpage_list, openpage);
 
 static struct proppage_list proppages;
 static hts_mutex_t pp_mutex;
@@ -41,9 +42,23 @@ typedef struct proppage {
   prop_sub_t *pp_model_sub;
   prop_t *pp_model;
 
-  char *pp_url;
+  rstr_t *pp_url;
+
+  struct openpage_list pp_pages;
 
 } proppage_t;
+
+
+
+/**
+ *
+ */
+typedef struct openpage {
+  LIST_ENTRY(openpage) op_link;
+  prop_sub_t *op_page_sub;
+  prop_t *op_root;
+  proppage_t *op_pp;
+} openpage_t;
 
 
 
@@ -54,14 +69,21 @@ static void
 pp_cb(void *opaque, prop_event_t event, ...)
 {
   proppage_t *pp = opaque;
+  openpage_t *op;
 
   if(event != PROP_DESTROYED) 
     return;
 
+  while((op = LIST_FIRST(&pp->pp_pages)) != NULL) {
+    LIST_REMOVE(op, op_link);
+    op->op_pp = NULL;
+    prop_set_int(prop_create(op->op_root, "close"), 1);
+  }
+
   LIST_REMOVE(pp, pp_link);
   prop_ref_dec(pp->pp_model);
   prop_unsubscribe(pp->pp_model_sub);
-  free(pp->pp_url);
+  rstr_release(pp->pp_url);
   free(pp);
 }
 
@@ -69,19 +91,24 @@ pp_cb(void *opaque, prop_event_t event, ...)
 /**
  *
  */
-void
-backend_prop_make(prop_t *model, char *url, size_t urllen)
+rstr_t *
+backend_prop_make(prop_t *model, const char *suggest)
 {
   proppage_t *pp;
-
+  rstr_t *r;
   hts_mutex_lock(&pp_mutex);
 
-  pp = malloc(sizeof(proppage_t));
+  pp = calloc(1, sizeof(proppage_t));
 
-  pp_tally++;
-
-  snprintf(url, urllen, "prop:%d", pp_tally);
-  pp->pp_url = strdup(url);
+  if(suggest == NULL) {
+    char url[50];
+    pp_tally++;
+    snprintf(url, sizeof(url), "prop:%d", pp_tally);
+    r = rstr_alloc(url);
+  } else {
+    r = rstr_alloc(suggest);
+  }
+  pp->pp_url = rstr_dup(r);
 
   pp->pp_model = prop_ref_inc(model);
 
@@ -94,9 +121,27 @@ backend_prop_make(prop_t *model, char *url, size_t urllen)
 
   LIST_INSERT_HEAD(&proppages, pp, pp_link);
   hts_mutex_unlock(&pp_mutex);
+  return r;
 }
 
 
+/**
+ *
+ */
+static void
+op_cb(void *opaque, prop_event_t event, ...)
+{
+  openpage_t *op = opaque;
+
+  if(event != PROP_DESTROYED) 
+    return;
+
+  if(op->op_pp != NULL)
+    LIST_REMOVE(op, op_link);
+  prop_unsubscribe(op->op_page_sub);
+  prop_ref_dec(op->op_root);
+  free(op);
+}
 
 
 /**
@@ -106,17 +151,30 @@ static int
 be_prop_open(prop_t *page, const char *url)
 {
   proppage_t *pp;
+  openpage_t *op;
 
   hts_mutex_lock(&pp_mutex);
 
   LIST_FOREACH(pp, &proppages, pp_link)
-    if(!strcmp(pp->pp_url, url))
+    if(!strcmp(rstr_get(pp->pp_url), url))
       break;
 
   if(pp == NULL) {
     hts_mutex_unlock(&pp_mutex);
     return 1;
   }
+
+  op = calloc(1, sizeof(openpage_t));
+  LIST_INSERT_HEAD(&pp->pp_pages, op, op_link);
+  op->op_pp = pp;
+
+  op->op_root = prop_ref_inc(page);
+  op->op_page_sub = 
+    prop_subscribe(PROP_SUB_TRACK_DESTROY,
+		   PROP_TAG_CALLBACK, op_cb, op,
+		   PROP_TAG_MUTEX, &pp_mutex,
+		   PROP_TAG_ROOT, page,
+		   NULL);
 
   prop_link(pp->pp_model, prop_create(page, "model"));
   hts_mutex_unlock(&pp_mutex);

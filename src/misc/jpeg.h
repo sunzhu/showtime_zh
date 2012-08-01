@@ -27,7 +27,8 @@ typedef struct jpeginfo {
   int ji_orientation;  // See orientation in pixmap.h
   struct pixmap *ji_thumbnail;
   time_t ji_time;
-
+  struct rstr *ji_manufacturer;
+  struct rstr *ji_equipment;
 } jpeginfo_t;
 
 
@@ -40,5 +41,16 @@ int jpeg_info(jpeginfo_t *ji, jpegreader_t *reader, void *handle, int flags,
 	      const uint8_t *buf, size_t len, char *errbuf, size_t errlen);
 
 void jpeg_info_clear(jpeginfo_t *ji);
+
+/**
+ *
+ */
+typedef struct jpeg_meminfo {
+  const uint8_t *data;
+  size_t size;
+} jpeg_meminfo_t;
+
+
+int jpeginfo_mem_reader(void *handle, void *buf, off_t offset, size_t size);
 
 #endif /* JPEG_H__ */

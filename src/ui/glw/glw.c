@@ -25,6 +25,7 @@
 #include "keymapper.h"
 
 #include "arch/threads.h"
+#include "text/text.h"
 
 #include "glw.h"
 #include "glw_text_bitmap.h"
@@ -137,7 +138,8 @@ glw_update_size(glw_root_t *gr)
   gr->gr_current_size = v;
 
   prop_set_int(gr->gr_prop_size, v);
-  glw_font_change_size(gr, v);
+  glw_text_flush(gr);
+  glw_icon_flush(gr);
   TRACE(TRACE_DEBUG, "GLW", "UI size scale changed to %d", v);
 }
 
@@ -211,12 +213,12 @@ glw_init_settings(glw_root_t *gr, const char *instance,
 	     instance_title);
 
     gr->gr_settings = settings_add_dir_cstr(NULL, title,
-					    "display", NULL, NULL);
+					    "display", NULL, NULL, NULL);
 
   } else {
     gr->gr_settings = settings_add_dir(NULL, 
 				       _p("Display and user interface"),
-				       "display", NULL, NULL);
+				       "display", NULL, NULL, NULL);
 
   }
 
@@ -294,13 +296,16 @@ glw_init(glw_root_t *gr, const char *theme,
 
   gr->gr_uii.uii_ui = ui;
 
+  gr->gr_font_domain = freetype_get_context();
+
   glw_text_bitmap_init(gr);
   glw_init_settings(gr, instance, instance_title);
 
   TAILQ_INIT(&gr->gr_destroyer_queue);
   glw_tex_init(gr);
 
-  gr->gr_frameduration = 1000000 / 60;
+  gr->gr_framerate = 60;
+  gr->gr_frameduration = 1000000 / gr->gr_framerate;
   uii_register(&gr->gr_uii, primary);
 
   return 0;
@@ -402,7 +407,7 @@ glw_create(glw_root_t *gr, const glw_class_t *class,
   w->glw_root = gr;
   w->glw_class = class;
   w->glw_alpha = 1.0f;
-  w->glw_blur  = 1.0f;
+  w->glw_sharpness = 1.0f;
   w->glw_refcnt = 1;
   w->glw_alignment = class->gc_default_alignment;
   w->glw_flags = GLW_NAV_FOCUSABLE;
@@ -540,6 +545,9 @@ glw_prepare_frame(glw_root_t *gr, int flags)
 
   gr->gr_screensaver_counter++;
 
+  if(gr->gr_be_prepare != NULL)
+    gr->gr_be_prepare(gr);
+
   prop_set_int(gr->gr_screensaver_active, glw_screensaver_is_active(gr));
   prop_set_int(gr->gr_prop_width, gr->gr_width);
   prop_set_int(gr->gr_prop_height, gr->gr_height);
@@ -569,6 +577,22 @@ glw_prepare_frame(glw_root_t *gr, int flags)
     glw_pointer_event(gr, &gpe);
   }
 
+  if(gr->gr_delayed_focus_leave) {
+    if(--gr->gr_delayed_focus_leave == 0 && gr->gr_current_focus) {
+      glw_focus_leave(gr->gr_current_focus);
+    }
+  }
+}
+
+
+/**
+ *
+ */
+void
+glw_post_scene(glw_root_t *gr)
+{
+  if(gr->gr_be_render_unlocked != NULL)
+    gr->gr_be_render_unlocked(gr);
 }
 
 /*
@@ -886,6 +910,7 @@ glw_move(glw_t *w, glw_t *b)
   } else {
     TAILQ_INSERT_BEFORE(b, w, glw_parent_link);
   }
+  glw_signal0(w->glw_parent, GLW_SIGNAL_CHILD_MOVED, w);
 }
 
 
@@ -974,9 +999,10 @@ glw_set_focus_weight(glw_t *w, float f)
   if(f == w->glw_focus_weight)
     return;
 
-  if(w->glw_focus_weight > 0 && w->glw_root->gr_current_focus == w)
-    glw_focus_leave(w);
-  
+  if(w->glw_focus_weight > 0 && w->glw_root->gr_current_focus == w) {
+    w->glw_root->gr_delayed_focus_leave = 2;
+  }
+
   if(f > 0)
     glw_focus_init_widget(w, f);
   else
@@ -1000,10 +1026,14 @@ glw_t *
 glw_focus_by_path(glw_t *w)
 {
   while(w->glw_focused != NULL) {
-    if(w->glw_focused->glw_flags & (GLW_FOCUS_BLOCKED | GLW_DESTROYING))
+    if(w->glw_focused->glw_flags & 
+       (GLW_FOCUS_BLOCKED | GLW_DESTROYING | GLW_HIDDEN))
       return NULL;
     w = w->glw_focused;
   }
+
+  if(w->glw_focus_weight == 0)
+    return NULL;
   return w;
 }
 
@@ -1070,7 +1100,7 @@ glw_focus_set(glw_root_t *gr, glw_t *w, int how)
 	  x == TAILQ_FIRST(&p->glw_childs) && 
 	  TAILQ_NEXT(x, glw_parent_link) == p->glw_focused;
 
-	if(y == NULL || how != GLW_FOCUS_SET_AUTOMATIC ||
+	if(y == NULL || how == GLW_FOCUS_SET_INTERACTIVE ||
 	   weight > y->glw_focus_weight || 
 	   (ff && weight == y->glw_focus_weight)) {
 	  x->glw_parent->glw_focused = x;
@@ -1096,6 +1126,7 @@ glw_focus_set(glw_root_t *gr, glw_t *w, int how)
     glw_path_modify(ww, 0, GLW_IN_FOCUS_PATH, com);
 
   gr->gr_current_focus = w;
+  gr->gr_delayed_focus_leave = 0;
 
 #if 0
   glw_t *h = w;
@@ -1269,7 +1300,7 @@ glw_focus_crawl1(glw_t *w, int forward)
   for(; c != NULL; c = forward ? TAILQ_NEXT(c, glw_parent_link) : 
 	TAILQ_PREV(c, glw_queue, glw_parent_link)) {
 
-    if(!(c->glw_flags & GLW_FOCUS_BLOCKED)) {
+    if(!(c->glw_flags & (GLW_FOCUS_BLOCKED | GLW_HIDDEN))) {
       if(glw_is_focusable(c))
 	return c;
       if(TAILQ_FIRST(&c->glw_childs))
@@ -1285,7 +1316,7 @@ glw_focus_crawl1(glw_t *w, int forward)
  * Used to focus next (or previous) focusable widget.
  */
 void
-glw_focus_crawl(glw_t *w, int forward)
+glw_focus_crawl(glw_t *w, int forward, int interactive)
 {
   glw_t *r = NULL;
 
@@ -1299,7 +1330,9 @@ glw_focus_crawl(glw_t *w, int forward)
     r = glw_focus_crawl1(w, forward);
 
   if(r != NULL)
-    glw_focus_set(w->glw_root, r, GLW_FOCUS_SET_INTERACTIVE);
+    glw_focus_set(w->glw_root, r,
+		  interactive ? GLW_FOCUS_SET_INTERACTIVE : 
+		  GLW_FOCUS_SET_AUTOMATIC);
 }
 
 
@@ -1320,8 +1353,12 @@ glw_focus_open_path_close_all_other(glw_t *w)
 
   if(c != NULL)
     glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_AUTOMATIC);
-  else
-    TRACE(TRACE_DEBUG, "GLW", "Nothing can be (re-)focused");
+  else {
+    c = glw_focus_crawl1(w, 1);
+
+    if(c != NULL)
+      glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_AUTOMATIC);
+  }
 }
 
 
@@ -1340,10 +1377,8 @@ glw_focus_open_path(glw_t *w)
   w->glw_flags &= ~GLW_FOCUS_BLOCKED;
 
   c = glw_focus_by_path(w);
-
-  assert(c != NULL);
-
-  glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_AUTOMATIC);
+  if(c != NULL)
+    glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_AUTOMATIC);
 }
 
 
@@ -1404,6 +1439,22 @@ glw_focus_suggest(glw_t *w)
   }
 }
 
+
+/**
+ *
+ */
+int
+glw_is_child_focusable(glw_t *w)
+{
+  glw_t *c;
+  if(glw_is_focusable(w))
+    return 1;
+  TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
+    if(glw_is_child_focusable(c))
+      return 1;
+  }
+  return 0;
+}
 
 
 
@@ -1737,8 +1788,8 @@ glw_dispatch_event(uii_t *uii, event_t *e)
        event_is_action(e, ACTION_PAUSE) ||
        event_is_action(e, ACTION_STOP) ||
        event_is_action(e, ACTION_EJECT) ||
-       event_is_action(e, ACTION_PREV_TRACK) ||
-       event_is_action(e, ACTION_NEXT_TRACK) ||
+       event_is_action(e, ACTION_SKIP_BACKWARD) ||
+       event_is_action(e, ACTION_SKIP_FORWARD) ||
        event_is_action(e, ACTION_SHOW_MEDIA_STATS) ||
        event_is_action(e, ACTION_SHUFFLE) ||
        event_is_action(e, ACTION_REPEAT) ||
@@ -1824,87 +1875,87 @@ glw_align_2(glw_rctx_t *rc, int a)
 }
 
 
+/**
+ *
+ */
+void
+glw_conf_constraints(glw_t *w, int x, int y, float weight, int conf)
+{
+  switch(conf) {
+  case GLW_CONSTRAINT_CONF_X:
+    w->glw_req_size_x = x;
+    w->glw_flags |= GLW_CONSTRAINT_X;
+    break;
+
+  case GLW_CONSTRAINT_CONF_Y:
+    w->glw_req_size_y = y;
+    w->glw_flags |= GLW_CONSTRAINT_Y;
+    break;
+
+  case GLW_CONSTRAINT_CONF_W:
+    w->glw_req_weight = weight;
+    w->glw_flags |= GLW_CONSTRAINT_W;
+    break;
+  default:
+    abort();
+  }
+  w->glw_flags |= conf;
+
+  if(w->glw_parent != NULL)
+    glw_signal0(w->glw_parent, GLW_SIGNAL_CHILD_CONSTRAINTS_CHANGED, w);
+}
 
 /**
  *
  */
 void
-glw_set_constraints(glw_t *w, int x, int y, float weight, 
-		    int flags, int conf)
+glw_set_constraints(glw_t *w, int x, int y, float weight, int flags)
 {
   int ch = 0;
-
-  if((w->glw_flags | flags) & GLW_CONSTRAINT_X) {
-
-    int f = flags & GLW_CONSTRAINT_X;
-
-    if(!(w->glw_flags & GLW_CONSTRAINT_CONF_X) ||
-       conf == GLW_CONSTRAINT_CONF_X) {
-
-      if(!(w->glw_req_size_x == x &&
-	   (w->glw_flags & GLW_CONSTRAINT_X) == f)) {
-
-	ch = 1;
-
-	w->glw_req_size_x = x;
-	
-	w->glw_flags &= ~GLW_CONSTRAINT_X;
-	w->glw_flags |= f | conf;
-      }
+  const int fc = w->glw_flags ^ flags;
+  if(!(w->glw_flags & GLW_CONSTRAINT_CONF_X)) {
+    if(fc & GLW_CONSTRAINT_X) {
+      ch = 1;
+      w->glw_flags = 
+	(w->glw_flags & ~GLW_CONSTRAINT_X) | (flags & GLW_CONSTRAINT_X);
+    }
+    if(w->glw_flags & GLW_CONSTRAINT_X && w->glw_req_size_x != x) {
+      w->glw_req_size_x = x;
+      ch = 1;
+    }
+  }
+    
+  if(!(w->glw_flags & GLW_CONSTRAINT_CONF_Y)) {
+    if(fc & GLW_CONSTRAINT_Y) {
+      ch = 1;
+      w->glw_flags = 
+	(w->glw_flags & ~GLW_CONSTRAINT_Y) | (flags & GLW_CONSTRAINT_Y);
+    }
+    if(w->glw_flags & GLW_CONSTRAINT_Y && w->glw_req_size_y != y) {
+      w->glw_req_size_y = y;
+      ch = 1;
     }
   }
 
-  if((w->glw_flags | flags) & GLW_CONSTRAINT_Y) {
-
-    int f = flags & GLW_CONSTRAINT_Y;
-
-    if(!(w->glw_flags & GLW_CONSTRAINT_CONF_Y) ||
-       conf == GLW_CONSTRAINT_CONF_Y) {
-
-      if(!(w->glw_req_size_y == y && 
-	   (w->glw_flags & GLW_CONSTRAINT_Y) == f)) {
-
-	ch = 1;
-
-	w->glw_req_size_y = y;
-	
-	w->glw_flags &= ~GLW_CONSTRAINT_Y;
-	w->glw_flags |= f | conf;
-      }
+  if(!(w->glw_flags & GLW_CONSTRAINT_CONF_W)) {
+    if(fc & GLW_CONSTRAINT_W) {
+      ch = 1;
+      w->glw_flags = 
+	(w->glw_flags & ~GLW_CONSTRAINT_W) | (flags & GLW_CONSTRAINT_W);
+    }
+    if(w->glw_flags & GLW_CONSTRAINT_W && w->glw_req_weight != weight) {
+      w->glw_req_weight = weight;
+      ch = 1;
     }
   }
-
-  if((w->glw_flags | flags) & GLW_CONSTRAINT_W) {
-
-    int f = flags & GLW_CONSTRAINT_W;
-
-   if(!(w->glw_flags & GLW_CONSTRAINT_W) ||
-       conf == GLW_CONSTRAINT_CONF_W) {
-
-      if(!(w->glw_req_weight == weight && 
-	   (w->glw_flags & GLW_CONSTRAINT_W) == f)) {
-
-	ch = 1;
-
-	w->glw_req_weight = weight;
-	
-	w->glw_flags &= ~GLW_CONSTRAINT_W;
-	w->glw_flags |= f | conf;
-      }
-    }
-  }
-
-
-  if((w->glw_flags ^ flags) & GLW_CONSTRAINT_F) {
+    
+  if(fc & GLW_CONSTRAINT_F) {
     ch = 1;
-    w->glw_flags &= ~GLW_CONSTRAINT_F;
-    w->glw_flags |= (flags & GLW_CONSTRAINT_F);
+    w->glw_flags = 
+      (w->glw_flags & ~GLW_CONSTRAINT_F) | (flags & GLW_CONSTRAINT_F);
   }
-
-  if(!ch)
-    return;
-
-  if(w->glw_parent != NULL)
+  
+  if(ch && w->glw_parent != NULL)
     glw_signal0(w->glw_parent, GLW_SIGNAL_CHILD_CONSTRAINTS_CHANGED, w);
 }
 
@@ -1964,7 +2015,7 @@ glw_copy_constraints(glw_t *w, glw_t *src)
 		      src->glw_req_size_x,
 		      src->glw_req_size_y,
 		      src->glw_req_weight,
-		      src->glw_flags & GLW_CONSTRAINT_FLAGS, 0);
+		      src->glw_flags & GLW_CONSTRAINT_FLAGS);
 }
 
 
@@ -1993,23 +2044,34 @@ glw_register_class(glw_class_t *gc)
   LIST_INSERT_HEAD(&glw_classes, gc, gc_link);
 }
 
+
+#define GET_A_NAME_BUF 1024
 /**
  *
  */
-static const char *
-glw_get_a_name_r(glw_t *w)
+static void
+glw_get_a_name_r(glw_t *w, char *buf)
 {
   glw_t *c;
-  const char *r;
+  const char *r = NULL;
 
   if(w->glw_class->gc_get_text != NULL)
-    return w->glw_class->gc_get_text(w);
+    r = w->glw_class->gc_get_text(w);
 
-  TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
-    if((r = glw_get_a_name_r(c)) != NULL)
-      return r;
-  }
-  return NULL;
+  if(r != NULL)
+    snprintf(buf + strlen(buf), GET_A_NAME_BUF - strlen(buf),
+	     "%s%s", buf[0] ? ", " : "", r);
+
+  r = NULL;
+  if(w->glw_class->gc_get_identity != NULL)
+    r = w->glw_class->gc_get_identity(w);
+
+  if(r != NULL)
+    snprintf(buf + strlen(buf), GET_A_NAME_BUF - strlen(buf),
+	     "%s%s", buf[0] ? ", " : "", r);
+
+  TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link)
+    glw_get_a_name_r(c, buf);
 }
 
 
@@ -2019,10 +2081,18 @@ glw_get_a_name_r(glw_t *w)
 const char *
 glw_get_a_name(glw_t *w)
 {
+  if(w == NULL)
+    return "<null>";
+
   if(w->glw_id != NULL)
     return w->glw_id;
 
-  return glw_get_a_name_r(w);
+  static char buf[1024];
+  buf[0] = 0;
+  glw_get_a_name_r(w, buf);
+  if(buf[0] == 0)
+    return "<no name>";
+  return buf;
 }
 
 
@@ -2132,6 +2202,9 @@ glw_hide(glw_t *w)
     return;
   w->glw_flags |= GLW_HIDDEN;
   glw_signal0(w->glw_parent, GLW_SIGNAL_CHILD_HIDDEN, w);
+
+  if(glw_is_focused(w))
+    glw_focus_crawl(w, 1, 0);
 }
 
 
@@ -2150,7 +2223,7 @@ glw_unhide(glw_t *w)
  *
  */
 void
-glw_store_matrix(glw_t *w, glw_rctx_t *rc)
+glw_store_matrix(glw_t *w, const glw_rctx_t *rc)
 {
   if(rc->rc_inhibit_matrix_store)
     return;
@@ -2173,7 +2246,7 @@ glw_rctx_init(glw_rctx_t *rc, int width, int height, int overscan)
   rc->rc_width  = width;
   rc->rc_height = height;
   rc->rc_alpha = 1.0f;
-  rc->rc_blur  = 1.0f;
+  rc->rc_sharpness  = 1.0f;
   rc->rc_overscanning = overscan;
 
   glw_LoadIdentity(rc);

@@ -43,6 +43,22 @@
 #include "misc/isolang.h"
 #include "text/text.h"
 #include "video/video_settings.h"
+#include "video/vobsub.h"
+
+
+typedef struct seek_item {
+  prop_t *si_prop;
+  float si_start; // in seconds
+} seek_item_t;
+
+typedef struct seek_index {
+  prop_t *si_root;
+  int si_nitems;
+  seek_item_t *si_current;
+  seek_item_t si_items[0];
+} seek_index_t;
+
+
 
 LIST_HEAD(attachment_list, attachment);
 
@@ -53,7 +69,8 @@ typedef struct attachment {
 } attachment_t;
 
 static void attachment_load(struct attachment_list *alist,
-			    const uint8_t *ptr, size_t len);
+			    const uint8_t *ptr, size_t len,
+			    int context);
 
 static void attachment_unload_all(struct attachment_list *alist);
 
@@ -66,10 +83,16 @@ static event_t *playlist_play(fa_handle_t *fh, media_pipe_t *mp, int primary,
 /**
  *
  */
-typedef struct fs_sub_scanner {
-  prop_t *p;
-  char *url;
-} fs_sub_scanner_t;
+typedef struct sub_load {
+  int sl_beflags;
+  prop_t *sl_p;
+  const char *sl_url;
+  int sl_stop;
+  int sl_opensub_hash_valid;
+  uint64_t sl_opensub_hash;
+  uint64_t sl_fsize;
+
+} sub_load_t;
 
 
 /**
@@ -78,20 +101,27 @@ typedef struct fs_sub_scanner {
 static int
 fs_sub_match(const char *video, const char *sub)
 {
-  char *fname = mystrdupa(sub);
-  fname = strrchr(fname, '/');
-  if(fname == NULL)
+  sub = strrchr(sub, '/');
+  if(sub == NULL)
     return 0;
+  sub++;
 
-  fname++;
   int vl = strlen(video);
-  if(strlen(fname) < vl)
-    return 0;
+  int sl = strlen(sub);
 
-  if(fname[vl] != '.')
-    return 0;
-  
-  return !memcmp(fname, video, vl);
+  if(sl >= vl && sub[vl] == '.' && !strncasecmp(sub, video, vl))
+    return 1;
+
+  char *x = strrchr(sub, '.');
+  if(x != NULL) {
+    size_t off = x - sub;
+    if(vl > off) {
+      if((video[off] == '.' || video[off] == ' ') && 
+	 !strncasecmp(sub, video, off))
+	return 1;
+    }
+  }
+  return 0;
 }
 
 
@@ -99,7 +129,8 @@ fs_sub_match(const char *video, const char *sub)
  *
  */
 static void
-fs_sub_scan_dir(prop_t *prop, const char *url, const char *video)
+fs_sub_scan_dir(prop_t *prop, const char *url, const char *video,
+		int *stop)
 {
   char *postfix;
   fa_dir_t *fd;
@@ -116,44 +147,70 @@ fs_sub_scan_dir(prop_t *prop, const char *url, const char *video)
   }
 
   TAILQ_FOREACH(fde, &fd->fd_entries, fde_link) {
+    if(*stop)
+      break;
 
-    if(fde->fde_type == CONTENT_DIR && !strcasecmp(fde->fde_filename, "subs")) {
-      fs_sub_scan_dir(prop, fde->fde_url, video);
+    if(fde->fde_type == CONTENT_DIR &&
+       !strcasecmp(rstr_get(fde->fde_filename), "subs")) {
+      fs_sub_scan_dir(prop, rstr_get(fde->fde_url), video, stop);
       continue;
     }
+    const char *filename = rstr_get(fde->fde_filename);
+    postfix = strrchr(filename, '.');
+    if(postfix == NULL)
+      continue;
 
-    /**
-     * get actual sub file name
-     */
-    subname=strrchr(fde->fde_filename, '/');
-    if(subname==NULL)
-	subname=fde->fde_filename;
-    else
-	subname++;
-
-    /**
-     * compare video and sub name
-     */
-    if(strncmp(video,subname,strlen(video))!=0)
-	continue;
-
-    postfix = strrchr(fde->fde_filename, '.');
-    if(postfix != NULL && !strcasecmp(postfix, ".srt")) {
+    if(!strcasecmp(postfix, ".srt")) {
       const char *lang = NULL;
-      if(postfix - fde->fde_filename > 4 && postfix[-4] == '.') {
+      if(postfix - filename > 4 && postfix[-4] == '.') {
 	char b[4];
 	memcpy(b, postfix - 3, 3);
 	b[3] = 0;
 	lang = isolang_iso2lang(b);
       }
 
-      int score = fs_sub_match(video, fde->fde_url);
-      TRACE(TRACE_DEBUG, "Video", "SRT %s score=%d", fde->fde_url, score); 
+      int score = fs_sub_match(video, rstr_get(fde->fde_url));
+      TRACE(TRACE_DEBUG, "Video", "SRT %s score=%d", 
+	    rstr_get(fde->fde_url), score); 
+
       if(score == 0 && !subtitle_settings.include_all_subs)
 	continue;
 
-      mp_add_track(prop, fde->fde_filename, fde->fde_url, "SRT", NULL, lang,
-		   NULL, _p("External file"), score);
+      mp_add_track(prop, rstr_get(fde->fde_filename), rstr_get(fde->fde_url),
+		   "SRT", NULL, lang, NULL, _p("External file"), score);
+    }
+
+    
+    if(!strcasecmp(postfix, ".ass") || !strcasecmp(postfix, ".ssa")) {
+      const char *lang = NULL;
+      if(postfix - filename > 4 && postfix[-4] == '.') {
+	char b[4];
+	memcpy(b, postfix - 3, 3);
+	b[3] = 0;
+	lang = isolang_iso2lang(b);
+      }
+
+      int score = fs_sub_match(video, rstr_get(fde->fde_url));
+      TRACE(TRACE_DEBUG, "Video", "SSA/ASS %s score=%d",
+	    rstr_get(fde->fde_url), score); 
+
+      if(score == 0 && !subtitle_settings.include_all_subs)
+	continue;
+
+      mp_add_track(prop, rstr_get(fde->fde_filename), rstr_get(fde->fde_url),
+		   "ASS / SSA", NULL, lang, NULL, _p("External file"), score);
+    }
+
+    if(!strcasecmp(postfix, ".idx")) {
+      int score = fs_sub_match(video, rstr_get(fde->fde_url));
+      TRACE(TRACE_DEBUG, "Video", "VOBSUB %s score=%d", 
+	    rstr_get(fde->fde_url), score); 
+
+      if(score == 0 && !subtitle_settings.include_all_subs)
+	continue;
+
+      vobsub_probe(rstr_get(fde->fde_url), rstr_get(fde->fde_filename),
+		   score, prop, NULL);
     }
   }
   fa_dir_free(fd);
@@ -164,43 +221,34 @@ fs_sub_scan_dir(prop_t *prop, const char *url, const char *video)
  *
  */
 static void *
-fs_sub_scan_thread(void *aux)
+sub_loader(void *aux)
 {
-  fs_sub_scanner_t *fss = aux;
-  char parent[URL_MAX];
-  char *fname = mystrdupa(fss->url);
+  sub_load_t *sl = aux;
 
-  fname = strrchr(fname, '/') ?: fname;
-  fname++;
-  char *dot = strrchr(fname, '.');
-  if(dot)
-    *dot = 0;
+  if(!(sl->sl_beflags & BACKEND_VIDEO_NO_FS_SCAN)) {
+    char parent[URL_MAX];
+    char *fname = mystrdupa(sl->sl_url);
 
-  fa_parent(parent, sizeof(parent), fss->url);
+    fname = strrchr(fname, '/') ?: fname;
+    fname++;
+    char *dot = strrchr(fname, '.');
+    if(dot)
+      *dot = 0;
 
-  fs_sub_scan_dir(fss->p, parent, fname);
+    fa_parent(parent, sizeof(parent), sl->sl_url);
+    fs_sub_scan_dir(sl->sl_p, parent, fname, &sl->sl_stop);
+  }
 
-  prop_ref_dec(fss->p);
-  free(fss->url);
-  free(fss);
+  if(sl->sl_stop)
+    return NULL;
+
+  if(sl->sl_opensub_hash_valid && sl->sl_fsize != -1)
+    opensub_load_subtitles(sl->sl_p,
+			   opensub_build_query(NULL, sl->sl_opensub_hash,
+					       sl->sl_fsize, NULL, NULL));
+
   return NULL;
 }
-
-/**
- *
- */
-static void
-fs_sub_scan(prop_t *prop, const char *url)
-{
-  fs_sub_scanner_t *fss = malloc(sizeof(fs_sub_scanner_t));
-  fss->p = prop_ref_inc(prop);
-  fss->url = strdup(url);
-
-  hts_thread_create_detached("fs sub scan", fs_sub_scan_thread, fss,
-			     THREAD_PRIO_LOW);
-}
-
-
 
 
 /**
@@ -260,7 +308,9 @@ static event_t *
 video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 		  media_pipe_t *mp, int flags,
 		  char *errbuf, size_t errlen,
-		  const char *canonical_url)
+		  const char *canonical_url,
+		  int freetype_context,
+		  seek_index_t *sidx)
 {
   media_buf_t *mb = NULL;
   media_queue_t *mq = NULL;
@@ -278,9 +328,13 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
   mp->mp_audio.mq_seektarget = AV_NOPTS_VALUE;
   mp_set_playstatus_by_hold(mp, 0, NULL);
 
-  int64_t start = video_get_restartpos(canonical_url) * 1000;
-  if(start)
-    seekbase = video_seek(fctx, mp, &mb, start, "restart position");
+  if(flags & BACKEND_VIDEO_CONTINUE ||
+     (video_settings.resume_mode == VIDEO_RESUME_YES &&
+      !(flags & BACKEND_VIDEO_START_FROM_BEGINNING))) {
+    int64_t start = video_get_restartpos(canonical_url) * 1000;
+    if(start)
+      seekbase = video_seek(fctx, mp, &mb, start, "restart position");
+  }
 
   while(1) {
     /**
@@ -328,6 +382,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
 	mb = media_buf_from_avpkt_unlocked(mp, &pkt);
 	mb->mb_codecid = fctx->streams[si]->codec->codec_id;
+	mb->mb_font_context = freetype_context;
 	mb->mb_data_type = MB_SUBTITLE;
 	mq = &mp->mp_video;
 
@@ -410,7 +465,20 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
       if(sec != restartpos_last) {
 	restartpos_last = sec;
 	metadb_set_video_restartpos(canonical_url, seekbase / 1000);
+
+	if(sidx->si_nitems) {
+	  int i, j = 0;
+	  for(i = 0; i < sidx->si_nitems; j = i, i++)
+	    if(sidx->si_items[i].si_start > sec)
+	      break;
+
+	  if(sidx->si_current != &sidx->si_items[j]) {
+	    sidx->si_current = &sidx->si_items[j];
+	    prop_suggest_focus(sidx->si_current->si_prop);
+	  }
+	}
       }
+
 
     } else if(event_is_type(e, EVENT_SEEK)) {
 
@@ -524,7 +592,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 /**
  *
  */
-static prop_t *
+static seek_index_t *
 build_index(media_pipe_t *mp, AVFormatContext *fctx, const char *url)
 {
   int i;
@@ -532,19 +600,47 @@ build_index(media_pipe_t *mp, AVFormatContext *fctx, const char *url)
   prop_t *parent = prop_create(root, "positions");
   char buf[URL_MAX];
 
+  int items = fctx->duration / 60000000;
+
+  seek_index_t *si = malloc(sizeof(seek_index_t) +
+			    sizeof(seek_item_t) * items);
+
+  si->si_current = NULL;
+  si->si_nitems = items;
+  si->si_root = root;
+
   prop_set_int(prop_create(root, "available"), 1);
 
-  for(i = 0; i < fctx->duration / 1000000; i+=60) {
-    prop_t *p = prop_create_root(NULL);
-    snprintf(buf, sizeof(buf), "%s#%d", url, i);
-    prop_set_string(prop_create(p, "image"), buf);
-    prop_set_float(prop_create(p, "timestamp"), i);
-    if(prop_set_parent(p, parent))
-      prop_destroy(p);
-  }
+  for(i = 0; i < items; i++) {
+    seek_item_t *item = &si->si_items[i];
 
-  return root;
+    prop_t *p = prop_create_root(NULL);
+
+    snprintf(buf, sizeof(buf), "%s#%d", url, i * 60);
+    prop_set_string(prop_create(p, "image"), buf);
+    prop_set_float(prop_create(p, "timestamp"), i * 60);
+
+    item->si_prop = p;
+    item->si_start = i * 60;
+
+    if(prop_set_parent(p, parent))
+      abort();
+  }
+  return si;
 }
+
+/**
+ *
+ */
+static void
+seek_index_destroy(seek_index_t *si)
+{
+  prop_destroy(si->si_root);
+  free(si);
+}
+
+
+
 
 /**
  *
@@ -566,7 +662,11 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
 
   uint64_t hash;
   int64_t fsize;
-  int opensub_hash_rval;
+
+  hts_thread_t sub_tid = 0;
+  sub_load_t sl;
+
+  int freetype_context = freetype_get_context();
 
   struct attachment_list alist;
   LIST_INIT(&alist);
@@ -632,11 +732,11 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
   }
 
   if(seek_is_fast)
-    opensub_hash_rval = opensub_compute_hash(fh, &hash);
+    sl.sl_opensub_hash_valid = !opensub_compute_hash(fh, &hash);
   else
-    opensub_hash_rval = 1;
+    sl.sl_opensub_hash_valid = 0;
 
-  if(opensub_hash_rval == -1)
+  if(!sl.sl_opensub_hash_valid)
     TRACE(TRACE_DEBUG, "Video", "Unable to compute opensub hash");
 
   AVIOContext *avio = fa_libav_reopen(fh);
@@ -654,6 +754,8 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
   TRACE(TRACE_DEBUG, "Video", "Starting playback of %s (%s)",
 	url, fctx->iformat->name);
 
+  mp_reinit_streams(mp);
+
   /**
    * Update property metadata
    */
@@ -664,17 +766,23 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
   }
 
   /**
-   * Subtitles from filesystem
+   * Subtitles fr
    */
-  if(!(flags & BACKEND_VIDEO_NO_FS_SCAN))
-    fs_sub_scan(mp->mp_prop_subtitle_tracks, url);
+
+  sl.sl_beflags = flags;
+  sl.sl_p = mp->mp_prop_subtitle_tracks;
+  sl.sl_url = url;
+  sl.sl_stop = 0;
+  sl.sl_opensub_hash = hash;
+  sl.sl_fsize = fsize;
+
+  hts_thread_create_joinable("subloader", &sub_tid,
+			     sub_loader, &sl, THREAD_PRIO_LOW);
+
 
   /**
    * Query opensubtitles.org
    */
-  if(!opensub_hash_rval && fsize != -1)
-    opensub_add_subtitles(mp->mp_prop_subtitle_tracks,
-			  opensub_build_query(NULL, hash, fsize, NULL, NULL));
 
   /**
    * Init codec contexts
@@ -716,7 +824,8 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
       break;
 
     case AVMEDIA_TYPE_ATTACHMENT:
-      attachment_load(&alist, ctx->extradata, ctx->extradata_size);
+      attachment_load(&alist, ctx->extradata, ctx->extradata_size,
+		      freetype_context);
       break;
 
     default:
@@ -749,6 +858,7 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
     }
   }
 
+  mp->mp_pts_delta_for_subs = fctx->start_time;
 
   // Start it
   mp_configure(mp, (seek_is_fast ? MP_PLAY_CAPS_SEEK : 0) | MP_PLAY_CAPS_PAUSE,
@@ -759,15 +869,19 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
 
   prop_set_string(mp->mp_prop_type, "video");
 
-  prop_t *seek_index = build_index(mp, fctx, url);
+  seek_index_t *si = build_index(mp, fctx, url);
 
   metadb_register_play(canonical_url, 0, CONTENT_VIDEO);
 
-  e = video_player_loop(fctx, cwvec, mp, flags, errbuf, errlen, canonical_url);
+  e = video_player_loop(fctx, cwvec, mp, flags, errbuf, errlen, canonical_url,
+			freetype_context, si);
 
-  prop_destroy(seek_index);
+  seek_index_destroy(si);
 
   TRACE(TRACE_DEBUG, "Video", "Stopped playback of %s", url);
+
+
+  mp->mp_pts_delta_for_subs = 0;
 
   mp_flush(mp, 0);
   mp_shutdown(mp);
@@ -779,6 +893,11 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
   attachment_unload_all(&alist);
 
   media_format_deref(fw);
+
+  sl.sl_stop = 1;
+  if(sub_tid)
+    hts_thread_join(&sub_tid);
+  TRACE(TRACE_DEBUG, "Video", "Subtitle scanner joined");
   
   return e;
 }
@@ -867,7 +986,8 @@ attachment_add_dtor(struct attachment_list *alist,
  *
  */
 static void
-attachment_load(struct attachment_list *alist, const uint8_t *ptr, size_t len)
+attachment_load(struct attachment_list *alist, const uint8_t *ptr, size_t len,
+		int context)
 {
   if(len < 20)
     return;
@@ -876,7 +996,7 @@ attachment_load(struct attachment_list *alist, const uint8_t *ptr, size_t len)
   if(!memcmp(ptr, (const uint8_t []){0,1,0,0,0}, 5) ||
      !memcmp(ptr, "OTTO", 4)) {
 
-    void *h = freetype_load_font_from_memory(ptr, len);
+    void *h = freetype_load_font_from_memory(ptr, len, context);
     if(h != NULL)
       attachment_add_dtor(alist, freetype_unload_font, h);
     return;

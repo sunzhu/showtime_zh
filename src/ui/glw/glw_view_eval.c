@@ -32,6 +32,8 @@
 #include "prop/prop_grouper.h"
 #include "prop/prop_nodefilter.h"
 #include "arch/arch.h"
+#include "text/text.h"
+#include "fileaccess/fileaccess.h"
 
 LIST_HEAD(clone_list, glw_clone);
 
@@ -62,17 +64,16 @@ typedef struct glw_prop_sub {
   glw_t *gps_widget;
 
   prop_sub_t *gps_sub;
+  prop_t *gps_prop;
   prop_t *gps_prop_view;
+  prop_t *gps_prop_clone;
 
   token_t *gps_rpn;
 
   token_t *gps_token;
 
-
-#ifdef GLW_VIEW_ERRORINFO
   rstr_t *gps_file;
   uint16_t gps_line;
-#endif
   uint16_t gps_type;
 
 } glw_prop_sub_t;
@@ -157,8 +158,7 @@ glw_prop_subscription_destroy_list(glw_root_t *gr, struct glw_prop_sub_list *l)
 
   while((gps = LIST_FIRST(l)) != NULL) {
 
-    if(gps->gps_sub != NULL)
-      prop_unsubscribe(gps->gps_sub);
+    prop_unsubscribe(gps->gps_sub);
 
     if(gps->gps_token != NULL)
       glw_view_token_free(gr, gps->gps_token);
@@ -185,10 +185,10 @@ glw_prop_subscription_destroy_list(glw_root_t *gr, struct glw_prop_sub_list *l)
 	prop_ref_dec(sc->sc_view_args);
       break;
     }
-#ifdef GLW_VIEW_ERRORINFO
     rstr_release(gps->gps_file);
-#endif
+    prop_ref_dec(gps->gps_prop);
     prop_ref_dec(gps->gps_prop_view);
+    prop_ref_dec(gps->gps_prop_clone);
     free(gps);
   }
 }
@@ -213,7 +213,7 @@ glw_prop_subscription_suspend_list(struct glw_prop_sub_list *l)
 
 
 static void eval_dynamic(glw_t *w, token_t *rpn, struct glw_rctx *rc,
-			 prop_t *view);
+			 prop_t *prop, prop_t *view, prop_t *clone);
 
 static int glw_view_eval_rpn0(token_t *t0, glw_view_eval_context_t *ec);
 
@@ -248,11 +248,9 @@ eval_alloc(token_t *src, glw_view_eval_context_t *ec, token_type_t type)
 {
   token_t *r = glw_view_token_alloc(ec->gr);
 
-#ifdef GLW_VIEW_ERRORINFO
   if(src->file != NULL)
     r->file = rstr_dup(src->file);
   r->line = src->line;
-#endif
 
   r->type = type;
   r->next = ec->alloc;
@@ -633,26 +631,13 @@ eval_lt(glw_view_eval_context_t *ec, struct token *self, int gt)
   if((b = token_resolve(ec, b)) == NULL)
     return -1;
 
-  if(token_as_string(a) && token_as_string(b)) {
-    rr = 0;
-  } else if(a->type != b->type) {
-    rr = 0;
-  } else {
-
-    switch(a->type) {
-    case TOKEN_INT:
-      rr = a->t_int < b->t_int;
-      break;
-    case TOKEN_FLOAT:
-      rr = a->t_float < b->t_float;
-      break;
-    default:
-      rr = 0;
-    }
-  }
+  if(gt)
+    rr = token2float(a) > token2float(b);
+  else
+    rr = token2float(a) < token2float(b);
 
   r = eval_alloc(self, ec, TOKEN_INT);
-  r->t_int = rr ^ gt;
+  r->t_int = rr;
   eval_push(ec, r);
   return 0;
 }
@@ -793,8 +778,7 @@ eval_assign(glw_view_eval_context_t *ec, struct token *self, int conditional)
   token_t *b = eval_pop(ec), *a = eval_pop(ec);
   int r = 0;
 
-  /* Catch some special rvalues here */
-
+  /* Catch some special cases here */
   if(b->type == TOKEN_PROPERTY_VALUE_NAME && 
      !strcmp(rstr_get(b->t_rstring), "event")) {
     /* Assignment from $event, if our eval context has an event use it */
@@ -824,6 +808,14 @@ eval_assign(glw_view_eval_context_t *ec, struct token *self, int conditional)
 
     b = eval_alloc(b, ec, TOKEN_PROPERTY_OWNER);
     b->t_prop = n.tgtprop;
+
+  } else if(b->type == TOKEN_PROPERTY_REF &&
+	    a->type == TOKEN_PROPERTY_REF) {
+
+    if(b->t_prop != a->t_prop)
+      prop_link(b->t_prop, a->t_prop);
+    eval_push(ec, b);
+    return 0;
 
   } else if((b = token_resolve(ec, b)) == NULL) {
     return -1;
@@ -905,7 +897,7 @@ eval_dynamic_every_frame_sig(glw_t *w, void *opaque,
 			     glw_signal_t signal, void *extra)
 {
   if(signal == GLW_SIGNAL_LAYOUT)
-    eval_dynamic(w, opaque, extra, NULL);
+    eval_dynamic(w, opaque, extra, NULL, NULL, NULL);
   return 0;
 }
 
@@ -918,7 +910,7 @@ eval_dynamic_focused_child_change_sig(glw_t *w, void *opaque,
 {
   if(signal == GLW_SIGNAL_FOCUS_CHILD_INTERACTIVE ||
      signal == GLW_SIGNAL_FOCUS_CHILD_AUTOMATIC)
-    eval_dynamic(w, opaque, NULL, NULL);
+    eval_dynamic(w, opaque, NULL, NULL, NULL, NULL);
   return 0;
 }
 
@@ -931,7 +923,7 @@ eval_dynamic_fhp_change_sig(glw_t *w, void *opaque,
 			    glw_signal_t signal, void *extra)
 {
   if(signal == GLW_SIGNAL_FHP_PATH_CHANGED)
-    eval_dynamic(w, opaque, NULL, NULL);
+    eval_dynamic(w, opaque, NULL, NULL, NULL, NULL);
   return 0;
 }
 
@@ -943,11 +935,14 @@ static int
 eval_dynamic_widget_meta_sig(glw_t *w, void *opaque, 
 			     glw_signal_t signal, void *extra)
 {
-  if(signal == GLW_SIGNAL_ACTIVE || signal == GLW_SIGNAL_INACTIVE ||
+  if(signal == GLW_SIGNAL_ACTIVE ||
+     signal == GLW_SIGNAL_INACTIVE ||
      signal == GLW_SIGNAL_CAN_SCROLL_CHANGED ||
      signal == GLW_SIGNAL_FULLWINDOW_CONSTRAINT_CHANGED ||
-     signal == GLW_SIGNAL_READY || signal == GLW_SIGNAL_FOCUS_DISTANCE_CHANGED)
-    eval_dynamic(w, opaque, NULL, NULL);
+     signal == GLW_SIGNAL_READINESS ||
+     signal == GLW_SIGNAL_FOCUS_DISTANCE_CHANGED ||
+     signal == GLW_SIGNAL_RESELECT_CHANGED)
+    eval_dynamic(w, opaque, NULL, NULL, NULL, NULL);
   return 0;
 }
 
@@ -955,7 +950,8 @@ eval_dynamic_widget_meta_sig(glw_t *w, void *opaque,
  *
  */
 static void
-eval_dynamic(glw_t *w, token_t *rpn, struct glw_rctx *rc, prop_t *view)
+eval_dynamic(glw_t *w, token_t *rpn, struct glw_rctx *rc, 
+	     prop_t *prop, prop_t *view, prop_t *clone)
 {
   glw_view_eval_context_t ec;
 
@@ -963,7 +959,9 @@ eval_dynamic(glw_t *w, token_t *rpn, struct glw_rctx *rc, prop_t *view)
   ec.w = w;
   ec.gr = w->glw_root;
   ec.rc = rc;
+  ec.prop = prop;
   ec.prop_viewx = view;
+  ec.prop_clone = clone;
 
   ec.sublist = &w->glw_prop_subscriptions;
 
@@ -1337,6 +1335,21 @@ cloner_select_child(sub_cloner_t *sc, prop_t *p, glw_t *parent, prop_t *extra)
 /**
  *
  */
+static void
+cloner_suggest_focus(sub_cloner_t *sc, prop_t *p, glw_t *parent)
+{
+  glw_clone_t *c;
+  
+  if((c = prop_tag_get(p, sc)) != NULL) {
+    if(parent->glw_class->gc_suggest_focus != NULL)
+      parent->glw_class->gc_suggest_focus(parent, c->c_w);
+  }
+}
+
+
+/**
+ *
+ */
 static token_t *
 prop_callback_alloc_token(glw_root_t *gr, glw_prop_sub_t *gps,
 			  token_type_t type)
@@ -1344,10 +1357,8 @@ prop_callback_alloc_token(glw_root_t *gr, glw_prop_sub_t *gps,
   token_t *t = glw_view_token_alloc(gr);
   t->type = type;
 
-#ifdef GLW_VIEW_ERRORINFO
   t->file = rstr_dup(gps->gps_file);
   t->line = gps->gps_line;
-#endif    
   return t;
 }
 
@@ -1428,6 +1439,11 @@ prop_callback_cloner(void *opaque, prop_event_t event, ...)
     cloner_select_child(sc, p, gps->gps_widget, p2);
     break;
 
+  case PROP_SUGGEST_FOCUS:
+    p = va_arg(ap, prop_t *);
+    cloner_suggest_focus(sc, p, gps->gps_widget);
+    break;
+
   case PROP_SET_RLINK:
     t = prop_callback_alloc_token(gr, gps, TOKEN_LINK);
     t->propsubr = gps;
@@ -1441,12 +1457,14 @@ prop_callback_cloner(void *opaque, prop_event_t event, ...)
     cloner_pagination_check(sc);
     break;
 
+
   case PROP_REQ_NEW_CHILD:
   case PROP_REQ_DELETE_VECTOR:
   case PROP_DESTROYED:
   case PROP_EXT_EVENT:
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
   case PROP_WANT_MORE_CHILDS:
+  case PROP_SET_STRING:
     break;
 
   }
@@ -1461,7 +1479,8 @@ prop_callback_cloner(void *opaque, prop_event_t event, ...)
   }
 
   if(rpn != NULL) 
-    eval_dynamic(gps->gps_widget, rpn, NULL, gps->gps_prop_view);
+    eval_dynamic(gps->gps_widget, rpn, NULL, gps->gps_prop, gps->gps_prop_view,
+		 gps->gps_prop_clone);
 }
 
 
@@ -1545,6 +1564,8 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
   case PROP_HAVE_MORE_CHILDS:
   case PROP_WANT_MORE_CHILDS:
+  case PROP_SUGGEST_FOCUS:
+  case PROP_SET_STRING:
     break;
   }
 
@@ -1558,7 +1579,8 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
   }
 
   if(rpn != NULL) 
-    eval_dynamic(gps->gps_widget, rpn, NULL, gps->gps_prop_view);
+    eval_dynamic(gps->gps_widget, rpn, NULL, gps->gps_prop, gps->gps_prop_view,
+		 gps->gps_prop_clone);
 }
 
 
@@ -1612,6 +1634,8 @@ prop_callback_counter(void *opaque, prop_event_t event, ...)
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
   case PROP_HAVE_MORE_CHILDS:
   case PROP_WANT_MORE_CHILDS:
+  case PROP_SUGGEST_FOCUS:
+  case PROP_SET_STRING:
     break;
   }
 
@@ -1627,7 +1651,8 @@ prop_callback_counter(void *opaque, prop_event_t event, ...)
   gps->gps_token = t;
 
   if(rpn != NULL) 
-    eval_dynamic(gps->gps_widget, rpn, NULL, gps->gps_prop_view);
+    eval_dynamic(gps->gps_widget, rpn, NULL, gps->gps_prop, gps->gps_prop_view,
+		 gps->gps_prop_clone);
 }
 
 
@@ -1699,18 +1724,18 @@ subscribe_prop(glw_view_eval_context_t *ec, struct token *self, int type)
   }
 
   gps->gps_type = type;
+  gps->gps_prop = prop_ref_inc(ec->prop);
   gps->gps_prop_view = prop_ref_inc(ec->prop_viewx);
+  gps->gps_prop_clone = prop_ref_inc(ec->prop_clone);
 
-#ifdef GLW_VIEW_ERRORINFO
   gps->gps_file = rstr_dup(self->file);
   gps->gps_line = self->line;
-#endif
 
   gps->gps_widget = w;
 
   int f = PROP_SUB_DIRECT_UPDATE;
 
-  if(ec->w->glw_class->gc_flags & GLW_EXPEDITE_SUBSCRIPTIONS)
+  if(ec->w->glw_flags2 & GLW2_EXPEDITE_SUBSCRIPTIONS)
     f |= PROP_SUB_EXPEDITE;
 
   if(ec->debug || ec->w->glw_flags & GLW_DEBUG)
@@ -2173,8 +2198,7 @@ glwf_space(glw_view_eval_context_t *ec, struct token *self,
     dummy = glw_class_find_by_name("dummy");
 
   glw_t *w = glw_create(ec->gr, dummy, ec->w, NULL, NULL);
-  glw_set_constraints(w, 0, 0, token2float(a),
-		      GLW_CONSTRAINT_W, GLW_CONSTRAINT_CONF_W);
+  glw_conf_constraints(w, 0, 0, token2float(a), GLW_CONSTRAINT_CONF_W);
   return 0;
 }
 
@@ -2361,13 +2385,14 @@ static int
 glwf_navOpen(glw_view_eval_context_t *ec, struct token *self,
 	     token_t **argv, unsigned int argc)
 {
-  token_t *a, *b, *c, *d, *r;
+  token_t *a, *b, *c, *d, *e, *r;
   const char *url;
   const char *view = NULL;
+  const char *how = NULL;
   prop_t *origin = NULL;
   prop_t *model = NULL;
 
-  if(argc < 1 || argc > 4)
+  if(argc < 1 || argc > 5)
     return glw_view_seterr(ec->ei, self, "navOpen(): Invalid number of args");
 
   if((a = token_resolve(ec, argv[0])) == NULL)
@@ -2418,8 +2443,21 @@ glwf_navOpen(glw_view_eval_context_t *ec, struct token *self,
     model = d->t_prop;
   }
 
+  if(argc > 4) {
+    if((e = token_resolve(ec, argv[4])) == NULL)
+      return -1;
+
+    if(e->type == TOKEN_VOID)
+      how = NULL;
+    else if(e->type == TOKEN_RSTRING)
+      how = rstr_get(e->t_rstring);
+    else
+      return glw_view_seterr(ec->ei, e, "navOpen(): "
+			     "Fifth argument is not a string or (void)");
+  }
+
   r = eval_alloc(self, ec, TOKEN_EVENT);
-  r->t_gem = glw_event_map_navOpen_create(url, view, origin, model);
+  r->t_gem = glw_event_map_navOpen_create(url, view, origin, model, how);
   eval_push(ec, r);
   return 0;
 }
@@ -4134,6 +4172,31 @@ glwf_isLink(glw_view_eval_context_t *ec, struct token *self,
 
 
 /**
+ * Create a link given two arguments (title + url)
+ */
+static int 
+glwf_link(glw_view_eval_context_t *ec, struct token *self,
+	    token_t **argv, unsigned int argc)
+{
+  token_t *a, *b, *r;
+  if((a = token_resolve(ec, argv[0])) == NULL)
+    return -1;
+  if((b = token_resolve(ec, argv[1])) == NULL)
+    return -1;
+  
+  if(a->type != TOKEN_RSTRING || b->type != TOKEN_RSTRING) {
+    r = eval_alloc(self, ec, TOKEN_VOID);
+  } else {
+    r = eval_alloc(self, ec, TOKEN_LINK);
+    r->t_link_rtitle = rstr_dup(a->t_rstring);
+    r->t_link_rurl = rstr_dup(b->t_rstring);
+  }
+  eval_push(ec, r);
+  return 0;
+}
+
+
+/**
  * sin(x)
  */
 static int 
@@ -4149,6 +4212,33 @@ glwf_sin(glw_view_eval_context_t *ec, struct token *self,
   r = eval_alloc(self, ec, TOKEN_FLOAT);
   r->t_float = a->type == TOKEN_FLOAT ?  sin(a->t_float) : 0;
   eval_push(ec, r);
+  return 0;
+}
+
+
+/**
+ * sinewave(x)
+ */
+static int 
+glwf_sinewave(glw_view_eval_context_t *ec, struct token *self,
+	      token_t **argv, unsigned int argc)
+{
+  token_t *a = argv[0];
+  token_t *r;
+
+  if((a = token_resolve(ec, a)) == NULL)
+    return -1;
+
+  float p = token2float(a);
+  self->t_extra_float += 2 * M_PI / (ec->w->glw_root->gr_framerate * p);
+
+  if(self->t_extra_float > 2 * M_PI)
+    self->t_extra_float -= 2 * M_PI;
+
+  r = eval_alloc(self, ec, TOKEN_FLOAT);
+  r->t_float = sin(self->t_extra_float);
+  eval_push(ec, r);
+  ec->dynamic_eval |= GLW_VIEW_DYNAMIC_EVAL_EVERY_FRAME;
   return 0;
 }
 
@@ -4260,8 +4350,8 @@ glwf_isReady(glw_view_eval_context_t *ec, struct token *self,
     r->t_int = 1;
   } else {
     r->t_int = 0;
-    ec->dynamic_eval |= GLW_VIEW_DYNAMIC_EVAL_WIDGET_META;
   }
+  ec->dynamic_eval |= GLW_VIEW_DYNAMIC_EVAL_WIDGET_META;
   eval_push(ec, r);
   return 0;
 }
@@ -4403,8 +4493,9 @@ glwf_propSorter(glw_view_eval_context_t *ec, struct token *self,
   eval_push(ec, r);
 
   self->t_extra = prop_nf_create(r->t_prop, a->t_prop, NULL,
-				 rstr_get(b->t_rstring),
 				 PROP_NF_TAKE_DST_OWNERSHIP);
+
+  prop_nf_sort(self->t_extra, rstr_get(b->t_rstring), 0, 0, NULL, 1);
 
   argc -= 2;
   argv += 2;
@@ -4757,6 +4848,372 @@ glwf_pluralise(glw_view_eval_context_t *ec, struct token *self,
   return 0;
 }
 
+
+/**
+ *
+ */
+static void
+glwf_loadfont_dtor(glw_root_t *gr, struct token *self)
+{
+  if(self->t_extra != NULL)
+    freetype_unload_font(self->t_extra);
+}
+
+
+/**
+ *
+ */
+static int
+glw_loadFont(glw_view_eval_context_t *ec, struct token *self,
+	     token_t **argv, unsigned int argc)
+{
+  token_t *path;
+  glw_root_t *gr = ec->w->glw_root;
+  void *font;
+
+  if((path = token_resolve(ec, argv[0])) == NULL)
+    return -1;
+
+  if(path->type != TOKEN_RSTRING)
+    return glw_view_seterr(ec->ei, path, "URL is not a string");
+
+  rstr_t *p = fa_absolute_path(path->t_rstring, self->file);
+  font = freetype_load_font(rstr_get(p), gr->gr_font_domain, gr->gr_vpaths);
+  rstr_release(p);
+
+  token_t *r = eval_alloc(self, ec, TOKEN_RSTRING);
+  if(font)
+    r->t_rstring  = freetype_get_family(font);
+  else
+    r->type = TOKEN_VOID;
+
+  eval_push(ec, r);
+
+  // unload later to avoid churn
+  if(self->t_extra != NULL)
+    freetype_unload_font(self->t_extra);
+  self->t_extra = font;
+
+  ec->dynamic_eval |= GLW_VIEW_DYNAMIC_KEEP;
+  return 0;
+}
+
+
+/**
+ *
+ */
+TAILQ_HEAD(multiopt_item_queue, multiopt_item);
+
+typedef struct multiopt_item {
+  TAILQ_ENTRY(multiopt_item) mi_link;
+  rstr_t *mi_title;
+  rstr_t *mi_value;
+  int mi_mark;
+  prop_t *mi_item;
+} multiopt_item_t;
+
+
+/**
+ *
+ */
+typedef struct glwf_multiopt_extra {
+  struct multiopt_item_queue q;
+
+  prop_t *settings;
+  prop_t *opts;
+  prop_t *title;
+
+  prop_t *value;
+  multiopt_item_t *cur;
+
+  prop_sub_t *sub;
+
+} glwf_multiopt_extra_t;
+
+
+/**
+ *
+ */
+static void
+multiopt_item_cycle(glwf_multiopt_extra_t *x)
+{
+  if(x->cur == NULL)
+    return;
+
+  x->cur = TAILQ_NEXT(x->cur, mi_link);
+  if(x->cur == NULL)
+    x->cur = TAILQ_FIRST(&x->q);
+  if(x->cur->mi_item)
+    prop_select(x->cur->mi_item);
+}
+
+/**
+ *
+ */
+static void 
+multiopt_item_cb(void *opaque, prop_event_t event, ...)
+{
+  glwf_multiopt_extra_t *x = opaque;
+  rstr_t *name;
+  prop_t *c;
+  va_list ap;
+
+  va_start(ap, event);
+
+  switch(event) {
+
+  case PROP_SELECT_CHILD:
+    c = va_arg(ap, prop_t *);
+    name = c ? prop_get_name(c) : NULL;
+    prop_set_rstring(x->value, name);
+    rstr_release(name);
+    break;
+
+  case PROP_EXT_EVENT:
+    multiopt_item_cycle(x);
+    break;
+
+  default:
+    break;
+  }
+
+  va_end(ap);
+
+}
+
+
+/**
+ *
+ */
+static void
+glwf_multiopt_ctor(struct token *self)
+{
+  glwf_multiopt_extra_t *x;
+  x = self->t_extra = calloc(1, sizeof(glwf_multiopt_extra_t));
+  TAILQ_INIT(&x->q);
+  x->value = prop_create_root(NULL);
+
+}
+
+
+/**
+ *
+ */
+static void
+multiopt_item_destroy(glwf_multiopt_extra_t *x, multiopt_item_t *mi)
+{
+  if(x->cur == mi) {
+    x->cur = TAILQ_NEXT(mi, mi_link);
+    if(x->cur == NULL)
+      x->cur = TAILQ_FIRST(&x->q);
+    if(x->cur != NULL && x->cur->mi_item)
+      prop_select(x->cur->mi_item);
+  }
+
+  TAILQ_REMOVE(&x->q, mi, mi_link);
+  rstr_release(mi->mi_value);
+  rstr_release(mi->mi_title);
+  if(mi->mi_item != NULL) {
+    prop_destroy(mi->mi_item);
+    prop_ref_dec(mi->mi_item);
+  }
+  free(mi);
+}
+
+
+/**
+ *
+ */
+static void
+glwf_multiopt_dtor(glw_root_t *gr, struct token *self)
+{
+  glwf_multiopt_extra_t *x = self->t_extra;
+  multiopt_item_t *mi;
+  while((mi = TAILQ_FIRST(&x->q)) != NULL)
+    multiopt_item_destroy(x, mi);
+
+  prop_ref_dec(x->settings);
+  prop_ref_dec(x->opts);
+  prop_ref_dec(x->title);
+  prop_destroy(x->value);
+  prop_unsubscribe(x->sub);
+  free(x);
+}
+
+
+/**
+ * 
+ */
+static int 
+glwf_multiopt(glw_view_eval_context_t *ec, struct token *self,
+		token_t **argv, unsigned int argc)
+{
+  token_t *dst, *setting, *title;
+  glwf_multiopt_extra_t *x = self->t_extra;
+  int i;
+  multiopt_item_t *mi, *n;
+  prop_t *p;
+
+  if(argc < 3)
+    return glw_view_seterr(ec->ei, self, 
+			   "multiopt(): Invalid number of args");
+  if((dst     = resolve_property_name2(ec, argv[0])) == NULL)
+    return -1;
+  if((setting = resolve_property_name2(ec, argv[1])) == NULL)
+    return -1;
+
+  if((title = token_resolve(ec, argv[2])) == NULL)
+    return -1;
+
+  p = setting->t_prop;
+
+  if(p != x->settings) {
+
+    TAILQ_FOREACH(mi, &x->q, mi_link) {
+      if(mi->mi_item != NULL) {
+	prop_ref_dec(mi->mi_item);
+	mi->mi_item = NULL;
+      }
+    }
+
+    if(x->settings != NULL) {
+      prop_destroy_childs(x->settings);
+      prop_ref_dec(x->settings);
+      prop_ref_dec(x->opts);
+      prop_ref_dec(x->title);
+      x->settings = NULL;
+      x->opts = NULL;
+      x->title = NULL;
+    }
+
+    prop_unsubscribe(x->sub);
+    x->sub = NULL;
+
+    x->settings = prop_ref_inc(p);
+
+    if(p != NULL) {
+
+      x->title = prop_create_r(prop_create(p, "metadata"), "title");
+      prop_set(p, "type", NULL, PROP_SET_STRING, "multiopt");
+      
+      x->opts = prop_create_r(p, "options");
+
+      x->sub = prop_subscribe(PROP_SUB_NO_INITIAL_UPDATE,
+			      PROP_TAG_CALLBACK, multiopt_item_cb, x, 
+			      PROP_TAG_ROOT, x->opts, 
+			      PROP_TAG_COURIER, ec->w->glw_root->gr_courier,
+			      NULL);
+    }
+  }
+
+  if(title->type == TOKEN_RSTRING)
+    prop_set_rstring(x->title, title->t_rstring);
+
+  TAILQ_FOREACH(mi, &x->q, mi_link)
+    mi->mi_mark = 1;
+
+  argv += 3;
+  argc -= 3;
+
+
+  for(i = 0; i < argc; i++) {
+    token_t *d;
+
+    if((d = token_resolve(ec, argv[i])) == NULL)
+      return -1;
+
+    if(d->type != TOKEN_LINK)
+      continue;
+
+    TAILQ_FOREACH(mi, &x->q, mi_link)
+      if(!strcmp(rstr_get(d->t_link_rurl), rstr_get(mi->mi_value)))
+	break;
+    
+    if(mi == NULL) {
+      mi = calloc(1, sizeof(multiopt_item_t));
+      mi->mi_value = rstr_dup(d->t_link_rurl);
+    } else {
+      TAILQ_REMOVE(&x->q, mi, mi_link);
+      mi->mi_mark = 0;
+    }
+    rstr_set(&mi->mi_title, d->t_link_rtitle);
+    TAILQ_INSERT_TAIL(&x->q, mi, mi_link);
+  }
+
+  for(mi = TAILQ_FIRST(&x->q); mi != NULL; mi = n) {
+    n = TAILQ_NEXT(mi, mi_link);
+    if(mi->mi_mark)
+      multiopt_item_destroy(x, mi);
+  }
+
+  // Insert into settings
+
+  if(x->opts != NULL) {
+    TAILQ_FOREACH(mi, &x->q, mi_link) {
+
+      if(mi->mi_item == NULL) {
+	prop_t *q = prop_create_root(rstr_get(mi->mi_value));
+	prop_set_rstring(prop_create(q, "title"), mi->mi_title);
+	mi->mi_item = prop_ref_inc(q);
+
+	if(prop_set_parent(q, x->opts)) {
+	  prop_destroy(q);
+	  prop_ref_dec(mi->mi_item);
+	  mi->mi_item = NULL;
+	}
+
+      } else {
+	prop_move(mi->mi_item, NULL);
+      }
+    }
+  }
+
+  x->cur = TAILQ_FIRST(&x->q);
+  if(x->cur != NULL)
+    prop_select(x->cur->mi_item);
+
+  prop_link(x->value, dst->t_prop);
+  ec->dynamic_eval |= GLW_VIEW_DYNAMIC_KEEP;
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int 
+glwf_canSelectNext(glw_view_eval_context_t *ec, struct token *self,
+		   token_t **argv, unsigned int argc)
+{
+  token_t *r = eval_alloc(self, ec, TOKEN_INT);
+  glw_t *w = ec->w;
+   
+  r->t_int = w->glw_class->gc_can_select_child != NULL &&
+    w->glw_class->gc_can_select_child(w, 1);
+  ec->dynamic_eval |= GLW_VIEW_DYNAMIC_EVAL_WIDGET_META;
+  eval_push(ec, r);
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int 
+glwf_canSelectPrev(glw_view_eval_context_t *ec, struct token *self,
+		   token_t **argv, unsigned int argc)
+{
+  token_t *r = eval_alloc(self, ec, TOKEN_INT);
+  glw_t *w = ec->w;
+   
+  r->t_int = w->glw_class->gc_can_select_child != NULL &&
+    w->glw_class->gc_can_select_child(w, 0);
+  ec->dynamic_eval |= GLW_VIEW_DYNAMIC_EVAL_WIDGET_META;
+  eval_push(ec, r);
+  return 0;
+}
+
+
 /**
  *
  */
@@ -4800,6 +5257,7 @@ static const token_func_t funcvec[] = {
   {"settingBool", 4, glw_settingBool, glwf_null_ctor, glwf_setting_dtor},
   {"isLink", 1, glwf_isLink},
   {"sin", 1, glwf_sin},
+  {"sinewave", 1, glwf_sinewave},
   {"monotime", 0, glwf_monotime},
   {"delay", 3, glwf_delay, glwf_delay_ctor, glwf_delay_dtor},
   {"isReady", 0, glwf_isReady},
@@ -4819,6 +5277,11 @@ static const token_func_t funcvec[] = {
   {"join", -1, glwf_join},
   {"fmt", -1, glwf_fmt},
   {"_pl", 3, glwf_pluralise},
+  {"loadFont", 1, glw_loadFont, glwf_null_ctor, glwf_loadfont_dtor},
+  {"multiopt", -1, glwf_multiopt, glwf_multiopt_ctor, glwf_multiopt_dtor},
+  {"link", 2, glwf_link},
+  {"canSelectNext", 0, glwf_canSelectNext},
+  {"canSelectPrevious", 0, glwf_canSelectPrev},
 };
 
 

@@ -140,7 +140,7 @@ reposition(glw_rctx_t *rc, int left, int top, int right, int bottom)
  *
  */
 static void
-glw_coverflow_render(glw_t *w, glw_rctx_t *rc)
+glw_coverflow_render(glw_t *w, const glw_rctx_t *rc)
 {
   glw_t *c, *p, *n;
   struct glw_queue rqueue;
@@ -262,6 +262,8 @@ glw_coverflow_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
   case GLW_SIGNAL_CHILD_DESTROYED:
     if(gc->scroll_to_me == extra)
       gc->scroll_to_me = NULL;
+    if(gc->rstart == extra)
+      gc->rstart = NULL;
     update_focus_distance(gc, extra);
     break;
   }

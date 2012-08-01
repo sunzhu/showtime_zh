@@ -45,7 +45,7 @@ typedef struct {
 static void
 clear_constraints(glw_t *w)
 {
-  glw_set_constraints(w, 0, 0, 0, GLW_CONSTRAINT_X | GLW_CONSTRAINT_Y, 0);
+  glw_set_constraints(w, 0, 0, 0, GLW_CONSTRAINT_X | GLW_CONSTRAINT_Y);
 }
 
 
@@ -107,6 +107,8 @@ deck_select_child(glw_t *w, glw_t *c, prop_t *origin)
   if(gd->efx_conf != GLW_TRANS_NONE &&
      (gd->prev != NULL || !(w->glw_flags & GLW_NO_INITIAL_TRANS)))
     gd->v = 0;
+
+  glw_signal0(w, GLW_SIGNAL_RESELECT_CHANGED, NULL);
 }
 
 
@@ -195,7 +197,7 @@ glw_deck_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
  *
  */
 static void
-deck_render(glw_rctx_t *rc, glw_deck_t *gd, glw_t *w, float v)
+deck_render(const glw_rctx_t *rc, glw_deck_t *gd, glw_t *w, float v)
 {
   if(gd->efx_conf != GLW_TRANS_NONE) {
     glw_rctx_t rc0 = *rc;
@@ -214,7 +216,7 @@ deck_render(glw_rctx_t *rc, glw_deck_t *gd, glw_t *w, float v)
  *
  */
 static void 
-glw_deck_render(glw_t *w, glw_rctx_t *rc)
+glw_deck_render(glw_t *w, const glw_rctx_t *rc)
 {
   glw_deck_t *gd = (glw_deck_t *)w;
 
@@ -241,6 +243,18 @@ set_page(glw_deck_t *gd, int n)
       break;
   }
   deck_select_child(&gd->w, c, NULL);
+}
+
+
+/**
+ *
+ */
+static int
+deck_can_select_child(glw_t *w, int next)
+{
+  glw_t *c = w->glw_selected;
+  return c != NULL && (next ? glw_get_next_n(c, 1) :
+		       glw_get_prev_n(c, 1));
 }
 
 
@@ -297,6 +311,7 @@ static glw_class_t glw_deck = {
   .gc_ctor = glw_deck_ctor,
   .gc_signal_handler = glw_deck_callback,
   .gc_select_child = deck_select_child,
+  .gc_can_select_child = deck_can_select_child,
 };
 
 GLW_REGISTER_CLASS(glw_deck);

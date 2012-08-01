@@ -27,8 +27,6 @@
 
 #include "glw.h"
 
-#define GLW_VIEW_ERRORINFO
-
 /**
  * 
  */
@@ -63,6 +61,7 @@ typedef enum {
   TOKEN_NULL_COALESCE,         // ??
   TOKEN_LT,                    // <
   TOKEN_GT,                    // >
+  TOKEN_COLON,                 // :
   TOKEN_RSTRING,               // A ref allocated string
   TOKEN_CSTRING,               // A compile time constant string
   TOKEN_FLOAT,
@@ -101,10 +100,8 @@ typedef struct token {
   struct token *child;  /* Childs */
   void *tmp;            /* Temporary link, used for various things */
 
-#ifdef GLW_VIEW_ERRORINFO
   rstr_t *file;
   int line;
-#endif
 
   token_type_t type;
   int t_num_args;

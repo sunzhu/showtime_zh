@@ -188,7 +188,7 @@ htsp_recv(htsp_connection_t *hc)
   uint8_t len[4];
   uint32_t l;
 
-  if(tc->read(tc, len, 4, 1) < 0)
+  if(tc->read(tc, len, 4, 1, NULL, NULL) < 0)
     return NULL;
   
   l = (len[0] << 24) | (len[1] << 16) | (len[2] << 8) | len[3];
@@ -197,7 +197,7 @@ htsp_recv(htsp_connection_t *hc)
 
   buf = malloc(l);
 
-  if(buf == NULL || tc->read(tc, buf, l, 1) < 0) {
+  if(buf == NULL || tc->read(tc, buf, l, 1, NULL, NULL) < 0) {
     free(buf);
     return NULL;
   }
@@ -1174,7 +1174,7 @@ make_model(prop_t *parent, const char *title, prop_t *nodes)
   pnf = prop_nf_create(prop_create(model, "nodes"),
 		       nodes,
 		       prop_create(model, "filter"),
-		       NULL, PROP_NF_AUTODESTROY);
+		       PROP_NF_AUTODESTROY);
   prop_set_int(prop_create(model, "canFilter"), 1);
 
   prop_nf_release(pnf);
@@ -1199,7 +1199,7 @@ make_model2(prop_t *parent, prop_t *sourcemodel)
   pnf = prop_nf_create(prop_create(model, "nodes"),
 		       prop_create(sourcemodel, "nodes"),
 		       prop_create(model, "filter"),
-		       NULL, PROP_NF_AUTODESTROY);
+		       PROP_NF_AUTODESTROY);
   prop_set_int(prop_create(model, "canFilter"), 1);
 
   prop_nf_release(pnf);
@@ -1534,12 +1534,12 @@ htsp_subscriber(htsp_connection_t *hc, htsp_subscription_t *hs,
       htsmsg_destroy(m);
 
     } else if(event_is_action(e, ACTION_PREV_CHANNEL) ||
-	      event_is_action(e, ACTION_PREV_TRACK)) {
+	      event_is_action(e, ACTION_SKIP_BACKWARD)) {
 
       chid = zap_channel(hc, hs, chid, errbuf, errlen, tag, -1, &name);
 
     } else if(event_is_action(e, ACTION_NEXT_CHANNEL) ||
-	      event_is_action(e, ACTION_NEXT_TRACK)) {
+	      event_is_action(e, ACTION_SKIP_FORWARD)) {
 
       chid = zap_channel(hc, hs, chid, errbuf, errlen, tag, 1, &name);
 
@@ -1730,6 +1730,9 @@ htsp_mux_input(htsp_connection_t *hc, htsmsg_t *m)
       memcpy(mb->mb_data, bin, binlen);
   
       mb->mb_size = binlen;
+
+      if(mb->mb_data_type == MB_SUBTITLE)
+	mb->mb_font_context = 0;
 
       if(mb_enqueue_no_block(mp, hss->hss_mq, mb,
 			     mb->mb_data_type == MB_SUBTITLE ? 

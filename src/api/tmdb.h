@@ -15,13 +15,15 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#pragma once
 
-#ifndef TMDB_H__
-#define TMDB_H__
+int64_t tmdb_query_by_title_and_year(void *db, const char *item_url, 
+				     const char *title, int year,
+				     int duration);
 
-struct htsmsg;
+int64_t tmdb_query_by_imdb_id(void *db, const char *item_url, 
+			      const char *imdb_id,
+			      int duration);
 
-struct htsmsg *
-tmdb_query_by_hash(uint64_t hash, char *errbuf, size_t errlen);
+void tmdb_init(void);
 
-#endif // TMDB_H__

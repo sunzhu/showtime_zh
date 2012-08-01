@@ -199,10 +199,10 @@ http_connection_get(const char *hostname, int port, int ssl,
  *
  */
 static void
-http_connection_destroy(http_connection_t *hc, int dbg)
+http_connection_destroy(http_connection_t *hc, int dbg, const char *reason)
 {
-  HTTP_TRACE(dbg, "Disconnected from %s:%d (id=%d)",
-	     hc->hc_hostname, hc->hc_port, hc->hc_id);
+  HTTP_TRACE(dbg, "Disconnected from %s:%d (id=%d) %s",
+	     hc->hc_hostname, hc->hc_port, hc->hc_id, reason);
   tcp_close(hc->hc_tc);
   free(hc);
 }
@@ -222,7 +222,7 @@ http_connection_park(http_connection_t *hc, int dbg)
   if(http_parked_connections == 5) {
     hc = TAILQ_FIRST(&http_connections);
     TAILQ_REMOVE(&http_connections, hc, hc_link);
-    http_connection_destroy(hc, dbg);
+    http_connection_destroy(hc, dbg, "Too many idle connections");
   } else {
     http_parked_connections++;
   }
@@ -515,7 +515,7 @@ typedef struct http_file {
 } http_file_t;
 
 
-static void http_detach(http_file_t *hf, int reusable);
+static void http_detach(http_file_t *hf, int reusable, const char *reason);
 
 
 
@@ -798,6 +798,8 @@ http_headers_init(struct http_header_list *l, const http_file_t *hf)
     http_header_add(l, "Accept-Encoding", "gzip", 0);
   else
     http_header_add(l, "Accept-Encoding", "identity", 0);
+
+  http_header_add(l, "Accept", "*/*", 0);
   
   http_header_add(l, "Connection",
 		  hf->hf_want_close ? "close" : "keep-alive", 0);
@@ -890,14 +892,14 @@ http_read_content(http_file_t *hf)
 
       if(csize > 0) {
 	buf = myrealloc(buf, s + csize + 1);
-	if(tcp_read_data(hc->hc_tc, buf + s, csize))
+	if(tcp_read_data(hc->hc_tc, buf + s, csize, NULL, 0))
 	  break;
 
 	s += csize;
 	buf[s] = 0;
       }
 
-      if(tcp_read_data(hc->hc_tc, chunkheader, 2))
+      if(tcp_read_data(hc->hc_tc, chunkheader, 2, NULL, 0))
 	break;
 
       if(csize == 0) {
@@ -916,7 +918,7 @@ http_read_content(http_file_t *hf)
     return NULL;
   buf[s] = 0;
   
-  if(tcp_read_data(hc->hc_tc, buf, s)) {
+  if(tcp_read_data(hc->hc_tc, buf, s, NULL, 0)) {
     free(buf);
     return NULL;
   }
@@ -942,7 +944,7 @@ http_drain_content(http_file_t *hf)
   free(buf);
 
   if(hf->hf_connection_mode == CONNECTION_MODE_CLOSE)
-    http_detach(hf, 0);
+    http_detach(hf, 0, "Connection-mode = close");
 
   return 0;
 }
@@ -958,7 +960,7 @@ hf_drain_bytes(http_file_t *hf, int64_t bytes)
   http_connection_t *hc = hf->hf_connection;
 
   if(!hf->hf_chunked_transfer)
-    return tcp_read_data(hc->hc_tc, NULL, bytes);
+    return tcp_read_data(hc->hc_tc, NULL, bytes, NULL, NULL);
   
   while(bytes > 0) {
     if(hf->hf_chunk_size == 0) {
@@ -970,14 +972,14 @@ hf_drain_bytes(http_file_t *hf, int64_t bytes)
 
     size_t read_size = MIN(bytes, hf->hf_chunk_size);
     if(read_size > 0)
-      if(tcp_read_data(hc->hc_tc, NULL, read_size))
+      if(tcp_read_data(hc->hc_tc, NULL, read_size, NULL, NULL))
 	return -1;
 
     bytes -= read_size;
     hf->hf_chunk_size -= read_size;
 
     if(hf->hf_chunk_size == 0) {
-      if(tcp_read_data(hc->hc_tc, chunkheader, 2))
+      if(tcp_read_data(hc->hc_tc, chunkheader, 2, NULL, NULL))
 	return -1;
     }
   }
@@ -1166,7 +1168,7 @@ http_read_response(http_file_t *hf, struct http_header_list *headers)
  *
  */
 static void
-http_detach(http_file_t *hf, int reusable)
+http_detach(http_file_t *hf, int reusable, const char *reason)
 {
   if(hf->hf_connection == NULL)
     return;
@@ -1174,7 +1176,7 @@ http_detach(http_file_t *hf, int reusable)
   if(reusable) {
     http_connection_park(hf->hf_connection, hf->hf_debug);
   } else {
-    http_connection_destroy(hf->hf_connection, hf->hf_debug);
+    http_connection_destroy(hf->hf_connection, hf->hf_debug, reason);
   }
   hf->hf_connection = NULL;
 }
@@ -1222,7 +1224,8 @@ redirect(http_file_t *hf, int *redircount, char *errbuf, size_t errlen,
   // Location changed, must detach from connection
   // We might still be able to reuse it if hostname+port is same
   // But that's for some other code to figure out
-  http_detach(hf, hf->hf_connection_mode == CONNECTION_MODE_PERSISTENT);
+  http_detach(hf, hf->hf_connection_mode == CONNECTION_MODE_PERSISTENT,
+	      "Location changed");
   return 0;
 }
 
@@ -1308,7 +1311,7 @@ http_connect(http_file_t *hf, char *errbuf, int errlen)
   hf->hf_rsize = 0;
 
   if(hf->hf_connection != NULL)
-    http_detach(hf, 0);
+    http_detach(hf, 0, "Reconnect");
 
   url = hf->hf_url;
 
@@ -1398,7 +1401,7 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
 
   code = http_read_response(hf, NULL);
   if(code == -1 && hf->hf_connection->hc_reused) {
-    http_detach(hf, 0);
+    http_detach(hf, 0, "Read error on reused connection, retrying");
     goto reconnect;
   }
 
@@ -1436,7 +1439,7 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
     hf->hf_rsize = 0;
 
     if(hf->hf_connection_mode == CONNECTION_MODE_CLOSE)
-      http_detach(hf, 0);
+      http_detach(hf, 0, "Head request");
 
     return 0;
     
@@ -1459,7 +1462,7 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
       return -1;
 
     if(hf->hf_connection_mode == CONNECTION_MODE_CLOSE)
-      http_detach(hf, 0);
+      http_detach(hf, 0, "Redirect");
 
     goto reconnect;
 
@@ -1470,7 +1473,7 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
       return -1;
 
     if(hf->hf_connection_mode == CONNECTION_MODE_CLOSE) {
-      http_detach(hf, 0);
+      http_detach(hf, 0, "Connection-mode = close");
       goto reconnect;
     }
 
@@ -1505,7 +1508,8 @@ http_destroy(http_file_t *hf)
 {
   http_detach(hf, 
 	      hf->hf_rsize == 0 &&
-	      hf->hf_connection_mode == CONNECTION_MODE_PERSISTENT);
+	      hf->hf_connection_mode == CONNECTION_MODE_PERSISTENT,
+	      "Request destroyed");
   free(hf->hf_url);
   free(hf->hf_auth);
   free(hf->hf_auth_realm);
@@ -1620,7 +1624,7 @@ again:
   tcp_write_queue(hf->hf_connection->hc_tc, &q);
   code = http_read_response(hf, NULL);
   if(code == -1 && hf->hf_connection->hc_reused) {
-    http_detach(hf, 0);
+    http_detach(hf, 0, "Read error on reused connection");
     goto reconnect;
   }
   
@@ -1636,7 +1640,7 @@ again:
       free(buf);
 
       if(hf->hf_connection_mode == CONNECTION_MODE_CLOSE)
-	http_detach(hf, 0);
+	http_detach(hf, 0, "Connection-mode = close");
 
       return retval;
       
@@ -1833,7 +1837,7 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
 		"Skipping by reading %"PRId64" bytes", hf->hf_pos);
 
 	  if(hf_drain_bytes(hf, hf->hf_pos)) {
-	    http_detach(hf, 0);
+	    http_detach(hf, 0, "Read error during drain");
 	    continue;
 	  }
 	}
@@ -1843,7 +1847,7 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
 	TRACE(TRACE_DEBUG, "HTTP", 
 	      "Read error (%d) [%s] filesize %lld -- retrying", code,
 	      range, hf->hf_filesize);
-	http_detach(hf, 0);
+	http_detach(hf, 0, "Read error");
 	continue;
       }
 
@@ -1865,9 +1869,9 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
 
     if(read_size > 0) {
       assert(totsize + read_size <= size);
-      if(tcp_read_data(hc->hc_tc, buf + totsize, read_size)) {
+      if(tcp_read_data(hc->hc_tc, buf + totsize, read_size, NULL, NULL)) {
 	// Fail but we can retry a couple of times
-	http_detach(hf, 0);
+	http_detach(hf, 0, "Read error during fa_read()");
 	continue;
       }
 
@@ -1885,7 +1889,7 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
       hf->hf_chunk_size -= read_size;
 
       if(hf->hf_chunk_size == 0) {
-	if(tcp_read_data(hc->hc_tc, chunkheader, 2))
+	if(tcp_read_data(hc->hc_tc, chunkheader, 2, NULL, NULL))
 	  goto bad;
       }
     }
@@ -1894,7 +1898,7 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
       return totsize;
       
     if(hf->hf_rsize == 0 && hf->hf_connection_mode == CONNECTION_MODE_CLOSE) {
-      http_detach(hf, 0);
+      http_detach(hf, 0, "Connection-mode = close");
       return totsize;
     }
 
@@ -1905,7 +1909,7 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
     return totsize;
   }
  bad:
-  http_detach(hf, 0);
+  http_detach(hf, 0, "Error during fa_read()");
   return -1;
 }
 
@@ -1995,7 +1999,7 @@ http_seek(fa_handle_t *handle, int64_t pos, int whence)
 	}
       }
       // Still got stale data on the socket, disconnect
-      http_detach(hf, 0);
+      http_detach(hf, 0, "Seeking during streaming");
     }
   }
   hf->hf_pos = np;
@@ -2052,7 +2056,8 @@ http_stat(fa_protocol_t *fap, const char *url, struct fa_stat *fs,
 static void *
 http_load(struct fa_protocol *fap, const char *url,
 	  size_t *sizep, char *errbuf, size_t errlen,
-	  char **etag, time_t *mtime, int *max_age)
+	  char **etag, time_t *mtime, int *max_age,
+	  int flags, fa_load_cb_t *cb, void *opaque)
 {
   char *res;
   int err;
@@ -2074,8 +2079,9 @@ http_load(struct fa_protocol *fap, const char *url,
   }
 
   err = http_request(url, NULL, &res, sizep, errbuf, errlen, NULL, NULL,
-		     0, // mtime ? HTTP_REQUEST_DEBUG : 0,
-		     &headers_out, &headers_in, NULL);
+		     flags,
+		     &headers_out, &headers_in, NULL,
+		     cb, opaque);
   if(err == -1) {
     res = NULL;
     goto done;
@@ -2442,7 +2448,7 @@ dav_propfind(http_file_t *hf, fa_dir_t *fd, char *errbuf, size_t errlen,
     code = http_read_response(hf, NULL);
 
     if(code == -1) {
-      http_detach(hf, 0);
+      http_detach(hf, 0, "Read error");
       continue;
     }
 
@@ -2579,6 +2585,27 @@ static fa_protocol_t fa_protocol_webdavs = {
 };
 FAP_REGISTER(webdavs);
 
+
+
+typedef struct http_read_aux {
+  size_t total;
+  fa_load_cb_t *cb;
+  void *opaque;
+} http_read_aux_t;
+
+/**
+ *
+ */
+static int
+http_request_partial(void *opaque, int amount)
+{
+  http_read_aux_t *hra = opaque;
+
+  if(hra->cb != NULL)
+    return hra->cb(hra->opaque, amount, hra->total);
+  return 0;
+}
+
 /**
  *
  */
@@ -2588,19 +2615,24 @@ http_request(const char *url, const char **arguments,
 	     char *errbuf, size_t errlen,
 	     htsbuf_queue_t *postdata, const char *postcontenttype,
 	     int flags, struct http_header_list *headers_out,
-	     const struct http_header_list *headers_in, const char *method)
+	     const struct http_header_list *headers_in, const char *method,
+	     fa_load_cb_t *cb, void *opaque)
 {
   http_file_t *hf = calloc(1, sizeof(http_file_t));
   htsbuf_queue_t q;
   int code, r;
   int redircount = 0;
   struct http_header_list headers;
+  http_read_aux_t hra;
+
+  hra.cb = cb;
+  hra.opaque = opaque;
 
   if(headers_out != NULL)
     LIST_INIT(headers_out);
   hf->hf_version = 1;
-  hf->hf_debug = !!(flags & HTTP_REQUEST_DEBUG);
-  hf->hf_req_compression = !!(flags & HTTP_COMPRESSION);
+  hf->hf_debug = !!(flags & FA_DEBUG);
+  hf->hf_req_compression = !!(flags & FA_COMPRESSION);
   hf->hf_url = strdup(url);
 
  retry:
@@ -2650,7 +2682,7 @@ http_request(const char *url, const char **arguments,
   if(postcontenttype != NULL) 
     http_header_add(&headers, "Content-Type", postcontenttype, 0);
 
-  if(!(flags & HTTP_DISABLE_AUTH))
+  if(!(flags & FA_DISABLE_AUTH))
     http_headers_auth(&headers, hf, m, arguments);
 
   http_cookie_append(hc->hc_hostname, hf->hf_path, &headers);
@@ -2670,7 +2702,7 @@ http_request(const char *url, const char **arguments,
 
   code = http_read_response(hf, headers_out);
   if(code == -1 && hf->hf_connection->hc_reused) {
-    http_detach(hf, 0);
+    http_detach(hf, 0, "Read error on reused connection");
     goto retry;
   }
 
@@ -2699,7 +2731,7 @@ http_request(const char *url, const char **arguments,
     // FALLTHRU
   case 301:
   case 307:
-    if(flags & HTTP_NOFOLLOW)
+    if(flags & FA_NOFOLLOW)
       break;
 
     if(redirect(hf, &redircount, errbuf, errlen, code, !no_content)) {
@@ -2764,7 +2796,7 @@ http_request(const char *url, const char **arguments,
 
 	  int zr = inflate(&z, r < 0 ? Z_FINISH : Z_NO_FLUSH);
 	  if(zr < 0) {
-	    snprintf(errbuf, errlen, "zlib error %d", zr);
+	    snprintf(errbuf, errlen, "zlib error %d (connection: close)", zr);
 	    free(mem);
 	    goto error;
 	  }
@@ -2808,6 +2840,8 @@ http_request(const char *url, const char **arguments,
     char *buf = NULL;
     size_t size = 0;
 
+    hra.total = 0;
+
     if(hf->hf_chunked_transfer) {
       char chunkheader[100];
 
@@ -2825,12 +2859,13 @@ http_request(const char *url, const char **arguments,
 	    snprintf(errbuf, errlen, "Out of memory (%zd)", size + csize + 1);
 	    goto error;
 	  }
-	  if(tcp_read_data(hc->hc_tc, buf + size, csize))
+	  if(tcp_read_data(hc->hc_tc, buf + size, csize,
+			   http_request_partial, &hra))
 	    break;
 
 	  size += csize;
 	}
-	if(tcp_read_data(hc->hc_tc, chunkheader, 2))
+	if(tcp_read_data(hc->hc_tc, chunkheader, 2, NULL, 0))
 	  break;
 
 	if(csize == 0)
@@ -2845,11 +2880,11 @@ http_request(const char *url, const char **arguments,
       size = hf->hf_filesize;
       buf = mymalloc(hf->hf_filesize + 1);
       if(buf == NULL) {
-	snprintf(errbuf, errlen, "Out of memory (%zd)", hf->hf_filesize + 1);
+	snprintf(errbuf, errlen, "Out of memory (%"PRId64")", hf->hf_filesize + 1);
 	goto error;
       }
-      r = tcp_read_data(hc->hc_tc, buf, hf->hf_filesize);
-      
+      r = tcp_read_data(hc->hc_tc, buf, hf->hf_filesize,
+			http_request_partial, &hra);
       if(r == -1) {
 	snprintf(errbuf, errlen, "HTTP read error");
 	free(buf);
@@ -2869,7 +2904,8 @@ http_request(const char *url, const char **arguments,
       while(1) {
 	int zr = inflate(&z, 0);
 	if(zr < 0) {
-	  snprintf(errbuf, errlen, "zlib error %d", zr);
+	  snprintf(errbuf, errlen, "zlib error %d (%d %d)", zr,
+		   z.avail_in, z.avail_out);
 	  free(buf);
 	  free(buf2);
 	  goto error;
@@ -2881,8 +2917,8 @@ http_request(const char *url, const char **arguments,
 	if(z.avail_out == 0) {
 	  buf2 = myrealloc(buf2, z.total_out * 2 + 1);
 	  if(buf2 == NULL) {
-	    snprintf(errbuf, errlen, "Out of memory (%zd)",
-		     z.total_out * 2 + 1);
+	    snprintf(errbuf, errlen, "Out of memory (%"PRId64")",
+		     (int64_t)(z.total_out * 2 + 1));
 	    goto error;
 	  }
 	  z.next_out = buf2 + z.total_out;
@@ -2908,6 +2944,7 @@ http_request(const char *url, const char **arguments,
   if(hf->hf_content_encoding == HTTP_CE_GZIP)
     inflateEnd(&z);
 
+  hf->hf_rsize = 0;
   http_destroy(hf);
   return 0;
   

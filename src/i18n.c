@@ -58,7 +58,8 @@ void
 i18n_init(void)
 {
   prop_t *s = settings_add_dir(NULL, _p("Languages"), NULL, NULL,
-			       _p("Preferred languages"));
+			       _p("Preferred languages"),
+			       "settings:i18n");
   setting_t *x;
   int i;
 
@@ -453,7 +454,8 @@ static void
 nls_load_lang(const char *path)
 {
   char errbuf[200];
-  char *data = fa_load(path, NULL, NULL, errbuf, sizeof(errbuf), NULL);
+  char *data = fa_load(path, NULL, NULL, errbuf, sizeof(errbuf), NULL, 0,
+		       NULL, NULL);
 
   if(data == NULL) {
     TRACE(TRACE_ERROR, "NLS", "Unable to load %s -- %s", path, errbuf);
@@ -491,7 +493,8 @@ nls_lang_metadata(const char *path, char *errbuf, size_t errlen,
 		  char *language, size_t languagesize,
 		  char *native, size_t nativesize)
 {
-  char *data = fa_load(path, NULL, NULL, errbuf, errlen, NULL);
+  char *data = fa_load(path, NULL, NULL, errbuf, errlen, NULL, 0,
+		       NULL, NULL);
   char *s;
   const char *s2;
   if(data == NULL)
@@ -607,21 +610,21 @@ nls_init(prop_t *parent, htsmsg_t *store)
   LIST_INIT(&list);
 
   TAILQ_FOREACH(fde, &fd->fd_entries, fde_link) {
-
-    if(fde->fde_filename[strlen(fde->fde_filename) - 1] == '~')
+    const char *filename = rstr_get(fde->fde_filename);
+    if(filename[strlen(filename) - 1] == '~')
       continue;
 
-    snprintf(buf, sizeof(buf), "%s", fde->fde_filename);
+    snprintf(buf, sizeof(buf), "%s", filename);
     if((e = strstr(buf, ".lang")) == NULL)
       continue;
     *e = 0;
 
-    if(nls_lang_metadata(fde->fde_url, 
+    if(nls_lang_metadata(rstr_get(fde->fde_url), 
 			 buf2, sizeof(buf2),
 			 language, sizeof(language), 
 			 native, sizeof(native))) {
       TRACE(TRACE_ERROR, "i18n", "Unable to load language from %s -- %s",
-	    fde->fde_url, buf2);
+	    rstr_get(fde->fde_url), buf2);
       continue;
     }
     l = alloca(sizeof(lang_t));

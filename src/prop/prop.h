@@ -24,7 +24,6 @@
 #include "event.h"
 #include "arch/threads.h"
 #include "misc/queue.h"
-#include "htsmsg/htsmsg.h"
 #include "misc/rstr.h"
 
 // #define PROP_DEBUG
@@ -52,6 +51,7 @@ typedef struct prop_vec {
 
 typedef enum {
   PROP_SET_VOID,
+  PROP_SET_STRING,
   PROP_SET_RSTRING,
   PROP_SET_CSTRING,
   PROP_SET_INT,
@@ -73,6 +73,7 @@ typedef enum {
   PROP_SUBSCRIPTION_MONITOR_ACTIVE,
   PROP_HAVE_MORE_CHILDS,
   PROP_WANT_MORE_CHILDS,
+  PROP_SUGGEST_FOCUS,
 } prop_event_t;
 
 
@@ -108,6 +109,10 @@ void prop_init(void);
  */
 #define PNVEC(name...) (const char *[]){name, NULL}
 
+
+/**
+ * Prop flags
+ */
 #define PROP_SUB_DIRECT_UPDATE 0x1
 #define PROP_SUB_NO_INITIAL_UPDATE 0x2
 #define PROP_SUB_TRACK_DESTROY 0x4
@@ -118,7 +123,10 @@ void prop_init(void);
 #define PROP_SUB_INTERNAL             0x80
 #define PROP_SUB_DONTLOCK             0x100
 #define PROP_SUB_IGNORE_VOID          0x200
-#define PROP_SUB_AUTO_DESTROY         0x400
+#define PROP_SUB_TRACK_DESTROY_EXP    0x400
+#define PROP_SUB_SINGLETON            0x800
+// Remember that flags field is uint16_t in prop_i.h so don't go above 0x8000
+
 
 enum {
   PROP_TAG_END = 0,
@@ -146,11 +154,14 @@ prop_sub_t *prop_subscribe(int flags, ...) __attribute__((__sentinel__(0)));
 void prop_unsubscribe(prop_sub_t *s);
 
 prop_t *prop_create_ex(prop_t *parent, const char *name,
-		       prop_sub_t *skipme, int noalloc)
+		       prop_sub_t *skipme, int noalloc, int incref)
      __attribute__ ((malloc)) __attribute__((nonnull (1)));
 
 #define prop_create(parent, name) \
-  prop_create_ex(parent, name, NULL, __builtin_constant_p(name))
+  prop_create_ex(parent, name, NULL, __builtin_constant_p(name), 0)
+
+#define prop_create_r(parent, name) \
+  prop_create_ex(parent, name, NULL, __builtin_constant_p(name), 1)
 
 prop_t *prop_create_root_ex(const char *name, int noalloc)
   __attribute__ ((malloc));
@@ -168,11 +179,14 @@ int prop_compare(const prop_t *a, const prop_t *b);
 
 void prop_move(prop_t *p, prop_t *before);
 
+void prop_set_ex(prop_sub_t *skipme, prop_t *p, ...);
+
+#define prop_set(p...) prop_set_ex(NULL, p)
+
 void prop_set_string_ex(prop_t *p, prop_sub_t *skipme, const char *str,
 			prop_str_type_t type);
 
-void prop_set_rstring_ex(prop_t *p, prop_sub_t *skipme, rstr_t *rstr,
-			 int noupdate);
+void prop_set_rstring_ex(prop_t *p, prop_sub_t *skipme, rstr_t *rstr);
 
 void prop_set_cstring_ex(prop_t *p, prop_sub_t *skipme, const char *str);
 
@@ -224,11 +238,11 @@ void prop_set_link_ex(prop_t *p, prop_sub_t *skipme, const char *title,
 
 #define prop_set_link(p, title, link) prop_set_link_ex(p, NULL, title, link)
 
-#define prop_set_rstring(p, rstr) prop_set_rstring_ex(p, NULL, rstr, 0)
+#define prop_set_rstring(p, rstr) prop_set_rstring_ex(p, NULL, rstr)
 
 #define prop_set_cstring(p, cstr) prop_set_cstring_ex(p, NULL, cstr)
 
-rstr_t *prop_get_string(prop_t *p);
+rstr_t *prop_get_string(prop_t *p, ...) __attribute__((__sentinel__(0)));
 
 char **prop_get_name_of_childs(prop_t *p);
 
@@ -295,6 +309,8 @@ void prop_unselect_ex(prop_t *parent, prop_sub_t *skipme);
 
 #define prop_unselect(parent) prop_unselect_ex(parent, NULL)
 
+void prop_suggest_focus(prop_t *p);
+
 void prop_destroy_childs(prop_t *parent);
 
 prop_t *prop_get_by_name(const char **name, int follow_symlinks, ...)
@@ -337,8 +353,6 @@ void prop_notify_dispatch(struct prop_notify_queue *q);
 void prop_courier_stop(prop_courier_t *pc);
 
 prop_t *prop_find(prop_t *parent, ...)  __attribute__((__sentinel__(0)));
-
-htsmsg_t *prop_tree_to_htsmsg(prop_t *p);
 
 void prop_send_ext_event(prop_t *p, event_t *e);
 

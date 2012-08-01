@@ -65,7 +65,8 @@ gmefile_scandir(fa_dir_t *fd, const char *url, char *errbuf, size_t errlen)
 
   *p = 0;
 
-  if((buf = fa_load(fpath, &size, NULL, errbuf, errlen, NULL)) == NULL)
+  if((buf = fa_load(fpath, &size, NULL, errbuf, errlen, NULL,
+		    0, NULL, NULL)) == NULL)
     return -1;
 
   err = gme_open_data(buf, size, &emu, gme_info_only);
@@ -277,8 +278,8 @@ fa_gme_playfile_internal(media_pipe_t *mp, void *buf, size_t size,
       mp_send_cmd_head(mp, mq, MB_CTRL_PAUSE);
       mp_set_playstatus_by_hold(mp, hold, e->e_payload);
 
-    } else if(event_is_action(e, ACTION_PREV_TRACK) ||
-	      event_is_action(e, ACTION_NEXT_TRACK) ||
+    } else if(event_is_action(e, ACTION_SKIP_BACKWARD) ||
+	      event_is_action(e, ACTION_SKIP_FORWARD) ||
 	      event_is_action(e, ACTION_STOP)) {
       mp_flush(mp, 0);
       break;
@@ -347,7 +348,8 @@ be_gmeplayer_play(const char *url0, media_pipe_t *mp,
   *p++= 0;
   track = atoi(p) - 1;
 
-  if((mem = fa_load(url, &size, NULL, errbuf, errlen, NULL)) == NULL)
+  if((mem = fa_load(url, &size, NULL, errbuf, errlen, NULL,
+		    0, NULL, NULL)) == NULL)
     return NULL;
 
   e = fa_gme_playfile_internal(mp, mem, size,

@@ -92,5 +92,6 @@ void GB2312StrToUtf8(
         int nBytes            /* size of input GB2312 chars */
         );
 //GB2312
+const char *dvd_langcode_to_string(uint16_t langcode);
 
 #endif

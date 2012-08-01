@@ -28,6 +28,8 @@
 #include "metadata/metadata.h"
 #include "navigator.h"
 
+typedef int (fa_load_cb_t)(void *opaque, int loaded, int total);
+
 struct prop;
 
 int fileaccess_init(void);
@@ -56,8 +58,8 @@ typedef struct fa_stat {
  */
 typedef struct fa_dir_entry {
   TAILQ_ENTRY(fa_dir_entry) fde_link;
-  char *fde_filename;
-  char *fde_url;
+  rstr_t *fde_filename;
+  rstr_t *fde_url;
   int   fde_type; /* CONTENT_ .. types from showtime.h */
   struct prop *fde_prop;
   struct prop *fde_metadata;
@@ -103,12 +105,15 @@ LIST_HEAD(fa_protocol_list, fa_protocol);
 extern struct fa_protocol_list fileaccess_all_protocols;
 
 
-#define FA_DEBUG 0x1
+#define FA_DEBUG           0x1
 // #define FA_DUMP  0x2
-#define FA_STREAMING 0x4
-#define FA_CACHE     0x8
+#define FA_STREAMING       0x4
+#define FA_CACHE           0x8
 #define FA_BUFFERED_SMALL  0x10
 #define FA_BUFFERED_BIG    0x20
+#define FA_DISABLE_AUTH    0x40
+#define FA_COMPRESSION     0x80
+#define FA_NOFOLLOW        0x100
 
 /**
  *
@@ -127,6 +132,7 @@ typedef struct fa_handle {
 typedef enum {
   FA_NOTIFY_ADD,
   FA_NOTIFY_DEL,
+  FA_NOTIFY_DIR_CHANGE,
 } fa_notify_op_t;
 
 
@@ -167,9 +173,14 @@ void fa_scanner(const char *url, time_t mtime,
 		prop_t *direct_close);
 
 void *fa_load(const char *url, size_t *sizep, const char **vpaths,
-	      char *errbuf, size_t errlen, int *cache_control);
+	      char *errbuf, size_t errlen, int *cache_control, int flags,
+	      fa_load_cb_t *cb, void *opaque);
 
 uint8_t *fa_load_and_close(fa_handle_t *fh, size_t *sizep);
+
+void *fa_load_query(const char *url, size_t *sizep,
+		    char *errbuf, size_t errlen, int *cache_control,
+		    const char **arguments, int flags);
 
 int fa_parent(char *dst, size_t dstlen, const char *url);
 
@@ -177,21 +188,19 @@ struct backend;
 
 int fa_normalize(const char *url, char *dst, size_t dstlen);
 
+rstr_t *fa_absolute_path(rstr_t *filename, rstr_t *at);
+
 int fa_check_url(const char *url, char *errbuf, size_t errlen);
 
 struct htsbuf_queue;
-
-#define HTTP_DISABLE_AUTH  0x1
-#define HTTP_REQUEST_DEBUG 0x2
-#define HTTP_COMPRESSION   0x4
-#define HTTP_NOFOLLOW      0x8
 
 int http_request(const char *url, const char **arguments, 
 		 char **result, size_t *result_sizep,
 		 char *errbuf, size_t errlen,
 		 struct htsbuf_queue *postdata, const char *postcontenttype,
 		 int flags, struct http_header_list *headers_out,
-		 const struct http_header_list *headers_in, const char *method);
+		 const struct http_header_list *headers_in, const char *method,
+		 fa_load_cb_t *cb, void *opaque);
 
 struct http_auth_req;
 int http_client_oauth(struct http_auth_req *har,

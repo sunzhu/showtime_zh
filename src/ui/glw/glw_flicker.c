@@ -45,7 +45,7 @@ glw_flicker_dtor(glw_t *w)
  *
  */
 static void 
-glw_flicker_render(glw_t *w, glw_rctx_t *rc)
+glw_flicker_render(glw_t *w, const glw_rctx_t *rc)
 {
   glw_flicker_t *gf = (void *)w;
   float a = rc->rc_alpha * w->glw_alpha;
@@ -55,11 +55,13 @@ glw_flicker_render(glw_t *w, glw_rctx_t *rc)
     v = 1.0 * gf->gf_phase + 0.25;
 
     glw_rgb_t rgb = {v,v,v};
-    glw_renderer_draw(&gf->gf_gr[0], w->glw_root, rc, NULL, &rgb, NULL, a, 0);
+    glw_renderer_draw(&gf->gf_gr[0], w->glw_root, rc,
+		      NULL, &rgb, NULL, a, 0);
 
     v = 1.0 * !gf->gf_phase + 0.25;
     glw_rgb_t rgb_ = {v,v,v};
-    glw_renderer_draw(&gf->gf_gr[1], w->glw_root, rc, NULL, &rgb_, NULL, a, 0);
+    glw_renderer_draw(&gf->gf_gr[1], w->glw_root, rc,
+		      NULL, &rgb_, NULL, a, 0);
   }
 }
 
