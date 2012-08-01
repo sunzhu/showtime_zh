@@ -136,7 +136,6 @@ fs_sub_scan_dir(prop_t *prop, const char *url, const char *video,
   fa_dir_t *fd;
   fa_dir_entry_t *fde;
   char errbuf[256];
-  char* subname;
 
   TRACE(TRACE_DEBUG, "Video", "Scanning for subs in %s for %s", url, video);
 
