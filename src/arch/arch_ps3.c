@@ -168,9 +168,11 @@ arch_init(void)
 {
   extern int trace_level;
   extern int concurrency;
+  extern int showtime_can_standby;
 
   concurrency = 2;
 
+  showtime_can_standby = 1;
 
   trace_level = TRACE_DEBUG;
   sysprop = prop_create(prop_get_global(), "system");
@@ -191,10 +193,13 @@ arch_init(void)
 void
 arch_exit(int retcode)
 {
+  if(retcode == 10)
+    Lv2Syscall3(379, 0x100, 0, 0 );
+
 #if ENABLE_BINREPLACE
   extern char *showtime_bin;
 
-  if(retcode == 13)
+  if(retcode == SHOWTIME_EXIT_RESTART)
     sysProcessExitSpawn2(showtime_bin, 0, 0, 0, 0, 1200, 0x70);
 #endif
 
@@ -1098,11 +1103,16 @@ arch_get_seed(void)
 void
 arch_preload_fonts(void)
 {
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-VR-R-LATIN2.TTF");
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-NR-R-JPN.TTF");
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-YG-R-KOR.TTF");
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-DH-R-CGB.TTF");
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-CP-R-KANA.TTF");
+  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-VR-R-LATIN2.TTF",
+		     FONT_DOMAIN_FALLBACK, NULL);
+  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-NR-R-JPN.TTF",
+		     FONT_DOMAIN_FALLBACK, NULL);
+  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-YG-R-KOR.TTF",
+		     FONT_DOMAIN_FALLBACK, NULL);
+  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-DH-R-CGB.TTF",
+		     FONT_DOMAIN_FALLBACK, NULL);
+  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-CP-R-KANA.TTF",
+		     FONT_DOMAIN_FALLBACK, NULL);
 }
 
 const char *

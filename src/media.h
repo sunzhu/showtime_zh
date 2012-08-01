@@ -100,6 +100,7 @@ typedef struct media_buf {
     MB_DVD_CLUT,
     MB_DVD_RESET_SPU,
     MB_DVD_SPU,
+    MB_DVD_SPU2,
     MB_DVD_PCI,
     MB_DVD_HILITE,
 
@@ -125,6 +126,7 @@ typedef struct media_buf {
     int32_t mb_data32;
     int mb_rate;
     int mb_codecid;
+    int mb_font_context;
   };
 
 
@@ -241,6 +243,7 @@ typedef struct media_pipe {
   int mp_avdelta;           // Audio vs video delta (µs)
   int mp_svdelta;           // Subtitle vs video delta (µs)
   int mp_stats;
+  int64_t mp_pts_delta_for_subs;
 
   struct audio_decoder *mp_audio_decoder;
 
@@ -371,6 +374,8 @@ media_buf_t *media_buf_from_avpkt_unlocked(media_pipe_t *mp, struct AVPacket *pk
 
 media_pipe_t *mp_create(const char *name, int flags, const char *type);
 
+void mp_reinit_streams(media_pipe_t *mp);
+
 #define mp_ref_inc(mp) atomic_add(&(mp)->mp_refcount, 1)
 void mp_ref_dec(media_pipe_t *mp);
 
@@ -379,6 +384,9 @@ int mb_enqueue_no_block(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb,
 struct event *mb_enqueue_with_events(media_pipe_t *mp, media_queue_t *mq, 
 				media_buf_t *mb);
 void mb_enqueue_always(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb);
+
+void mb_enqueue_always_head(media_pipe_t *mp, media_queue_t *mq,
+			    media_buf_t *mb);
 
 void mp_enqueue_event(media_pipe_t *mp, struct event *e);
 struct event *mp_dequeue_event(media_pipe_t *mp);

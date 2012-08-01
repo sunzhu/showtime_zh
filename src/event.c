@@ -99,6 +99,7 @@ static struct strtab actionnames[] = {
   { "Ok",                    ACTION_OK },
   { "Cancel",                ACTION_CANCEL },
   { "Backspace",             ACTION_BS },
+  { "Delete",                ACTION_DELETE },
 
   { "Forward",               ACTION_NAV_FWD },
   { "Back",                  ACTION_NAV_BACK },
@@ -122,8 +123,8 @@ static struct strtab actionnames[] = {
   { "Eject",                 ACTION_EJECT },
   { "Record",                ACTION_RECORD },
 
-  { "PreviousTrack",         ACTION_PREV_TRACK },
-  { "NextTrack",             ACTION_NEXT_TRACK },
+  { "PreviousTrack",         ACTION_SKIP_BACKWARD },
+  { "NextTrack",             ACTION_SKIP_FORWARD },
   { "SeekForward",           ACTION_SEEK_FORWARD },
   { "SeekReverse",           ACTION_SEEK_BACKWARD },
   { "SeekFastForward",       ACTION_SEEK_FAST_FORWARD },
@@ -134,7 +135,7 @@ static struct strtab actionnames[] = {
   { "VolumeMuteToggle",      ACTION_VOLUME_MUTE_TOGGLE },
 
   { "Menu",                  ACTION_MENU },
-  { "Sysinfo",               ACTION_SYSINFO },
+  { "ItemMenu",              ACTION_ITEMMENU },
   { "LogWindow",             ACTION_LOGWINDOW },
   { "Select",                ACTION_SELECT },
   { "MediaStats",            ACTION_SHOW_MEDIA_STATS },
@@ -203,6 +204,7 @@ event_playurl_dtor(event_t *e)
   if(ep->model != NULL)
     prop_destroy(ep->model);
   free(ep->url);
+  free(ep->how);
   free(ep);
 }
 
@@ -211,10 +213,11 @@ event_playurl_dtor(event_t *e)
  */
 event_t *
 event_create_playurl(const char *url, int primary, int priority, int no_audio,
-		     prop_t *model)
+		     prop_t *model, const char *how)
 {
   event_playurl_t *ep = event_create(EVENT_PLAY_URL, sizeof(event_playurl_t));
   ep->url = strdup(url);
+  ep->how = how ? strdup(how) : NULL;
   ep->model = prop_xref_addref(model);
   ep->primary = primary;
   ep->priority = priority;
@@ -235,6 +238,7 @@ event_openurl_dtor(event_t *e)
   prop_ref_dec(ou->model);
   free(ou->url);
   free(ou->view);
+  free(ou->how);
   free(ou);
 }
 
@@ -244,7 +248,7 @@ event_openurl_dtor(event_t *e)
  */
 event_t *
 event_create_openurl(const char *url, const char *view, prop_t *origin,
-		     prop_t *model)
+		     prop_t *model, const char *how)
 {
   event_openurl_t *e = event_create(EVENT_OPENURL, sizeof(event_openurl_t));
 
@@ -252,7 +256,7 @@ event_create_openurl(const char *url, const char *view, prop_t *origin,
   e->view     = view   ? strdup(view)         : NULL;
   e->origin   = prop_ref_inc(origin);
   e->model    = prop_ref_inc(model);
-
+  e->how      = how    ? strdup(how)          : NULL;
   e->h.e_dtor = event_openurl_dtor;
   return &e->h;
 }
@@ -490,8 +494,8 @@ event_dispatch(event_t *e)
 	    event_is_action(e, ACTION_PAUSE) ||
 	    event_is_action(e, ACTION_STOP) ||
 	    event_is_action(e, ACTION_EJECT) ||
-	    event_is_action(e, ACTION_PREV_TRACK) ||
-	    event_is_action(e, ACTION_NEXT_TRACK) ||
+	    event_is_action(e, ACTION_SKIP_BACKWARD) ||
+	    event_is_action(e, ACTION_SKIP_FORWARD) ||
 	    event_is_action(e, ACTION_SHOW_MEDIA_STATS) ||
 	    event_is_action(e, ACTION_SHUFFLE) ||
 	    event_is_action(e, ACTION_REPEAT) ||
@@ -514,3 +518,36 @@ event_dispatch(event_t *e)
   event_release(e);
 }
 
+
+/**
+ *
+ */
+const static int action_from_fkey[13][2] = {
+  { 0, 0 },
+  { ACTION_MENU,             0 },
+  { ACTION_SHOW_MEDIA_STATS, 0 },
+  { ACTION_ITEMMENU,         0 },
+  { ACTION_LOGWINDOW,        ACTION_ENABLE_SCREENSAVER },
+
+  { ACTION_RELOAD_UI,        ACTION_RELOAD_DATA },
+  { 0, 0 },
+  { 0, 0 },
+  { 0, 0 },
+
+  { ACTION_SWITCH_VIEW,      0 },
+  { 0, 0 },
+  { ACTION_FULLSCREEN_TOGGLE,      0 },
+  { 0, 0 },
+};
+
+
+event_t *
+event_from_Fkey(unsigned int keynum, unsigned int mod)
+{
+  if(keynum < 1 || keynum > 12 || mod > 1)
+    return NULL;
+  int a = action_from_fkey[keynum][mod];
+  if(a == 0)
+    return NULL;
+  return event_create_action(a);
+}

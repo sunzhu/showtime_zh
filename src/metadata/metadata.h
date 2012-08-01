@@ -22,9 +22,17 @@
 #pragma once
 
 struct prop;
+struct prop_vec;
+struct prop_nf;
+typedef struct metadata_lazy_prop metadata_lazy_prop_t;
+
+#define METADATA_ERROR    -1
+#define METADATA_DEADLOCK -2
 
 /**
- * Content types
+ * Content types.
+ * These are stored directly in the sqlite metadata database so they
+ * must never be changed
  */
 typedef enum {
   CONTENT_UNKNOWN     = 0,
@@ -40,6 +48,32 @@ typedef enum {
   CONTENT_PLUGIN      = 10,
   CONTENT_num
 } contenttype_t;
+
+
+/**
+ * Video types.
+ * These are stored directly in the sqlite metadata database so they
+ * must never be changed
+ */
+typedef enum {
+  METADATA_VIDEO_MOVIE = 1,
+  METADATA_VIDEO_TVSHOW = 2,
+  METADATA_VIDEO_MUSICVIDEO = 3,
+} metadata_video_type_t;
+
+
+/**
+ * Image types.
+ * These are stored directly in the sqlite metadata database so they
+ * must never be changed
+ */
+typedef enum {
+  METADATA_IMAGE_POSTER = 1,
+  METADATA_IMAGE_BACKDROP = 2,
+  METADATA_IMAGE_PROFILE = 3,
+} metadata_image_type_t;
+
+
 
 
 const char *content2type(contenttype_t ctype);
@@ -81,14 +115,38 @@ typedef struct metadata {
   contenttype_t md_contenttype;
   float md_duration;
   int md_tracks;
+  int md_track;
   time_t md_time;
 
   rstr_t *md_title;
   rstr_t *md_album;
   rstr_t *md_artist;
   rstr_t *md_format;
+  rstr_t *md_genre;
+
+  rstr_t *md_director;
+  rstr_t *md_producer;
 
   struct metadata_stream_queue md_streams;
+
+  int md_year;
+  rstr_t *md_description;
+  rstr_t *md_tagline;
+
+  rstr_t *md_imdb_id;
+  int md_rating;  // 0 - 100
+  int md_rate_count;
+  
+  metadata_video_type_t md_video_type;
+
+  rstr_t *md_backdrop;
+  rstr_t *md_icon;
+
+  int md_dsid;
+
+
+  rstr_t *md_manufacturer;
+  rstr_t *md_equipment;
 
 } metadata_t;
 
@@ -102,11 +160,9 @@ void metadata_add_stream(metadata_t *md, const char *codec,
 			 const char *info, const char *isolang,
 			 int disposition, int tracknum);
 
-void metadata_to_proptree(const metadata_t *md, struct prop *proproot,
+void metadata_to_proptree(const metadata_t *md,
+			  struct prop *proproot,
 			  int cleanup_streams);
-
-
-
 
 void metadb_init(void);
 
@@ -160,9 +216,33 @@ void metadb_insert_albumart(void *db, int64_t album_id, const char *url,
 void metadb_insert_artistpic(void *db, int64_t artist_id, const char *url,
 			     int width, int height);
 
+void metadb_insert_videoart(void *db, int64_t videoitem_id, const char *url,
+			    metadata_image_type_t type,
+			    int width, int height);
+
+void metadb_insert_videocast(void *db, int64_t videoitem_id,
+			     const char *name,
+			     const char *character,
+			     const char *department,
+			     const char *job,
+			     int order,
+			     const char *image,
+			     int width,
+			     int height,
+			     const char *ext_id);
+
+void metadb_insert_videogenre(void *db, int64_t videoitem_id,
+			      const char *title);
+
+int64_t metadb_insert_videoitem(void *db, const char *url, int ds_id,
+				const char *ext_id, const metadata_t *md);
+
+metadata_t *metadb_get_videoinfo(void *db, const char *url, int ds_id);
+
+
 void decoration_init(void);
 
-void decorated_browse_create(struct prop *model);
+void decorated_browse_create(struct prop *model, struct prop_nf *pnf);
 
 void metadata_init(void);
 
@@ -170,4 +250,12 @@ void metadata_bind_artistpics(struct prop *prop, rstr_t *artist);
 
 void metadata_bind_albumart(struct prop *prop, rstr_t *artist, rstr_t *album);
 
+void metadata_bind_movie_info(metadata_lazy_prop_t **mlpp,
+			      struct prop *prop, rstr_t *url, rstr_t *title,
+			      int year, rstr_t *imdb_id, int duration);
 
+void metadata_unbind(metadata_lazy_prop_t *mlp);
+
+rstr_t *metadata_filename_to_title(const char *filename, int *yearp);
+
+rstr_t *metadata_remove_postfix(const char *filename, char c);

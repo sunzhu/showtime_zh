@@ -174,7 +174,7 @@ typedef struct cached_image {
 struct pixmap *
 backend_imageloader(rstr_t *url0, const image_meta_t *im,
 		    const char **vpaths, char *errbuf, size_t errlen,
-		    int *cache_control)
+		    int *cache_control, be_load_cb_t *cb, void *opaque)
 {
   const char *url = rstr_get(url0);
   htsmsg_t *m = NULL;
@@ -214,10 +214,10 @@ backend_imageloader(rstr_t *url0, const image_meta_t *im,
       htsmsg_t *img = htsmsg_get_map_by_field(f);
       if(img == NULL)
 	continue;
-      int w = htsmsg_get_u32_or_default(img, "width", 0);
-      int h = htsmsg_get_u32_or_default(img, "height", 0);
+      int w = htsmsg_get_u32_or_default(img, "width", 10000);
+      int h = htsmsg_get_u32_or_default(img, "height", 10000);
       const char *u = htsmsg_get_str(img, "url");
-      if(!w || !h || !u)
+      if(!u)
 	continue;
 
       if(best != NULL) {
@@ -251,6 +251,7 @@ backend_imageloader(rstr_t *url0, const image_meta_t *im,
     }
     if(best == NULL) {
       snprintf(errbuf, errlen, "No image in set");
+      htsmsg_destroy(m);
       return NULL;
     }
     url = best;
@@ -261,10 +262,13 @@ backend_imageloader(rstr_t *url0, const image_meta_t *im,
   if(nb == NULL || nb->be_imageloader == NULL) {
     snprintf(errbuf, errlen, "No backend for URL");
   } else {
-    pm = nb->be_imageloader(url, im, vpaths, errbuf, errlen, cache_control);
+    pm = nb->be_imageloader(url, im, vpaths, errbuf, errlen, cache_control,
+			    cb, opaque);
     if(pm != NULL && pm != NOT_MODIFIED)
       pm = pixmap_decode(pm, im, errbuf, errlen);
   }
+  if(m)
+    htsmsg_destroy(m);
   return pm;
 }
 

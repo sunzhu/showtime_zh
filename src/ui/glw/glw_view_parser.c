@@ -155,8 +155,8 @@ parse_shunting_yard(token_t *expr, errorinfo_t *ei, glw_root_t *gr)
 	  glw_view_seterr(ei, t, "Unexpected separator '',''");
  	  goto err;
 	}
+	curfunc->t_num_args++;
       }
-      curfunc->t_num_args++;
       break;
 
     case TOKEN_ADD:
@@ -341,6 +341,20 @@ parse_prep_expression(token_t *expr, errorinfo_t *ei, glw_root_t *gr)
       t->next = t1->next;
       t = t1->next;
       glw_view_token_free(gr, t1);
+      continue;
+    }
+
+
+    /**
+     * Transform 'name: ' into a attribute assignment
+     */
+    if(t->type == TOKEN_IDENTIFIER &&
+       t1 != NULL && t1->type == TOKEN_COLON) {
+      if(glw_view_attrib_resolve(t))
+	return glw_view_seterr(ei, t, "Unknown attribute: %s",
+				rstr_get(t->t_rstring));
+
+      t1->type = TOKEN_ASSIGNMENT;
       continue;
     }
 

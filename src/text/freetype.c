@@ -46,7 +46,7 @@
 static FT_Library text_library;
 static FT_Stroker text_stroker;
 static hts_mutex_t text_mutex;
-
+static int font_domain_tally = 10;
 
 #define GLYPH_HASH_SIZE 128
 #define GLYPH_HASH_MASK (GLYPH_HASH_SIZE-1)
@@ -60,6 +60,7 @@ LIST_HEAD(family_list, family);
 typedef struct family {
   LIST_ENTRY(family) link;
   char *name;
+  int font_domain;
   int id;
 } family_t;
 
@@ -73,16 +74,17 @@ typedef struct face {
 
   FT_Face face;
   char *url;
- 
+  int current_size;
   int *family_id_vec;
   uint8_t style;
-  uint8_t persistent;
-
+  int persistent;
+  int font_domain;
   struct glyph_list glyphs;
 
 } face_t;
 
 static struct face_queue faces;
+static face_t *default_font;
 
 
 //------------------------- Glyph cache -----------------------
@@ -113,12 +115,13 @@ static struct glyph_list glyph_hash[GLYPH_HASH_SIZE];
 static struct glyph_queue allglyphs;
 static int num_glyphs;
 
+static void face_set_family(face_t *f, int family_id);
 
 /**
  *
  */
 static int
-family_get(const char *name)
+family_get(const char *name, int font_domain)
 {
   family_t *f;
 
@@ -137,13 +140,14 @@ family_get(const char *name)
   }
 
   LIST_FOREACH(f, &families, link)
-    if(!strcasecmp(n2, f->name))
+    if(!strcasecmp(n2, f->name) && f->font_domain == font_domain)
       break;
   
   if(f == NULL) {
     f = malloc(sizeof(family_t));
     f->id = ++family_id_tally;
     f->name = strdup(n2);
+    f->font_domain = font_domain;
   } else {
     LIST_REMOVE(f, link);
   }
@@ -155,7 +159,7 @@ family_get(const char *name)
 /**
  *
  */
-__attribute__((unused)) static const char *
+static const char *
 family_get_by_id(int id)
 {
   family_t *f;
@@ -273,7 +277,7 @@ remove_face_alias(int family_id)
  *
  */
 static face_t *
-face_create_epilogue(face_t *face, const char *source)
+face_create_epilogue(face_t *face, const char *source, int font_domain)
 {
   const char *family = face->face->family_name;
   const char *style = face->face->style_name;
@@ -291,13 +295,13 @@ face_create_epilogue(face_t *face, const char *source)
 	face->style = TR_STYLE_ITALIC;
     }
   }
-
+  face->font_domain = font_domain;
   face->family_id_vec = calloc(2, sizeof(int));
-  face->family_id_vec[0] = family_get(family);
+  face->family_id_vec[0] = family_get(family, font_domain);
 
   FT_Select_Charmap(face->face, FT_ENCODING_UNICODE);
 
-  remove_face_alias(family_get(family));
+  remove_face_alias(family_get(family, font_domain));
 
   TAILQ_INSERT_TAIL(&faces, face, link);
   return face;
@@ -308,14 +312,19 @@ face_create_epilogue(face_t *face, const char *source)
  *
  */
 static face_t *
-face_create_from_uri(const char *path)
+face_create_from_uri(const char *path, int font_domain, const char **vpaths)
 {
   char errbuf[256];
   FT_Open_Args oa = {0};
   FT_Error err;
   int64_t s;
+  face_t *face;
 
-  fa_handle_t *fh = fa_open(path, errbuf, sizeof(errbuf));
+  TAILQ_FOREACH(face, &faces, link)
+    if(face->url != NULL && !strcmp(face->url, path) &&
+       face->font_domain == font_domain)
+      return face;
+  fa_handle_t *fh = fa_open_vpaths(path, vpaths, errbuf, sizeof(errbuf), 0);
   if(fh == NULL) {
     TRACE(TRACE_ERROR, "Freetype", "Unable to load font: %s -- %s",
 	  path, errbuf);
@@ -331,7 +340,7 @@ face_create_from_uri(const char *path)
     return NULL;
   }
 
-  face_t *face = calloc(1, sizeof(face_t));
+  face = calloc(1, sizeof(face_t));
 
   FT_Stream srec = calloc(1, sizeof(FT_StreamRec));
   srec->size = fa_fsize(fh);
@@ -351,7 +360,7 @@ face_create_from_uri(const char *path)
   }
   face->url = strdup(path);
 
-  return face_create_epilogue(face, path);
+  return face_create_epilogue(face, path, font_domain);
 }
 
 
@@ -360,7 +369,7 @@ face_create_from_uri(const char *path)
  *
  */
 static face_t *
-face_create_from_memory(const void *ptr, size_t len)
+face_create_from_memory(const void *ptr, size_t len, int context)
 {
   face_t *face = calloc(1, sizeof(face_t));
 
@@ -368,31 +377,7 @@ face_create_from_memory(const void *ptr, size_t len)
     free(face);
     return NULL;
   }
-  return face_create_epilogue(face, "memory");
-}
-
-
-
-/**
- *
- */
-static int
-face_resolve(int uc, uint8_t style, int family_id,
-	     char *urlbuf, size_t urllen)
-{
-#if ENABLE_LIBFONTCONFIG
-  if(!fontconfig_resolve(uc, style, family_get_by_id(family_id),
-			 urlbuf, urllen))
-    return 0;
-#endif
-
-#if ENABLE_FONT_LIBERATION
-  snprintf(urlbuf, urllen,
-	   "%s/resources/fonts/liberation/LiberationSans-Regular.ttf",
-	   showtime_dataroot());
-  return 0;
-#endif
-  return -1;
+  return face_create_epilogue(face, "memory", context);
 }
 
 
@@ -421,7 +406,10 @@ face_set_family(face_t *f, int family_id)
 
   if(f->family_id_vec != NULL)
     while(f->family_id_vec[len] != 0)
-      len++;
+      if(f->family_id_vec[len] == family_id)
+	return;
+      else
+	len++;
 #if 0
   printf("Font %s alias to %s\n",
 	 f->family_id_vec ? family_get_by_id(f->family_id_vec[0]) : "<yet unnamed>",
@@ -438,10 +426,9 @@ face_set_family(face_t *f, int family_id)
  *
  */
 static face_t *
-face_find(int uc, uint8_t style, int family_id)
+face_find2(int uc, uint8_t style, int family_id)
 {
   face_t *f;
-  char url[URL_MAX];
 
   // Try already loaded faces
   TAILQ_FOREACH(f, &faces, link)
@@ -456,39 +443,73 @@ face_find(int uc, uint8_t style, int family_id)
        FT_Get_Char_Index(f->face, uc))
       return f;
 
-  if(!face_resolve(uc, style, family_id, url, sizeof(url))) {
+  // Try default font
+  if(default_font != NULL)
+    if(FT_Get_Char_Index(default_font->face, uc))
+      f = default_font;
+
+  if(f == NULL)
     TAILQ_FOREACH(f, &faces, link)
-      if(f->url != NULL && !strcmp(f->url, url))
+      if(f->font_domain == FONT_DOMAIN_FALLBACK &&
+	 FT_Get_Char_Index(f->face, uc))
 	break;
 
-
-    if(f != NULL) {
-      // Same family, just return
-      if(face_is_family(f, family_id))
-	return f;
-    
-      face_set_family(f, family_id);
-      return f;
-    }
-
-    f = face_create_from_uri(url);
-  }
-
+#if ENABLE_LIBFONTCONFIG
   if(f == NULL) {
-    TAILQ_FOREACH(f, &faces, link)
-      if(f->style == style && FT_Get_Char_Index(f->face, uc))
-	break;
+    char url[URL_MAX];
+    if(!fontconfig_resolve(uc, style, family_get_by_id(family_id),
+			   url, sizeof(url)))
+      f = face_create_from_uri(url, FONT_DOMAIN_FALLBACK, NULL);
   }
-  if(f == NULL) {
+#endif
+
+  
+  // Last resort, anything that has the glyph
+  if(f == NULL)
     TAILQ_FOREACH(f, &faces, link)
-      if(f->style == 0 && FT_Get_Char_Index(f->face, uc))
+      if(FT_Get_Char_Index(f->face, uc))
 	break;
-  }
 
   if(f != NULL)
     face_set_family(f, family_id);
 
   return f;
+}
+
+
+/**
+ *
+ */
+static face_t *
+face_find(int uc, uint8_t style, int family_id)
+{
+  face_t *f = face_find2(uc, style, family_id);
+#if 0
+  printf("Resolv %C (%d %s) -> %s\n",
+	 uc, style, family_get_by_id(family_id),
+	 f ? f->url ? f->url : "<memory>" : "<none>");
+#endif
+  return f;
+}
+
+
+/**
+ *
+ */
+static void
+face_set_size(face_t *f, int size)
+{
+  if(f->current_size == size)
+    return;
+
+  FT_Size_RequestRec  req;
+  req.type = FT_SIZE_REQUEST_TYPE_REAL_DIM;
+  req.width = size << 6;
+  req.height = size << 6;
+  req.horiResolution = 0;
+  req.vertResolution = 0;
+  FT_Request_Size(f->face, &req);
+  f->current_size = size;
 }
 
 
@@ -523,15 +544,7 @@ glyph_get(int uc, int size, uint8_t style, int family_id)
 
     gi = FT_Get_Char_Index(f->face, uc);
 
-    FT_Size_RequestRec  req;
-    req.type = FT_SIZE_REQUEST_TYPE_REAL_DIM;
-    req.width = size << 6;
-    req.height = size << 6;
-    req.horiResolution = 0;
-    req.vertResolution = 0;
-    
-    FT_Request_Size(f->face, &req);
-
+    face_set_size(f, size);
 
     if((err = FT_Load_Glyph(f->face, gi, FT_LOAD_FORCE_AUTOHINT)) != 0)
       return NULL;
@@ -842,9 +855,9 @@ static struct pixmap *
 text_render0(const uint32_t *uc, const int len,
 	     int flags, int default_size, float scale,
 	     int global_alignment, int max_width, int max_lines,
-	     const char *family)
+	     const char *family, int context)
 {
-  const int default_family_id = family_get(family ?: "Arial");
+  const int default_family_id = family_get(family ?: "Sans", context);
   int family_id = default_family_id;
   pixmap_t *pm;
   FT_UInt prev = 0;
@@ -1033,6 +1046,14 @@ text_render0(const uint32_t *uc, const int len,
       current_outline = 64 * (uc[i] & 0xffff) * scale;
       break;
 
+    case TR_CODE_SHADOW_US ... TR_CODE_SHADOW_US + 0xffff:
+      current_shadow = (uc[i] & 0xffff);
+      break;
+
+    case TR_CODE_OUTLINE_US ... TR_CODE_OUTLINE_US + 0xffff:
+      current_outline = 64 * (uc[i] & 0xffff);
+      break;
+
     case TR_CODE_FONT_SIZE + 1 ... TR_CODE_FONT_SIZE + 7:
       current_size = legacy_size_mult[uc[i] & 0xf] * default_size * scale;
       break;
@@ -1051,7 +1072,8 @@ text_render0(const uint32_t *uc, const int len,
       continue;
 
     if(FT_HAS_KERNING(g->face->face) && g->gi && prev) {
-      FT_Get_Kerning(g->face->face, prev, g->gi, FT_KERNING_DEFAULT, &delta); 
+      face_set_size(g->face, current_size);
+      FT_Get_Kerning(g->face->face, prev, g->gi, FT_KERNING_DEFAULT, &delta);
       items[out].kerning = delta.x;
     } else {
       items[out].kerning = 0;
@@ -1139,8 +1161,8 @@ text_render0(const uint32_t *uc, const int len,
 	
 	if(flags & TR_RENDER_ELLIPSIZE) {
 	  glyph_t *eg = glyph_get(HORIZONTAL_ELLIPSIS_UNICODE, g->size, 0,
-			 g->face->family_id_vec[0]);
-	  if(w >= max_width - eg->adv_x) {
+				  g->face->family_id_vec[0]);
+	  if(w + d > max_width - eg->adv_x ) {
 
 	    while(j > 0 && items[li->start + j - 1].code == ' ') {
 	      j--;
@@ -1158,7 +1180,7 @@ text_render0(const uint32_t *uc, const int len,
 	  }
 	} else {
 
-	  if(w >= max_width) {
+	  if(w > max_width) {
 	    pmflags |= PIXMAP_TEXT_TRUNCATED;
 	    li->count = j;
 	    break;
@@ -1180,7 +1202,7 @@ text_render0(const uint32_t *uc, const int len,
     return NULL;
   }
 
-  int target_width  = siz_x / 64 + 3; /// +3 ???
+  int target_width  = siz_x / 64;
   int target_height = 0;
   int margin = 0;
 
@@ -1247,42 +1269,47 @@ text_render0(const uint32_t *uc, const int len,
   // --- allocate and init pixmap
 
   pm = pixmap_create(target_width + margin*2, target_height + margin*2,
+		     flags & TR_RENDER_NO_OUTPUT ? PIXMAP_NULL :
 		     color_output ? PIXMAP_BGR32 : PIXMAP_IA, 1);
+
   if(pm != NULL) {
     pm->pm_lines = lines;
     pm->pm_flags = pmflags;
     pm->pm_margin = margin;
+
+    if(pm->pm_data != NULL) {
   
-    if(flags & TR_RENDER_DEBUG) {
-      uint8_t *data = pm->pm_pixels;
-      for(i = 0; i < pm->pm_height; i+=3)
-	memset(data + i * pm->pm_linesize, 0xc0, pm->pm_linesize);
+      if(flags & TR_RENDER_DEBUG) {
+	uint8_t *data = pm->pm_pixels;
+	for(i = 0; i < pm->pm_height; i+=3)
+	  memset(data + i * pm->pm_linesize, 0xc0, pm->pm_linesize);
 
-      int y;
-      int l = color_output ? 4 : 2;
-      for(i = 0; i < pm->pm_width; i+=3)
-	for(y = 0; y < pm->pm_height; y++)
-	  memset(data + y * pm->pm_linesize + i * l, 0xc0, l);
-    }
+	int y;
+	int l = color_output ? 4 : 2;
+	for(i = 0; i < pm->pm_width; i+=3)
+	  for(y = 0; y < pm->pm_height; y++)
+	    memset(data + y * pm->pm_linesize + i * l, 0xc0, l);
+      }
 
-    if(flags & TR_RENDER_CHARACTER_POS) {
-      pm->pm_charposlen = len;
-      pm->pm_charpos = malloc(2 * pm->pm_charposlen * sizeof(int));
-    }
+      if(flags & TR_RENDER_CHARACTER_POS) {
+	pm->pm_charposlen = len;
+	pm->pm_charpos = malloc(2 * pm->pm_charposlen * sizeof(int));
+      }
 
-    if(need_shadow_pass) {
+      if(need_shadow_pass) {
+	draw_glyphs(pm, &lq, target_height, siz_x, items, start_x, start_y,
+		    origin_y, margin, 0);
+	pixmap_box_blur(pm, 4, 4);
+      }
+
+      if(need_outline_pass)
+	draw_glyphs(pm, &lq, target_height, siz_x, items, start_x, start_y,
+		    origin_y, margin, 1);
+
+
       draw_glyphs(pm, &lq, target_height, siz_x, items, start_x, start_y,
-		  origin_y, margin, 0);
-      pixmap_box_blur(pm, 4, 4);
+		  origin_y, margin, 2);
     }
-
-    if(need_outline_pass)
-      draw_glyphs(pm, &lq, target_height, siz_x, items, start_x, start_y,
-		  origin_y, margin, 1);
-
-
-    draw_glyphs(pm, &lq, target_height, siz_x, items, start_x, start_y,
-		origin_y, margin, 2);
   }
   free(items);
 
@@ -1299,14 +1326,14 @@ text_render0(const uint32_t *uc, const int len,
 struct pixmap *
 text_render(const uint32_t *uc, const int len, int flags, int default_size,
 	    float scale, int alignment, int max_width, int max_lines,
-	    const char *family)
+	    const char *family, int context)
 {
   struct pixmap *pm;
 
   hts_mutex_lock(&text_mutex);
 
   pm = text_render0(uc, len, flags, default_size, scale, alignment, 
-		    max_width, max_lines, family);
+		    max_width, max_lines, family, context);
   while(num_glyphs > 512)
     glyph_flush_one();
 
@@ -1321,10 +1348,34 @@ text_render(const uint32_t *uc, const int len, int flags, int default_size,
 /**
  *
  */
+static void
+freetype_set_default_font(const char *url)
+{
+  hts_mutex_lock(&text_mutex);
+
+  if(default_font) {
+    if(--default_font->persistent == 0)
+      face_destroy(default_font);
+    default_font = NULL;
+  }
+
+  if(url) {
+    default_font =  face_create_from_uri(url, FONT_DOMAIN_DEFAULT, NULL);
+    if(default_font != NULL)
+      default_font->persistent++;
+  }
+  hts_mutex_unlock(&text_mutex);
+}
+
+
+/**
+ *
+ */
 int
 freetype_init(void)
 {
   int error;
+  char url[512];
 
   error = FT_Init_FreeType(&text_library);
   if(error) {
@@ -1336,6 +1387,13 @@ freetype_init(void)
   TAILQ_INIT(&allglyphs);
   hts_mutex_init(&text_mutex);
   arch_preload_fonts();
+
+  snprintf(url, sizeof(url),
+	   "%s/resources/fonts/liberation/LiberationSans-Regular.ttf",
+	   showtime_dataroot());
+
+  freetype_set_default_font(url);
+
   return 0;
 }
 
@@ -1343,32 +1401,49 @@ freetype_init(void)
 /**
  *
  */
-void
-freetype_load_font(const char *url)
+void *
+freetype_load_font(const char *url, int context, const char **vpaths)
 {
   face_t *f;
   hts_mutex_lock(&text_mutex);
 
-  f = face_create_from_uri(url);
+  f = face_create_from_uri(url, context, vpaths);
   if(f != NULL)
-    f->persistent = 1;  // Make sure it never is auto unloaded
+    f->persistent++;
 
   hts_mutex_unlock(&text_mutex);
+  return f;
 }
+
+
+
+/**
+ *
+ */
+rstr_t *
+freetype_get_family(void *handle)
+{
+  face_t *f = handle;
+  hts_mutex_lock(&text_mutex);
+  rstr_t *r = rstr_alloc(family_get_by_id(f->family_id_vec[0]));
+  hts_mutex_unlock(&text_mutex);
+  return r;
+}
+
 
 
 /**
  *
  */
 void *
-freetype_load_font_from_memory(const void *ptr, size_t len)
+freetype_load_font_from_memory(const void *ptr, size_t len, int context)
 {
   face_t *f;
   hts_mutex_lock(&text_mutex);
 
-  f = face_create_from_memory(ptr, len);
+  f = face_create_from_memory(ptr, len, context);
   if(f != NULL)
-    f->persistent = 1;  // Make sure it never is auto unloaded
+    f->persistent++;
 
   hts_mutex_unlock(&text_mutex);
   return f;
@@ -1383,7 +1458,8 @@ freetype_unload_font(void *ref)
 {
   face_t *f = ref;
   hts_mutex_lock(&text_mutex);
-  face_destroy(f);
+  if(--f->persistent == 0)
+    face_destroy(f);
   hts_mutex_unlock(&text_mutex);
 }
 
@@ -1392,10 +1468,24 @@ freetype_unload_font(void *ref)
  *
  */
 int
-freetype_family_id(const char *str)
+freetype_family_id(const char *str, int context)
 {
   hts_mutex_lock(&text_mutex);
-  int id = family_get(str);
+  int id = family_get(str, context);
+  hts_mutex_unlock(&text_mutex);
+  return id;
+}
+
+
+/**
+ *
+ */
+int
+freetype_get_context(void)
+{
+  int id;
+  hts_mutex_lock(&text_mutex);
+  id = ++font_domain_tally;
   hts_mutex_unlock(&text_mutex);
   return id;
 }

@@ -625,10 +625,8 @@ playqueue_load_with_source(prop_t *track, prop_t *source, int paused)
 
   hts_mutex_lock(&playqueue_mutex);
 
-  track = prop_follow(track);
-
   TAILQ_FOREACH(pqe, &playqueue_entries, pqe_linear_link) {
-    if(pqe->pqe_originator == track) {
+    if(prop_compare(track, pqe->pqe_originator)) {
       pqe_play(pqe, EVENT_PLAYQUEUE_JUMP);
       hts_mutex_unlock(&playqueue_mutex);
       return;
@@ -664,16 +662,10 @@ static void
 playqueue_enqueue(prop_t *track)
 {
   playqueue_entry_t *pqe, *before;
-  prop_t *p;
   rstr_t *url;
   int doplay = 0;
 
-  p = prop_get_by_name(PNVEC("self", "url"), 1,
-		       PROP_TAG_NAMED_ROOT, track, "self",
-		       NULL);
-  
-  url = prop_get_string(p);
-  prop_ref_dec(p);
+  url = prop_get_string(track, "url", NULL);
 
   if(url == NULL)
     return;
@@ -1138,10 +1130,10 @@ player_thread(void *aux)
       continue;
     }
 
-    if(event_is_action(e, ACTION_PREV_TRACK)) {
+    if(event_is_action(e, ACTION_SKIP_BACKWARD)) {
       pqe = playqueue_advance(pqe, 1);
 
-    } else if(event_is_action(e, ACTION_NEXT_TRACK) ||
+    } else if(event_is_action(e, ACTION_SKIP_FORWARD) ||
 	      event_is_type  (e, EVENT_EOF)) {
       mp_end(mp);
 

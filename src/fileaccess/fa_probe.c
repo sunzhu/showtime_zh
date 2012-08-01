@@ -88,7 +88,7 @@ static const uint8_t gifsig[6] = {'G', 'I', 'F', '8', '9', 'a'};
  *
  */
 static rstr_t *
-ffmpeg_metadata_get(AVMetadata *m, const char *key)
+ffmpeg_metadata_rstr(AVMetadata *m, const char *key)
 {
   AVMetadataTag *tag;
   int len;
@@ -117,6 +117,23 @@ ffmpeg_metadata_get(AVMetadata *m, const char *key)
   }
   return ret;
 }
+
+
+/**
+ *
+ */
+static int
+ffmpeg_metadata_int(AVMetadata *m, const char *key, int def)
+{
+  AVMetadataTag *tag;
+
+  if((tag = av_metadata_get(m, key, NULL, AV_METADATA_IGNORE_SUFFIX)) == NULL)
+    return def;
+
+  return tag->value && tag->value[0] >= '0' && tag->value[0] <= '9' ?
+    atoi(tag->value) : def;
+}
+
 
 #if 0
 /**
@@ -219,11 +236,15 @@ fa_probe_exif(metadata_t *md, const char *url, uint8_t *pb, fa_handle_t *fh)
   jpeginfo_t ji;
 
   if(jpeg_info(&ji, jpeginfo_reader, fh, 
-	       JPEG_INFO_DIMENSIONS | JPEG_INFO_ORIENTATION,
+	       JPEG_INFO_DIMENSIONS | JPEG_INFO_ORIENTATION |
+	       JPEG_INFO_METADATA,
 	       pb, 256, NULL, 0))
     return;
   
   md->md_time = ji.ji_time;
+  md->md_manufacturer = rstr_dup(ji.ji_manufacturer);
+  md->md_equipment    = rstr_dup(ji.ji_equipment);
+  jpeg_info_clear(&ji);
 }
 
 
@@ -275,20 +296,22 @@ fa_probe_header(metadata_t *md, const char *url, fa_handle_t *fh)
     char *buf;
 
     snprintf(path, sizeof(path), "zip://%s/plugin.json", url);
-    buf = fa_load(path, NULL, NULL, NULL, 0, NULL);
+    buf = fa_load(path, NULL, NULL, NULL, 0, NULL, 0, NULL, NULL);
     if(buf != NULL) {
       htsmsg_t *json = htsmsg_json_deserialize(buf);
       free(buf);
 
-      const char *title = htsmsg_get_str(json, "title");
-      if(title != NULL && htsmsg_get_str(json, "id") != NULL &&
-	 htsmsg_get_str(json, "type") != NULL) {
-	md->md_title = rstr_alloc(title);
-	md->md_contenttype = CONTENT_PLUGIN;
+      if(json != NULL) {
+	const char *title = htsmsg_get_str(json, "title");
+	if(title != NULL && htsmsg_get_str(json, "id") != NULL &&
+	   htsmsg_get_str(json, "type") != NULL) {
+	  md->md_title = rstr_alloc(title);
+	  md->md_contenttype = CONTENT_PLUGIN;
+	  htsmsg_destroy(json);
+	  return 1;
+	}
 	htsmsg_destroy(json);
-	return 1;
       }
-      htsmsg_destroy(json);
     }
     metdata_set_redirect(md, "zip://%s", url);
     md->md_contenttype = CONTENT_ARCHIVE;
@@ -481,25 +504,10 @@ fa_lavf_load_meta(metadata_t *md, AVFormatContext *fctx, const char *url)
   int has_video = 0;
   int has_audio = 0;
 
-  /* Format meta info */
+  md->md_artist = ffmpeg_metadata_rstr(fctx->metadata, "artist") ?:
+    ffmpeg_metadata_rstr(fctx->metadata, "author");
 
-  md->md_title = ffmpeg_metadata_get(fctx->metadata, "title");
-  if(md->md_title == NULL) {
-    fa_url_get_last_component(tmp1, sizeof(tmp1), url);
-
-    // Strip .xxx ending in filenames
-    i = strlen(tmp1);
-    if(i > 4 && tmp1[i - 4] == '.')
-      tmp1[i - 4] = 0;
-
-    url_deescape(tmp1);
-    md->md_title = rstr_alloc(tmp1);
-  }
-
-  md->md_artist = ffmpeg_metadata_get(fctx->metadata, "artist") ?:
-    ffmpeg_metadata_get(fctx->metadata, "author");
-
-  md->md_album = ffmpeg_metadata_get(fctx->metadata, "album");
+  md->md_album = ffmpeg_metadata_rstr(fctx->metadata, "album");
 
   md->md_format = rstr_alloc(fctx->iformat->long_name);
 
@@ -510,65 +518,69 @@ fa_lavf_load_meta(metadata_t *md, AVFormatContext *fctx, const char *url)
   if(fctx->nb_streams == 1 && 
      fctx->streams[0]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
     md->md_contenttype = CONTENT_AUDIO;
-    return;
-  }
 
-  int atrack = 0;
-  int strack = 0;
-  int vtrack = 0;
+    md->md_title = ffmpeg_metadata_rstr(fctx->metadata, "title");
+    md->md_track = ffmpeg_metadata_int(fctx->metadata, "track", 0);
+  } else {
 
-  /* Check each stream */
+    int atrack = 0;
+    int strack = 0;
+    int vtrack = 0;
 
-  for(i = 0; i < fctx->nb_streams; i++) {
-    AVStream *stream = fctx->streams[i];
-    AVCodecContext *avctx = stream->codec;
-    AVCodec *codec = avcodec_find_decoder(avctx->codec_id);
-    AVMetadataTag *lang, *title;
-    int tn;
+    /* Check each stream */
 
-    switch(avctx->codec_type) {
-    case AVMEDIA_TYPE_VIDEO:
-      has_video = !!codec;
-      tn = ++vtrack;
-      break;
-    case AVMEDIA_TYPE_AUDIO:
-      has_audio = !!codec;
-      tn = ++atrack;
-      break;
-    case AVMEDIA_TYPE_SUBTITLE:
-      tn = ++strack;
-      break;
+    for(i = 0; i < fctx->nb_streams; i++) {
+      AVStream *stream = fctx->streams[i];
+      AVCodecContext *avctx = stream->codec;
+      AVCodec *codec = avcodec_find_decoder(avctx->codec_id);
+      AVMetadataTag *lang, *title;
+      int tn;
 
-    default:
-      continue;
+      switch(avctx->codec_type) {
+      case AVMEDIA_TYPE_VIDEO:
+	has_video = !!codec;
+	tn = ++vtrack;
+	break;
+      case AVMEDIA_TYPE_AUDIO:
+	has_audio = !!codec;
+	tn = ++atrack;
+	break;
+      case AVMEDIA_TYPE_SUBTITLE:
+	tn = ++strack;
+	break;
+
+      default:
+	continue;
+      }
+
+      if(codec == NULL) {
+	snprintf(tmp1, sizeof(tmp1), "%s", codecname(avctx->codec_id));
+      } else {
+	metadata_from_ffmpeg(tmp1, sizeof(tmp1), codec, avctx);
+      }
+
+      lang = av_metadata_get(stream->metadata, "language", NULL,
+			     AV_METADATA_IGNORE_SUFFIX);
+
+      title = av_metadata_get(stream->metadata, "title", NULL,
+			      AV_METADATA_IGNORE_SUFFIX);
+
+      metadata_add_stream(md, codecname(avctx->codec_id),
+			  avctx->codec_type, i,
+			  title ? title->value : NULL,
+			  tmp1,
+			  lang ? lang->value : NULL,
+			  stream->disposition,
+			  tn);
     }
-
-    if(codec == NULL) {
-      snprintf(tmp1, sizeof(tmp1), "%s", codecname(avctx->codec_id));
-    } else {
-      metadata_from_ffmpeg(tmp1, sizeof(tmp1), codec, avctx);
-    }
-
-    lang = av_metadata_get(stream->metadata, "language", NULL,
-			  AV_METADATA_IGNORE_SUFFIX);
-
-    title = av_metadata_get(stream->metadata, "title", NULL,
-			    AV_METADATA_IGNORE_SUFFIX);
-
-    metadata_add_stream(md, codecname(avctx->codec_id),
-			avctx->codec_type, i,
-			title ? title->value : NULL,
-			tmp1,
-			lang ? lang->value : NULL,
-			stream->disposition,
-			tn);
-  }
   
-  md->md_contenttype = CONTENT_FILE;
-  if(has_video)
-    md->md_contenttype = CONTENT_VIDEO;
-  else if(has_audio)
-    md->md_contenttype = CONTENT_AUDIO;
+    md->md_contenttype = CONTENT_FILE;
+    if(has_video) {
+      md->md_contenttype = CONTENT_VIDEO;
+    } else if(has_audio) {
+      md->md_contenttype = CONTENT_AUDIO;
+    }
+  }
 }
   
 

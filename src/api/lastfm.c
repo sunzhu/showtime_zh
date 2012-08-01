@@ -127,7 +127,8 @@ lastfm_load_artistinfo(void *db, const char *artist,
 		       "api_key", LASTFM_APIKEY,
 		       NULL, NULL},
 		   &result, &resultsize, errbuf, sizeof(errbuf),
-		   NULL, NULL, HTTP_COMPRESSION, NULL, NULL, NULL);
+		   NULL, NULL, FA_COMPRESSION, NULL, NULL, NULL,
+		   NULL, NULL);
   if(n) {
     TRACE(TRACE_DEBUG, "lastfm", "HTTP query to lastfm failed: %s",  errbuf);
     return;
@@ -140,6 +141,11 @@ lastfm_load_artistinfo(void *db, const char *artist,
   }
 
   int src = metadb_get_datasource(db, "lastfm");
+  if(src < 0) {
+    TRACE(TRACE_DEBUG, "lastfm", "Unable to get datasource: %d", src);
+    htsmsg_destroy(info);
+    return;
+  }
 
   const char *mbid = htsmsg_get_str_multi(info,
 					  "tags", "lfm",
@@ -149,7 +155,7 @@ lastfm_load_artistinfo(void *db, const char *artist,
   
   int64_t artist_id = metadb_artist_get_by_title(db, artist, src, mbid);
 
-  if(artist_id == -1) {
+  if(artist_id < 0) {
     htsmsg_destroy(info);
     return;
   }
@@ -165,7 +171,8 @@ lastfm_load_artistinfo(void *db, const char *artist,
 			 "page", str,
 			 NULL, NULL},
 		     &result, &resultsize, errbuf, sizeof(errbuf),
-		     NULL, NULL, HTTP_COMPRESSION, NULL, NULL, NULL);
+		     NULL, NULL, FA_COMPRESSION, NULL, NULL, NULL,
+		     NULL, NULL);
 
     if(n) {
       TRACE(TRACE_DEBUG, "lastfm", "HTTP query to lastfm failed: %s",  errbuf);
@@ -211,8 +218,6 @@ lastfm_parse_albuminfo(void *db, htsmsg_t *xml, const char *artist,
   const char *artist_mbid = NULL;
 
   const char *album_mbid = htsmsg_get_str_multi(tags, "mbid", "cdata", NULL);
-  if(album_mbid == NULL)
-    return;
 
   if((tracks = htsmsg_get_map_multi(tags, "tracks", "tags", NULL)) != NULL) {
 
@@ -248,19 +253,22 @@ lastfm_parse_albuminfo(void *db, htsmsg_t *xml, const char *artist,
   }
 
   int src = metadb_get_datasource(db, "lastfm");
-
-  if(artist_mbid == NULL)
+  if(src < 0) {
+    TRACE(TRACE_DEBUG, "lastfm", "Unable to get datasource: %d", src);
     return;
+  }
 
   int64_t artist_id = metadb_artist_get_by_title(db, artist,
 						 src, artist_mbid);
 
-  if(artist_id == -1) {
+  if(artist_id < 0)
     return;
-  }
 
   int64_t album_id = metadb_album_get_by_title(db, album, artist_id,
 					       src, album_mbid);
+
+  if(album_id < 0)
+    return;
 
   HTSMSG_FOREACH(f, tags) {
     htsmsg_t *image;
@@ -311,7 +319,8 @@ lastfm_load_albuminfo(void *db, const char *album, const char *artist)
 		       "api_key", LASTFM_APIKEY,
 		       NULL, NULL},
 		   &result, &resultsize, errbuf, sizeof(errbuf),
-		   NULL, NULL, HTTP_COMPRESSION, NULL, NULL, NULL);
+		   NULL, NULL, FA_COMPRESSION, NULL, NULL, NULL,
+		   NULL, NULL);
 
   if(n) {
     TRACE(TRACE_DEBUG, "lastfm", "HTTP query to lastfm failed: %s",  errbuf);

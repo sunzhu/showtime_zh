@@ -1084,6 +1084,8 @@ extern const uint16_t ISO_8859_15[];
 extern const uint16_t ISO_8859_16[];
 extern const uint16_t CP1250[];
 extern const uint16_t CP1251[];
+extern const uint16_t CP1252[];
+extern const uint16_t CP1253[];
 
 
 const static charset_t charsets[] = {
@@ -1104,6 +1106,8 @@ const static charset_t charsets[] = {
   {"ISO-8859-16", "ISO-8859-16 (Latin-10)", ISO_8859_16},
   {"CP1250", "Windows 1250", CP1250},
   {"CP1251", "Windows 1251", CP1251},
+  {"CP1252", "Windows 1252", CP1252},
+  {"CP1253", "Windows 1253", CP1253},
 };
 
 const charset_t *
@@ -1282,4 +1286,174 @@ utf16_to_utf8(char **bufp, size_t *lenp)
   *o2++ = 0;
   assert(o2 == *bufp + olen);
   free(freeme);
+}
+
+
+/**
+ * DVD language codes
+ */
+const struct {
+  const char *langcode;
+  const char *displayname;
+} langtbl[] = {
+  {"AB", "Abkhazian"},
+  {"LT", "Lithuanian"},
+  {"AA", "Afar"},
+  {"MK", "Macedonian"},
+  {"AF", "Afrikaans"},
+  {"MG", "Malagasy"},
+  {"SQ", "Albanian"},
+  {"MS", "Malay"},
+  {"AM", "Amharic"},
+  {"ML", "Malayalam"},
+  {"AR", "Arabic"},
+  {"MT", "Maltese"},
+  {"HY", "Armenian"},
+  {"MI", "Maori"},
+  {"AS", "Assamese"},
+  {"MR", "Marathi"},
+  {"AY", "Aymara"},
+  {"MO", "Moldavian"},
+  {"AZ", "Azerbaijani"},
+  {"MN", "Mongolian"},
+  {"BA", "Bashkir"},
+  {"NA", "Nauru"},
+  {"EU", "Basque"},
+  {"NE", "Nepali"},
+  {"BN", "Bengali"},
+  {"NO", "Norwegian"},
+  {"DZ", "Bhutani"},
+  {"OC", "Occitan"},
+  {"BH", "Bihari"},
+  {"OR", "Oriya"},
+  {"BI", "Bislama"},
+  {"OM", "Afan"},
+  {"BR", "Breton"},
+  {"PA", "Panjabi"},
+  {"BG", "Bulgarian"},
+  {"PS", "Pashto"},
+  {"MY", "Burmese"},
+  {"FA", "Persian"},
+  {"BE", "Byelorussian"},
+  {"PL", "Polish"},
+  {"KM", "Cambodian"},
+  {"PT", "Portuguese"},
+  {"CA", "Catalan"},
+  {"QU", "Quechua"},
+  {"ZH", "Chinese"},
+  {"RM", "Rhaeto-Romance"},
+  {"CO", "Corsican"},
+  {"RO", "Romanian"},
+  {"HR", "Croatian"},
+  {"RU", "Russian"},
+  {"CS", "Czech"},
+  {"SM", "Samoan"},
+  {"DA", "Danish"},
+  {"SG", "Sangho"},
+  {"NL", "Dutch"},
+  {"SA", "Sanskrit"},
+  {"EN", "English"},
+  {"GD", "Gaelic"},
+  {"EO", "Esperanto"},
+  {"SH", "Serbo-Crotain"},
+  {"ET", "Estonian"},
+  {"ST", "Sesotho"},
+  {"FO", "Faroese"},
+  {"SR", "Serbian"},
+  {"FJ", "Fiji"},
+  {"TN", "Setswana"},
+  {"FI", "Finnish"},
+  {"SN", "Shona"},
+  {"FR", "French"},
+  {"SD", "Sindhi"},
+  {"FY", "Frisian"},
+  {"SI", "Singhalese"},
+  {"GL", "Galician"},
+  {"SS", "Siswati"},
+  {"KA", "Georgian"},
+  {"SK", "Slovak"},
+  {"DE", "German"},
+  {"SL", "Slovenian"},
+  {"EL", "Greek"},
+  {"SO", "Somali"},
+  {"KL", "Greenlandic"},
+  {"ES", "Spanish"},
+  {"GN", "Guarani"},
+  {"SU", "Sundanese"},
+  {"GU", "Gujarati"},
+  {"SW", "Swahili"},
+  {"HA", "Hausa"},
+  {"SV", "Swedish"},
+  {"IW", "Hebrew"},
+  {"TL", "Tagalog"},
+  {"HI", "Hindi"},
+  {"TG", "Tajik"},
+  {"HU", "Hungarian"},
+  {"TT", "Tatar"},
+  {"IS", "Icelandic"},
+  {"TA", "Tamil"},
+  {"IN", "Indonesian"},
+  {"TE", "Telugu"},
+  {"IA", "Interlingua"},
+  {"TH", "Thai"},
+  {"IE", "Interlingue"},
+  {"BO", "Tibetian"},
+  {"IK", "Inupiak"},
+  {"TI", "Tigrinya"},
+  {"GA", "Irish"},
+  {"TO", "Tonga"},
+  {"IT", "Italian"},
+  {"TS", "Tsonga"},
+  {"JA", "Japanese"},
+  {"TR", "Turkish"},
+  {"JW", "Javanese"},
+  {"TK", "Turkmen"},
+  {"KN", "Kannada"},
+  {"TW", "Twi"},
+  {"KS", "Kashmiri"},
+  {"UK", "Ukranian"},
+  {"KK", "Kazakh"},
+  {"UR", "Urdu"},
+  {"RW", "Kinyarwanda"},
+  {"UZ", "Uzbek"},
+  {"KY", "Kirghiz"},
+  {"VI", "Vietnamese"},
+  {"RN", "Kirundi"},
+  {"VO", "Volapuk"},
+  {"KO", "Korean"},
+  {"CY", "Welsh"},
+  {"KU", "Kurdish"},
+  {"WO", "Wolof"},
+  {"LO", "Laothian"},
+  {"JI", "Yiddish"},
+  {"LA", "Latin"},
+  {"YO", "Yoruba"},
+  {"LV", "Lettish"},
+  {"XH", "Xhosa"},
+  {"LN", "Lingala"},
+  {"ZU", "Zulu"},
+  {NULL, NULL}
+};
+
+
+/**
+ *
+ */
+const char *
+dvd_langcode_to_string(uint16_t langcode)
+{
+  int i = 0;
+  char str[3];
+
+  str[0] = langcode >> 8;
+  str[1] = langcode & 0xff;
+  str[2] = 0;
+  
+  while(langtbl[i].langcode != NULL) {
+    if(!strcasecmp(langtbl[i].langcode, str))
+      return langtbl[i].displayname;
+    i++;
+  }
+  return "Other";
+
 }

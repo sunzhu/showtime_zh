@@ -47,7 +47,7 @@ glw_LerpMatrix(Mtx out, float v, const Mtx a, const Mtx b)
 }
 
 
-typedef float *PMtx;
+typedef const float *PMtx;
 
 #define glw_pmtx_mul_prepare(dst, src) dst = &src[0]
 
@@ -57,6 +57,16 @@ glw_pmtx_mul_vec3(Vec3 dst, const float *mt, const Vec3 a)
   dst[0] = mt[0] * a[0] + mt[4] * a[1] + mt[ 8] * a[2] + mt[12];
   dst[1] = mt[1] * a[0] + mt[5] * a[1] + mt[ 9] * a[2] + mt[13];
   dst[2] = mt[2] * a[0] + mt[6] * a[1] + mt[10] * a[2] + mt[14];
+}
+
+
+static inline void
+glw_pmtx_mul_vec4_i(Vec4 dst, const float *mt, const Vec4 a)
+{
+  dst[0] = mt[0] * a[0] + mt[4] * a[1] + mt[ 8] * a[2] + mt[12];
+  dst[1] = mt[1] * a[0] + mt[5] * a[1] + mt[ 9] * a[2] + mt[13];
+  dst[2] = mt[2] * a[0] + mt[6] * a[1] + mt[10] * a[2] + mt[14];
+  dst[3] = a[3];
 }
 
 
@@ -91,21 +101,6 @@ glw_vec4_lerp(Vec4 dst, float s, const Vec4 a, const Vec4 b)
 }
 
 static inline void
-glw_vec2_store(float *p, const Vec2 v)
-{
-  p[0] = v[0];
-  p[1] = v[1];
-}
-
-static inline void
-glw_vec3_store(float *p, const Vec3 v)
-{
-  p[0] = v[0];
-  p[1] = v[1];
-  p[2] = v[2];
-}
-
-static inline void
 glw_vec4_store(float *p, const Vec4 v)
 {
   p[0] = v[0];
@@ -114,8 +109,6 @@ glw_vec4_store(float *p, const Vec4 v)
   p[3] = v[3];
 }
 
-#define glw_vec2_get(p) (p)
-#define glw_vec3_get(p) (p)
 #define glw_vec4_get(p) (p)
 
 
@@ -184,4 +177,18 @@ extern int glw_mtx_invert(Mtx dst, const Mtx src);
 #define glw_vec2_extract(v, i) v[i]
 #define glw_vec3_extract(v, i) v[i]
 #define glw_vec4_extract(v, i) v[i]
+
+#define glw_vec4_mul_c0(v, s) v[0] *= (s)
+#define glw_vec4_mul_c1(v, s) v[1] *= (s)
+#define glw_vec4_mul_c2(v, s) v[2] *= (s)
+#define glw_vec4_mul_c3(v, s) v[3] *= (s)
+
+#define glw_vec4_set(v, i, s) v[i] = (s)
+
 #define glw_mtx_get(m) (m)
+
+static inline void
+glw_mtx_copy(Mtx dst, const Mtx src)
+{
+  memcpy(dst, src, sizeof(Mtx));
+}

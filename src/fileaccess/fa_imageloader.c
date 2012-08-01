@@ -49,16 +49,8 @@ static AVCodecContext *pngencoder;
 
 static pixmap_t *fa_image_from_video(const char *url, const image_meta_t *im,
 				     char *errbuf, size_t errlen,
-				     int *cache_control);
-
-/**
- *
- */
-typedef struct meminfo {
-  const uint8_t *data;
-  size_t size;
-} meminfo_t;
-
+				     int *cache_control,
+				     fa_load_cb_t *cb, void *opaque);
 
 /**
  *
@@ -79,35 +71,21 @@ fa_imageloader_init(void)
 
 
 /**
- *
- */
-static int
-jpeginfo_mem_reader(void *handle, void *buf, off_t offset, size_t size)
-{
-  meminfo_t *mi = handle;
-
-  if(size + offset > mi->size)
-    return -1;
-
-  memcpy(buf, mi->data + offset, size);
-  return size;
-}
-
-/**
  * Load entire image into memory using fileaccess load method.
  * Faster than open+read+close.
  */
 static pixmap_t *
 fa_imageloader2(const char *url, const char **vpaths,
-		char *errbuf, size_t errlen, int *cache_control)
+		char *errbuf, size_t errlen, int *cache_control,
+		fa_load_cb_t *cb, void *opaque)
 {
   uint8_t *p;
   size_t size;
-  meminfo_t mi;
+  jpeg_meminfo_t mi;
   pixmap_type_t fmt;
   int width = -1, height = -1, orientation = 0;
 
-  p = fa_load(url, &size, vpaths, errbuf, errlen, cache_control);
+  p = fa_load(url, &size, vpaths, errbuf, errlen, cache_control, 0, cb, opaque);
   if(p == NULL || p == NOT_MODIFIED)
     return (pixmap_t *)p;
 
@@ -185,7 +163,7 @@ jpeginfo_reader(void *handle, void *buf, off_t offset, size_t size)
 pixmap_t *
 fa_imageloader(const char *url, const struct image_meta *im,
 	       const char **vpaths, char *errbuf, size_t errlen,
-	       int *cache_control)
+	       int *cache_control, fa_load_cb_t *cb, void *opaque)
 {
   uint8_t p[16];
   int r;
@@ -195,10 +173,12 @@ fa_imageloader(const char *url, const struct image_meta *im,
   pixmap_type_t fmt;
 
   if(strchr(url, '#'))
-    return fa_image_from_video(url, im, errbuf, errlen, cache_control);
+    return fa_image_from_video(url, im, errbuf, errlen, cache_control,
+			       cb, opaque);
 
   if(!im->im_want_thumb)
-    return fa_imageloader2(url, vpaths, errbuf, errlen, cache_control);
+    return fa_imageloader2(url, vpaths, errbuf, errlen, cache_control,
+			   cb, opaque);
 
   if((fh = fa_open_vpaths(url, vpaths, errbuf, errlen,
 			  FA_BUFFERED_SMALL)) == NULL)
@@ -319,7 +299,7 @@ ifv_close(void)
 static pixmap_t *
 fa_image_from_video2(const char *url, const image_meta_t *im, 
 		     const char *cacheid, char *errbuf, size_t errlen,
-		     int sec, time_t mtime)
+		     int sec, time_t mtime, fa_load_cb_t *cb, void *opaque)
 {
   pixmap_t *pm = NULL;
 
@@ -407,6 +387,12 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
     if(r == AVERROR_EOF) {
       break;
     }
+    
+    if(cb != NULL && cb(opaque, 0, 1)) {
+      snprintf(errbuf, errlen, "Aborted");
+      break;
+    }
+
     if(r != 0) {
       ifv_close();
       break;
@@ -487,7 +473,7 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
       oframe->data[0] = pm->pm_pixels;
       oframe->linesize[0] = pm->pm_linesize;
       
-      size_t outputsize = pm->pm_linesize * h;
+      size_t outputsize = MAX(pm->pm_linesize * h, FF_MIN_BUFFER_SIZE);
       void *output = malloc(outputsize);
       pngencoder->width = w;
       pngencoder->height = h;
@@ -517,7 +503,8 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
  */
 static pixmap_t *
 fa_image_from_video(const char *url0, const image_meta_t *im,
-		    char *errbuf, size_t errlen, int *cache_control)
+		    char *errbuf, size_t errlen, int *cache_control,
+		    fa_load_cb_t *cb, void *opaque)
 {
   static char *stated_url;
   static fa_stat_t fs;
@@ -565,7 +552,7 @@ fa_image_from_video(const char *url0, const image_meta_t *im,
 
   hts_mutex_lock(&image_from_video_mutex);
   pm = fa_image_from_video2(url, im, cacheid, errbuf, errlen,
-			    secs, stattime);
+			    secs, stattime, cb, opaque);
   hts_mutex_unlock(&image_from_video_mutex);
   return pm;
 }

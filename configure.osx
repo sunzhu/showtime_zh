@@ -50,7 +50,10 @@ enable timegm
 enable realpath
 enable polarssl
 enable librtmp
-enable font_liberation
+enable dvd
+enable spotify
+enable vda
+enable fsevents
 
 for opt do
   optval="${opt#*=}"
@@ -82,9 +85,6 @@ setup_env "$@"
 enable libpthread
 enable zlib
 enable posix_networking
-enable dvd
-enable spotify
-enable vda
 
 #
 # c compiler
@@ -102,7 +102,7 @@ if [ "x$CC" != "x" ]; then
     echo >>${CONFIG_MAK} "CC=$CC"
     CC="$CC"
 else
-    CC=cc
+    CC="cc"
 fi
 
 if checkcc; then 
@@ -180,14 +180,8 @@ echo >>${CONFIG_MAK} "LDFLAGS_cfg += -F\$(shell dirname \$(SPOTIFY_FRAMEWORK)) -
 
 
 
+freetype_setup
 libav_setup
-
-
-#
-# Freetype
-# 
-echo >>${CONFIG_MAK} "CFLAGS_cfg += -I/usr/X11/include -I/usr/X11/include/freetype2"
-echo >>${CONFIG_MAK} "LDFLAGS_cfg += -L/usr/X11/lib -lfreetype"
 
 
 #

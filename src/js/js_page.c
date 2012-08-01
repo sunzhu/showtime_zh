@@ -37,6 +37,7 @@ LIST_HEAD(js_item_list, js_item);
 
 static struct js_route_list js_routes;
 static struct js_searcher_list js_searchers;
+static JSFunctionSpec item_proto_functions[];
 
 /**
  *
@@ -108,6 +109,8 @@ typedef struct js_model {
 
   int jm_subs;
 
+  jsval jm_item_proto;
+
 } js_model_t;
 
 
@@ -137,9 +140,7 @@ js_model_destroy(js_model_t *jm)
   if(jm->jm_args)
     strvec_free(jm->jm_args);
 
-
-  if(jm->jm_eventsub != NULL)
-    prop_unsubscribe(jm->jm_eventsub);
+  prop_unsubscribe(jm->jm_eventsub);
 
   if(jm->jm_root)      prop_ref_dec(jm->jm_root);
   if(jm->jm_loading)   prop_ref_dec(jm->jm_loading);
@@ -263,7 +264,7 @@ item_finalize(JSContext *cx, JSObject *obj)
   free(ji);
 }
 
-
+#if 0
 /**
  *
  */
@@ -283,14 +284,14 @@ item_set_property(JSContext *cx, JSObject *obj, jsval id, jsval *vp)
 
   return JS_TRUE;
 }
-
+#endif
 
 /**
  *
  */
 static JSClass item_class = {
   "item", JSCLASS_HAS_PRIVATE,
-  item_set_property,JS_PropertyStub,JS_PropertyStub,JS_PropertyStub,
+  JS_PropertyStub,JS_PropertyStub,JS_PropertyStub,JS_PropertyStub,
   JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub, item_finalize,
   JSCLASS_NO_OPTIONAL_MEMBERS
 };
@@ -355,7 +356,9 @@ js_item_onEvent(JSContext *cx, JSObject *obj,
   }
 
   js_event_handler_create(cx, &ji->ji_event_handlers,
-			  JS_GetStringBytes(JS_ValueToString(cx, argv[0])),
+			  JSVAL_IS_STRING(argv[0]) ?
+			  JS_GetStringBytes(JS_ValueToString(cx, argv[0])) :
+			  NULL,
 			  argv[1]);
   
   *rval = JSVAL_VOID;
@@ -376,12 +379,92 @@ js_item_destroy(JSContext *cx, JSObject *obj,
   return JS_TRUE;
 }
 
+
+
 /**
  *
  */
-static JSFunctionSpec item_functions[] = {
+static JSBool 
+js_item_dump(JSContext *cx, JSObject *obj,
+	     uintN argc, jsval *argv, jsval *rval)
+{
+  js_item_t *ji = JS_GetPrivate(cx, obj);
+  prop_print_tree(ji->ji_root, 1);
+  *rval = JSVAL_VOID;
+  return JS_TRUE;
+}
+
+
+
+/**
+ *
+ */
+static JSBool 
+js_item_addOptURL(JSContext *cx, JSObject *obj,
+	      uintN argc, jsval *argv, jsval *rval)
+{
+  js_item_t *ji = JS_GetPrivate(cx, obj);
+  const char *title;
+  const char *url;
+
+  if (!JS_ConvertArguments(cx, argc, argv, "ss", &title, &url))
+    return JS_FALSE;
+  
+  prop_t *p = prop_create_root(NULL);
+  prop_set_string(prop_create(p, "type"), "location");
+  prop_set_string(prop_create(p, "url"), url);
+  prop_set_string(prop_create(prop_create(p, "metadata"), "title"), title);
+  prop_set_int(prop_create(p, "enabled"), 1);
+
+  prop_t *opts = prop_create_r(ji->ji_root, "options");
+  if(prop_set_parent(p, opts))
+    prop_destroy(p);
+  prop_ref_dec(opts);
+
+  *rval = JSVAL_VOID;
+  return JS_TRUE;
+}
+
+
+/**
+ *
+ */
+static JSBool 
+js_item_addOptAction(JSContext *cx, JSObject *obj,
+		     uintN argc, jsval *argv, jsval *rval)
+{
+  js_item_t *ji = JS_GetPrivate(cx, obj);
+  const char *title;
+  const char *action;
+
+  if (!JS_ConvertArguments(cx, argc, argv, "ss", &title, &action))
+    return JS_FALSE;
+  
+  prop_t *p = prop_create_root(NULL);
+  prop_set_string(prop_create(p, "type"), "action");
+  prop_set_string(prop_create(prop_create(p, "metadata"), "title"), title);
+  prop_set_int(prop_create(p, "enabled"), 1);
+  prop_set_string(prop_create(p, "action"), action);
+
+  prop_t *opts = prop_create_r(ji->ji_root, "options");
+  if(prop_set_parent(p, opts))
+    prop_destroy(p);
+  prop_ref_dec(opts);
+
+  *rval = JSVAL_VOID;
+  return JS_TRUE;
+}
+
+
+/**
+ *
+ */
+static JSFunctionSpec item_proto_functions[] = {
   JS_FS("onEvent",            js_item_onEvent,      2, 0, 0),
   JS_FS("destroy",            js_item_destroy,      0, 0, 0),
+  JS_FS("addOptURL",          js_item_addOptURL,    2, 0, 0),
+  JS_FS("addOptAction",       js_item_addOptAction, 2, 0, 0),
+  JS_FS("dump",               js_item_dump,         0, 0, 0),
   JS_FS_END
 };
 
@@ -430,7 +513,10 @@ js_appendItem0(JSContext *cx, js_model_t *model, prop_t *parent,
     prop_destroy(item);
     prop_ref_dec(p);
   } else {
-    JSObject *robj = JS_NewObjectWithGivenProto(cx, &item_class, NULL, NULL);
+    JSObject *robj =
+      JS_NewObjectWithGivenProto(cx, &item_class,
+				 JSVAL_TO_OBJECT(model->jm_item_proto), NULL);
+
     *rval =  OBJECT_TO_JSVAL(robj);
     js_item_t *ji = calloc(1, sizeof(js_item_t));
     ji->ji_model = model;
@@ -438,7 +524,6 @@ js_appendItem0(JSContext *cx, js_model_t *model, prop_t *parent,
     LIST_INSERT_HEAD(&model->jm_items, ji, ji_link);
     JS_SetPrivate(cx, robj, ji);
     ji->ji_enable_set_property = 1; 
-    JS_DefineFunctions(cx, robj, item_functions);
   }
   return JS_TRUE;
 }
@@ -551,7 +636,7 @@ init_model_props(js_model_t *jm, prop_t *model)
   pnf = prop_nf_create(prop_create(model, "nodes"),
 		       jm->jm_nodes,
 		       prop_create(model, "filter"),
-		       NULL, PROP_NF_AUTODESTROY);
+		       PROP_NF_AUTODESTROY);
 
   prop_set_int(prop_create(model, "canFilter"), 1);
 
@@ -569,7 +654,6 @@ js_appendModel(JSContext *cx, JSObject *obj, uintN argc,
   js_model_t *parent = JS_GetPrivate(cx, obj);
   const char *type;
   JSObject *metaobj = NULL;
-  char url[URL_MAX];
   prop_t *item, *metadata;
   js_model_t *jm;
   JSObject *robj;
@@ -579,14 +663,15 @@ js_appendModel(JSContext *cx, JSObject *obj, uintN argc,
 
   item = prop_create_root(NULL);
 
-  backend_prop_make(item, url, sizeof(url));
+  rstr_t *url = backend_prop_make(item, NULL);
  
   metadata = prop_create(item, "metadata");
 
   if(metaobj)
     js_prop_from_object(cx, metaobj, metadata);
 
-  prop_set_string(prop_create(item, "url"), url);
+  prop_set_rstring(prop_create(item, "url"), url);
+  rstr_release(url);
 
   jm = js_model_create(JSVAL_VOID);
 
@@ -977,6 +1062,11 @@ js_open_trampoline(void *arg)
 
   JS_BeginRequest(cx);
 
+  jm->jm_item_proto = OBJECT_TO_JSVAL(JS_NewObject(cx, NULL, NULL, NULL));
+  JS_AddNamedRoot(cx, &jm->jm_item_proto, "itemproto");
+  JS_DefineFunctions(cx, JSVAL_TO_OBJECT(jm->jm_item_proto),
+		     item_proto_functions);
+
   js_open_invoke(cx, jm);
 
   jm->jm_cx = cx;
@@ -990,6 +1080,9 @@ js_open_trampoline(void *arg)
     prop_notify_dispatch(&nor);
 
   }
+
+  JS_RemoveRoot(cx, &jm->jm_item_proto);
+
   js_model_release(jm);
 
   JS_DestroyContext(cx);

@@ -38,7 +38,7 @@ typedef struct rsx_vp {
   int rvp_u_modelview;
   int rvp_u_color;
   int rvp_u_color_offset;
-  int rvp_u_blur_amount;
+  int rvp_u_blur;
 
   int rvp_a_position;
   int rvp_a_color;
@@ -84,6 +84,10 @@ typedef struct glw_backend_root {
   struct rsx_fp *be_fp_yuv2rgb_1f;
   struct rsx_fp *be_fp_yuv2rgb_2f;
 
+  struct rsx_fp *be_fp_tex_stencil;
+  struct rsx_fp *be_fp_flat_stencil;
+  struct rsx_fp *be_fp_tex_stencil_blur;
+
   int be_blendmode;
   
 } glw_backend_root_t;
@@ -99,6 +103,8 @@ typedef struct glw_backend_texture {
 #define GLW_TEXTURE_TYPE_NO_ALPHA 1
 } glw_backend_texture_t;
 
+#define glw_tex_width(gbt) ((gbt)->tex.width)
+#define glw_tex_height(gbt) ((gbt)->tex.height)
 
 
 #define glw_can_tnpo2(gr) 1

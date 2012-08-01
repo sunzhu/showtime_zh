@@ -22,6 +22,10 @@
 #pragma once
 
 struct pixmap;
+struct rstr;
+
+#define FONT_DOMAIN_FALLBACK 0
+#define FONT_DOMAIN_DEFAULT  1
 
 #define TR_STYLE_BOLD   0x1
 #define TR_STYLE_ITALIC 0x2
@@ -47,6 +51,8 @@ struct pixmap;
 #define TR_CODE_FONT_SIZE  0x7f040000  /* HTML kinda legacy size 
 					  1: smallest, 7: biggest
 				       */
+#define TR_CODE_SHADOW_US  0x7f050000  // Unscaled version
+#define TR_CODE_OUTLINE_US 0x7f060000  // Unscaled version
 
 
 #define TR_CODE_COLOR      0x7e000000  // Low 24 bit is BGR
@@ -63,6 +69,7 @@ struct pixmap;
 #define TR_RENDER_ITALIC        0x10
 #define TR_RENDER_SHADOW        0x20
 #define TR_RENDER_OUTLINE       0x40
+#define TR_RENDER_NO_OUTPUT     0x80
 
 #define TR_ALIGN_AUTO      0
 #define TR_ALIGN_LEFT      1
@@ -73,19 +80,25 @@ struct pixmap;
 struct pixmap *
 text_render(const uint32_t *uc, int len, int flags, int default_size,
 	    float scale, int alignment,
-	    int max_width, int max_lines, const char *font_family);
+	    int max_width, int max_lines, const char *font_family,
+	    int font_domain);
 
 
 #if ENABLE_LIBFREETYPE
 int freetype_init(void);
 
-void freetype_load_font(const char *url);
+void *freetype_load_font(const char *url, int font_domain, const char **vpaths);
 
-void *freetype_load_font_from_memory(const void *ptr, size_t len);
+void *freetype_load_font_from_memory(const void *ptr, size_t len,
+				     int font_domain);
 
 void freetype_unload_font(void *ref);
 
-int freetype_family_id(const char *str);
+int freetype_family_id(const char *str, int context);
+
+int freetype_get_context(void);   // rename context -> font_domain
+
+struct rstr *freetype_get_family(void *handle);
 
 #endif
 
@@ -99,5 +112,6 @@ int fontconfig_resolve(int uc, uint8_t style, const char *family,
 
 
 uint32_t *text_parse(const char *str, int *lenp, int flags,
-		     const uint32_t *prefix, int prefixlen);
+		     const uint32_t *prefix, int prefixlen,
+		     int context);
 

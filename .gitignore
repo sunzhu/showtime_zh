@@ -4,10 +4,10 @@ config.default
 ps3support
 wiisupport
 support/traceprint/traceprint
-TODO
 core*
 glwthemes/test/
 ext/sqlite/sqlite3
 ._*
 .DS_Store
 debian/changelog
+.downloadcache

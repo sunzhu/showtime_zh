@@ -21,11 +21,22 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include "arch/atomic.h"
 
 #define USE_RSTR
 
 #ifdef USE_RSTR
+
+// #define RSTR_STATS
+
+#ifdef RSTR_STATS
+extern int rstr_allocs;
+extern int rstr_dups;
+extern int rstr_releases;
+extern int rstr_frees;
+#endif
+
 
 typedef struct rstr {
   int32_t refcnt;
@@ -53,13 +64,23 @@ rstr_dup(rstr_t *rs)
 {
   if(rs != NULL)
     atomic_add(&rs->refcnt, 1);
+#ifdef RSTR_STATS
+  atomic_add(&rstr_dups, 1);
+#endif
   return rs;
 }
 
 static inline void rstr_release(rstr_t *rs)
 {
-  if(rs != NULL && atomic_add(&rs->refcnt, -1) == 1)
+#ifdef RSTR_STATS
+  atomic_add(&rstr_releases, 1);
+#endif
+  if(rs != NULL && atomic_add(&rs->refcnt, -1) == 1) {
+#ifdef RSTR_STATS
+    atomic_add(&rstr_frees, 1);
+#endif
     free(rs);
+  }
 }
 
 static inline void rstr_set(rstr_t **p, rstr_t *r)
@@ -69,6 +90,17 @@ static inline void rstr_set(rstr_t **p, rstr_t *r)
 }
 
 rstr_t *rstr_spn(rstr_t *s, const char *set);
+
+static inline int rstr_eq(const rstr_t *a, const rstr_t *b)
+{
+  if(a == NULL && b == NULL)
+    return 1;
+  if(a == NULL || b == NULL)
+    return 0;
+  return !strcmp(rstr_get(a), rstr_get(b));
+}
+
+
 
 #else
 

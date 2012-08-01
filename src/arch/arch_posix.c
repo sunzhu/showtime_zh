@@ -113,6 +113,7 @@ get_system_concurrency(void)
 #include <limits.h>
 #include <syslog.h>
 #include <sys/statvfs.h>
+#include "text/text.h"
 
 #ifdef XBMC_PLUGIN
 #include "xbmc-plugin.h"
@@ -411,6 +412,10 @@ arch_get_seed(void)
 void
 arch_preload_fonts(void)
 {
+#ifdef __APPLE__
+  freetype_load_font("file:///Library/Fonts/Arial Unicode.ttf",
+		     FONT_DOMAIN_FALLBACK, NULL);
+#endif
 }
 
 

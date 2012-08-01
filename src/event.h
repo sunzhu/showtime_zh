@@ -42,6 +42,7 @@ typedef enum {
   ACTION_OK,
   ACTION_CANCEL,
   ACTION_BS,
+  ACTION_DELETE,
 
   ACTION_FOCUS_NEXT,  /* TAB */
   ACTION_FOCUS_PREV,  /* Shift + TAB */
@@ -66,10 +67,12 @@ typedef enum {
   ACTION_EJECT,
   ACTION_RECORD,
 
-  ACTION_PREV_TRACK,
-  ACTION_NEXT_TRACK,
+  ACTION_SKIP_FORWARD,
+  ACTION_SKIP_BACKWARD,
+
   ACTION_SEEK_FORWARD,
   ACTION_SEEK_BACKWARD,
+
   ACTION_SEEK_FAST_FORWARD,
   ACTION_SEEK_FAST_BACKWARD,
 
@@ -78,7 +81,7 @@ typedef enum {
   ACTION_VOLUME_MUTE_TOGGLE,
 
   ACTION_MENU,
-  ACTION_SYSINFO,
+  ACTION_ITEMMENU,
   ACTION_LOGWINDOW,
   ACTION_SELECT,
   ACTION_SHOW_MEDIA_STATS,
@@ -193,6 +196,7 @@ typedef struct event_openurl {
   char *view;
   struct prop *origin;
   struct prop *model;
+  char *how;
 } event_openurl_t;
 
 
@@ -207,6 +211,7 @@ typedef struct event_playurl {
   int priority;
   int no_audio;
   struct prop *model;
+  char *how;
 } event_playurl_t;
 
 
@@ -271,10 +276,12 @@ void event_addref(event_t *e);
 event_t *event_create_str(event_type_t et, const char *url);
 
 event_t *event_create_playurl(const char *url, int primary, int priority,
-			      int no_audio, struct prop *model);
+			      int no_audio, struct prop *model,
+			      const char *how);
 
 event_t *event_create_openurl(const char *url, const char *view,
-			      struct prop *origin, struct prop *model);
+			      struct prop *origin, struct prop *model,
+			      const char *how);
 
 event_t *event_create_playtrack(struct prop *track,
 				struct prop *psource,
@@ -296,5 +303,7 @@ int action_update_hold_by_event(int hold, event_t *e);
 int event_is_action(event_t *e, action_type_t at);
 
 void event_dispatch(event_t *e);
+
+event_t *event_from_Fkey(unsigned int keynum, unsigned int mod);
 
 #endif /* EVENT_H */

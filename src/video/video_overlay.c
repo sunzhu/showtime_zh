@@ -23,6 +23,7 @@
 #include "misc/string.h"
 #include "video_overlay.h"
 #include "video_settings.h"
+#include "dvdspu.h"
 #include "sub.h"
 
 void
@@ -98,7 +99,8 @@ video_subtitles_lavc(video_decoder_t *vd, media_buf_t *mb,
 
     case SUBTITLE_ASS:
       sub_ass_render(vd, r->ass,
-		     ctx->subtitle_header, ctx->subtitle_header_size);
+		     ctx->subtitle_header, ctx->subtitle_header_size,
+		     mb->mb_font_context);
       break;
 
     default:
@@ -112,9 +114,9 @@ video_subtitles_lavc(video_decoder_t *vd, media_buf_t *mb,
 /**
  *
  */
-void
-video_overlay_render_cleartext(video_decoder_t *vd, const char *txt,
-			       int64_t start, int64_t stop, int tags)
+video_overlay_t *
+video_overlay_render_cleartext(const char *txt, int64_t start, int64_t stop,
+			       int tags, int fontdomain)
 {
   uint32_t *uc;
   int len, txt_len;
@@ -136,9 +138,9 @@ video_overlay_render_cleartext(video_decoder_t *vd, const char *txt,
 
     uc = text_parse(txt, &len, 
 		    tags ? (TEXT_PARSE_TAGS | TEXT_PARSE_HTML_ENTETIES) : 0,
-		    pfx, 5);
+		    pfx, 5, fontdomain);
     if(uc == NULL)
-      return;
+      return NULL;
 
     vo = calloc(1, sizeof(video_overlay_t));
     vo->vo_type = VO_TEXT;
@@ -154,8 +156,7 @@ video_overlay_render_cleartext(video_decoder_t *vd, const char *txt,
   
   vo->vo_start = start;
   vo->vo_stop = stop;
-  
-  video_overlay_enqueue(vd, vo);
+  return vo;
 }
 
 /**
@@ -175,9 +176,9 @@ calculate_subtitle_duration(int txt_len)
 void 
 video_overlay_decode(video_decoder_t *vd, media_buf_t *mb)
 {
-  media_codec_t *cw = mb->mb_cw;
+  media_codec_t *mc = mb->mb_cw;
   
-  if(cw == NULL) {
+  if(mc == NULL) {
 
     int offset = 0;
     char *str;
@@ -192,12 +193,22 @@ video_overlay_decode(video_decoder_t *vd, media_buf_t *mb)
     memcpy(str, mb->mb_data + offset, mb->mb_size - offset);
     str[mb->mb_size - offset] = 0;
 
-    video_overlay_render_cleartext(vd, str, mb->mb_pts,
-				   mb->mb_duration ?
-				   mb->mb_pts + mb->mb_duration :
-				   AV_NOPTS_VALUE, 1);
+    video_overlay_t *vo;
+    vo = video_overlay_render_cleartext(str, mb->mb_pts,
+					mb->mb_duration ?
+					mb->mb_pts + mb->mb_duration :
+					AV_NOPTS_VALUE, 1,
+					mb->mb_font_context);
+
+    if(vo != NULL)
+      video_overlay_enqueue(vd, vo);
+    
   } else {
-    video_subtitles_lavc(vd, mb, cw->codec_ctx);
+      
+    if(mc->decode) 
+      mc->decode(mc, vd, NULL, mb, 0);
+    else
+      video_subtitles_lavc(vd, mb, mc->codec_ctx);
   }
 }
 
@@ -206,13 +217,42 @@ video_overlay_decode(video_decoder_t *vd, media_buf_t *mb)
  *
  */
 void
-video_overlay_destroy(video_decoder_t *vd, video_overlay_t *vo)
+video_overlay_destroy(video_overlay_t *vo)
 {
-  TAILQ_REMOVE(&vd->vd_overlay_queue, vo, vo_link);
   if(vo->vo_pixmap != NULL)
     pixmap_release(vo->vo_pixmap);
   free(vo->vo_text);
   free(vo);
+}
+
+
+/**
+ *
+ */
+video_overlay_t *
+video_overlay_dup(video_overlay_t *src)
+{
+  video_overlay_t *dst = malloc(sizeof(video_overlay_t));
+  memcpy(dst, src, sizeof(video_overlay_t));
+  
+  if(src->vo_pixmap)
+    dst->vo_pixmap = pixmap_dup(src->vo_pixmap);
+
+  if(src->vo_text) {
+    dst->vo_text = malloc(src->vo_text_length * sizeof(uint32_t));
+    memcpy(dst->vo_text, src->vo_text, src->vo_text_length * sizeof(uint32_t));
+  }
+  return dst;
+}
+
+/**
+ *
+ */
+void
+video_overlay_dequeue_destroy(video_decoder_t *vd, video_overlay_t *vo)
+{
+  TAILQ_REMOVE(&vd->vd_overlay_queue, vo, vo_link);
+  video_overlay_destroy(vo);
 }
 
 
@@ -225,7 +265,7 @@ video_overlay_flush(video_decoder_t *vd, int send)
   video_overlay_t *vo;
 
   while((vo = TAILQ_FIRST(&vd->vd_overlay_queue)) != NULL)
-    video_overlay_destroy(vd, vo);
+    video_overlay_dequeue_destroy(vd, vo);
 
   if(!send)
     return;
@@ -234,3 +274,20 @@ video_overlay_flush(video_decoder_t *vd, int send)
   vo->vo_type = VO_FLUSH;
   video_overlay_enqueue(vd, vo);
 }
+
+
+/**
+ *
+ */
+int
+video_overlay_codec_create(media_codec_t *mc, enum CodecID id,
+			   AVCodecContext *ctx, media_pipe_t *mp)
+{
+  switch(id) {
+  case CODEC_ID_DVD_SUBTITLE:
+    return dvdspu_codec_create(mc, id, ctx, mp);
+  default:
+    return 1;
+  }
+}
+

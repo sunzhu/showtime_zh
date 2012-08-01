@@ -24,6 +24,7 @@
 #include "misc/strtab.h"
 #include "glw_view.h"
 #include "glw.h"
+#include "fileaccess/fileaccess.h" // for relative path resolving
 
 /**
  *
@@ -75,6 +76,13 @@ static void
 set_id(glw_t *w, const char *str)
 {
   mystrset(&w->glw_id, str);
+}
+
+static void
+set_how(glw_t *w, const char *str)
+{
+  if(w->glw_class->gc_set_how != NULL)
+    w->glw_class->gc_set_how(w, str);
 }
 
 
@@ -131,6 +139,26 @@ set_caption(glw_view_eval_context_t *ec, const token_attrib_t *a,
  *
  */
 static int
+set_font(glw_view_eval_context_t *ec, const token_attrib_t *a,
+	    struct token *t)
+{
+  rstr_t *str;
+
+  if(t->type == TOKEN_RSTRING)
+    str = t->t_rstring;
+  else
+    str = NULL;
+
+  if(ec->w->glw_class->gc_set_font != NULL)
+    ec->w->glw_class->gc_set_font(ec->w, str);
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
 set_float(glw_view_eval_context_t *ec, const token_attrib_t *a, 
 	  struct token *t)
 {
@@ -177,7 +205,7 @@ set_float(glw_view_eval_context_t *ec, const token_attrib_t *a,
 static void
 set_weight(glw_t *w, float v)
 {
-  glw_set_constraints(w, 0, 0, v, GLW_CONSTRAINT_W, GLW_CONSTRAINT_CONF_W);
+  glw_conf_constraints(w, 0, 0, v, GLW_CONSTRAINT_CONF_W);
 }
 
 static void
@@ -189,7 +217,7 @@ set_alpha(glw_t *w, float v)
 static void
 set_blur(glw_t *w, float v)
 {
-  w->glw_blur = GLW_CLAMP(1 - v, 0, 1);
+  w->glw_sharpness = GLW_CLAMP(1 - v, 0, 1);
 }
 
 /**
@@ -277,7 +305,7 @@ set_int(glw_view_eval_context_t *ec, const token_attrib_t *a,
 static void
 set_width(glw_t *w, int v)
 {
-  glw_set_constraints(w, v, 0, 0, GLW_CONSTRAINT_X, GLW_CONSTRAINT_CONF_X);
+  glw_conf_constraints(w, v, 0, 0, GLW_CONSTRAINT_CONF_X);
 }
 
 
@@ -287,7 +315,7 @@ set_width(glw_t *w, int v)
 static void
 set_height(glw_t *w, int v)
 {
-  glw_set_constraints(w, 0, v, 0, GLW_CONSTRAINT_Y, GLW_CONSTRAINT_CONF_Y);
+  glw_conf_constraints(w, 0, v, 0, GLW_CONSTRAINT_CONF_Y);
 }
 
 
@@ -566,6 +594,17 @@ set_clipping(glw_t *w, const float *xyzw)
 }
 
 
+/**
+ *
+ */
+static void
+set_plane(glw_t *w, const float *xyzw)
+{
+  if(w->glw_class->gc_set_plane != NULL)
+    w->glw_class->gc_set_plane(w, xyzw);
+}
+
+
 static struct strtab aligntab[] = {
   { "center",        LAYOUT_ALIGN_CENTER},
   { "left",          LAYOUT_ALIGN_LEFT},
@@ -576,6 +615,7 @@ static struct strtab aligntab[] = {
   { "topRight",      LAYOUT_ALIGN_TOP_RIGHT},
   { "bottomLeft",    LAYOUT_ALIGN_BOTTOM_LEFT},
   { "bottomRight",   LAYOUT_ALIGN_BOTTOM_RIGHT},
+  { "justified",     LAYOUT_ALIGN_JUSTIFIED},
 
 };
 
@@ -655,6 +695,33 @@ mod_flag(glw_view_eval_context_t *ec, const token_attrib_t *a,
 /**
  *
  */
+static int
+mod_hidden(glw_view_eval_context_t *ec, const token_attrib_t *a, 
+	   struct token *t)
+{
+  int v = 0;
+
+  if(t->type == TOKEN_INT)
+    v = t->t_int;
+  else if(t->type == TOKEN_FLOAT)
+    v = t->t_float > 0.5;
+  else if(t->type == TOKEN_VOID)
+    v = 0;
+  else
+    return glw_view_seterr(ec->ei, t, "Invalid assignment for attribute %s",
+			    a->name);
+
+  if(v)
+    glw_hide(ec->w);
+  else
+    glw_unhide(ec->w);
+  return 0;
+}
+
+
+/**
+ *
+ */
 static void
 mod_flags1(glw_t *w, int set, int clr)
 {
@@ -720,32 +787,40 @@ mod_video_flags(glw_t *w, int set, int clr)
     w->glw_class->gc_mod_video_flags(w, set, clr);
 }
 
+
+
+/**
+ *
+ */
+static void
+set_source(glw_t *w, rstr_t *p)
+{
+  if(w->glw_class->gc_set_source != NULL)
+    w->glw_class->gc_set_source(w, p);
+}
+
+
 /**
  *
  */
 static int
-set_source(glw_view_eval_context_t *ec, const token_attrib_t *a,
-	   struct token *t)
+set_path(glw_view_eval_context_t *ec, const token_attrib_t *a,
+	 struct token *t)
 {
   glw_t *w = ec->w;
+
   rstr_t *r;
-  if(w->glw_class->gc_set_source == NULL)
-    return 0;
+
+  void (*fn)(glw_t *w, rstr_t *r) = a->fn;
 
   switch(t->type) {
   case TOKEN_VOID:
-    w->glw_class->gc_set_source(w, NULL);
-    break;
-
-  case TOKEN_CSTRING:
-    r = rstr_alloc(t->t_cstring);
-    w->glw_class->gc_set_source(w, r);
-    rstr_release(r);
-    break;
+    fn(w, NULL);
+    return 0;
 
   case TOKEN_RSTRING:
   case TOKEN_LINK:
-    w->glw_class->gc_set_source(w, t->t_rstring);
+    r = t->t_rstring;
     break;
 
   default:
@@ -753,6 +828,10 @@ set_source(glw_view_eval_context_t *ec, const token_attrib_t *a,
 			    "Attribute '%s' expects a string or scalar not %s",
 			   a->name, token2name(t));
   }
+
+  r = fa_absolute_path(r, t->file);
+  fn(w, r);
+  rstr_release(r);
   return 0;
 }
 
@@ -802,14 +881,16 @@ set_propref(glw_view_eval_context_t *ec, const token_attrib_t *a,
  */
 static const token_attrib_t attribtab[] = {
   {"id",              set_string, 0, set_id},
+  {"how",             set_string, 0, set_how},
   {"caption",         set_caption, 0},
-  {"source",          set_source, 0},
+  {"font",            set_font, 0},
+  {"source",          set_path, 0, set_source},
 
   {"debug",                   mod_flag, GLW_DEBUG, mod_flags1},
   {"filterConstraintX",       mod_flag, GLW_CONSTRAINT_IGNORE_X, mod_flags1},
   {"filterConstraintY",       mod_flag, GLW_CONSTRAINT_IGNORE_Y, mod_flags1},
   {"filterConstraintWeight",  mod_flag, GLW_CONSTRAINT_IGNORE_W, mod_flags1},
-  {"hidden",                  mod_flag, GLW_HIDDEN, mod_flags1},
+  {"hidden",                  mod_hidden},
   {"noInitialTransform",      mod_flag, GLW_NO_INITIAL_TRANS, mod_flags1},
   {"focusOnClick",            mod_flag, GLW_FOCUS_ON_CLICK, mod_flags1},
   {"autoRefocusable",         mod_flag, GLW_AUTOREFOCUSABLE, mod_flags1},
@@ -821,6 +902,8 @@ static const token_attrib_t attribtab[] = {
   {"alwaysGrabKnob",          mod_flag, GLW2_ALWAYS_GRAB_KNOB, mod_flags2},
   {"autohide",                mod_flag, GLW2_AUTOHIDE, mod_flags2},
   {"shadow",                  mod_flag, GLW2_SHADOW, mod_flags2},
+  {"autofade",                mod_flag, GLW2_AUTOFADE, mod_flags2},
+  {"expediteSubscriptions",   mod_flag, GLW2_EXPEDITE_SUBSCRIPTIONS, mod_flags2},
 
   {"fixedSize",       mod_flag, GLW_IMAGE_FIXED_SIZE, mod_img_flags},
   {"bevelLeft",       mod_flag, GLW_IMAGE_BEVEL_LEFT, mod_img_flags},
@@ -832,6 +915,7 @@ static const token_attrib_t attribtab[] = {
   {"borderOnly",      mod_flag, GLW_IMAGE_BORDER_ONLY, mod_img_flags},
   {"leftBorder",      mod_flag, GLW_IMAGE_BORDER_LEFT, mod_img_flags},
   {"rightBorder",     mod_flag, GLW_IMAGE_BORDER_RIGHT, mod_img_flags},
+  {"aspectFixedBorders", mod_flag, GLW_IMAGE_ASPECT_FIXED_BORDERS, mod_img_flags},
 
   {"password",        mod_flag,  GTB_PASSWORD, mod_text_flags},
   {"ellipsize",       mod_flag,  GTB_ELLIPSIZE, mod_text_flags},
@@ -879,6 +963,7 @@ static const token_attrib_t attribtab[] = {
   {"spacing",         set_int,    GLW_ATTRIB_SPACING},
   {"Xspacing",        set_int,    GLW_ATTRIB_X_SPACING},
   {"Yspacing",        set_int,    GLW_ATTRIB_Y_SPACING},
+  {"scrollThreshold", set_int,    GLW_ATTRIB_SCROLL_THRESHOLD},
 
   {"color",           set_float3, 0, set_rgb},
   {"translation",     set_float3, 0, set_translation},
@@ -891,12 +976,18 @@ static const token_attrib_t attribtab[] = {
   {"margin",          set_int16_4, 0, set_margin},
   {"rotation",        set_float4, 0, set_rotation},
   {"clipping",        set_float4, 0, set_clipping},
+  {"plane",           set_float4, 0, set_plane},
+  {"alphaFallOff",    set_float, GLW_ATTRIB_ALPHA_FALLOFF},
+  {"blurFallOff",     set_float, GLW_ATTRIB_BLUR_FALLOFF},
+  
+
 
   {"align",           set_align,  0},
   {"effect",          set_transition_effect,  0},
 
   {"args",            set_args,  0},
   {"parent",          set_propref, GLW_ATTRIB_PROP_PARENT},
+  {"self",            set_propref, GLW_ATTRIB_PROP_SELF},
   {"model",           set_propref, GLW_ATTRIB_PROP_MODEL},
 };
 

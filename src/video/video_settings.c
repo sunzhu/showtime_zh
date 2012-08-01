@@ -69,7 +69,7 @@ set_subtitle_always_select(void *opaque, int v)
 static void
 set_subtitle_style_override(void *opaque, int v)
 {
-  subtitle_settings.outline_size = v;
+  subtitle_settings.style_override = v;
 }
 
 static void
@@ -198,7 +198,8 @@ video_settings_init(void)
   setting_t *x;
 
   s = settings_add_dir(NULL, _p("Video playback"), "video", NULL,
-		       _p("Video acceleration and display behaviour"));
+		       _p("Video acceleration and display behaviour"),
+		       NULL);
 
   if((store = htsmsg_store_load("videoplayback")) == NULL)
     store = htsmsg_create_map();
@@ -292,7 +293,8 @@ video_settings_init(void)
   //----------------------------------------------------------
 
   s = settings_add_dir(NULL, _p("Subtitles"), "subtitle", NULL,
-		       _p("Generic settings for video subtitles"));
+		       _p("Generic settings for video subtitles"),
+		       NULL);
   subtitle_settings_dir = s;
 
   if((store = htsmsg_store_load("subtitles")) == NULL)

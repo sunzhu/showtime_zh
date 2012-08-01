@@ -18,6 +18,12 @@
 
 #include "glw.h"
 
+const static float projection[16] = {
+  2.414213,0.000000,0.000000,0.000000,
+  0.000000,2.414213,0.000000,0.000000,
+  0.000000,0.000000,1.033898,-1.000000,
+  0.000000,0.000000,2.033898,0.000000
+};
 
 /**
  * return 1 if the extension is found, otherwise 0
@@ -43,12 +49,20 @@ check_gl_ext(const uint8_t *s, const char *func)
  *
  */
 void
-glw_wirebox(glw_root_t *gr, glw_rctx_t *rc)
+glw_wirebox(glw_root_t *gr, const glw_rctx_t *rc)
 {
   glw_backend_root_t *gbr = &gr->gr_be;
-  glw_load_program(gbr, gbr->gbr_renderer_flat);
-  glw_program_set_modelview(gbr, rc);
-  glw_program_set_uniform_color(gbr, 1,1,1,1);
+  if(gbr->gbr_delayed_rendering)
+    return;
+
+  glw_load_program(gbr, NULL);
+
+  glMatrixMode(GL_PROJECTION);
+  glLoadMatrixf(projection);
+  glMatrixMode(GL_MODELVIEW);
+  glLoadMatrixf(glw_mtx_get(rc->rc_mtx));
+
+
   glDisable(GL_TEXTURE_2D);
   glBegin(GL_LINE_LOOP);
   glColor4f(1,1,1,1);
@@ -65,9 +79,11 @@ glw_wirebox(glw_root_t *gr, glw_rctx_t *rc)
  *
  */
 void
-glw_wirecube(glw_root_t *gr, glw_rctx_t *rc)
+glw_wirecube(glw_root_t *gr, const glw_rctx_t *rc)
 {
   glw_backend_root_t *gbr = &gr->gr_be;
+  if(gbr->gbr_delayed_rendering)
+    return;
 
   glw_load_program(gbr, gbr->gbr_renderer_flat);
   glw_program_set_modelview(gbr, rc);
@@ -135,7 +151,8 @@ glw_opengl_init_context(glw_root_t *gr)
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glEnable(GL_CULL_FACE);
-  gbr->gbr_culling = 1;
+
+  gbr->gbr_frontface = GLW_CCW;
 
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // We should try to fix this
 
@@ -176,7 +193,7 @@ glw_opengl_init_context(glw_root_t *gr)
   int use_shaders = 1;
 
   if(strstr(renderer, "Mesa"))
-      use_shaders = 0;
+    use_shaders = 0;
 
   if(use_shaders) {
     return glw_opengl_shaders_init(gr);

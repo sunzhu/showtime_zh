@@ -77,7 +77,7 @@ glw_fx_texrot_dtor(glw_t *w)
  *
  */
 static void 
-glw_fx_texrot_render(glw_t *w, glw_rctx_t *rc)
+glw_fx_texrot_render(glw_t *w, const glw_rctx_t *rc)
 {
   glw_fx_texrot_t *fx = (void *)w;
   glw_loadable_texture_t *glt = fx->fx_tex;
@@ -87,7 +87,8 @@ glw_fx_texrot_render(glw_t *w, glw_rctx_t *rc)
 
   if(glt != NULL && glt->glt_state == GLT_STATE_VALID && a > 0.01) {
     glw_renderer_draw(&fx->fx_render, w->glw_root, rc, 
-		      &glw_rtt_texture(&fx->fx_rtt), NULL, NULL, a, 0);
+		      &glw_rtt_texture(&fx->fx_rtt),
+		      NULL, NULL, a, 0);
   }
 }
 

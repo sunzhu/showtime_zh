@@ -48,7 +48,7 @@ glw_bar_dtor(glw_t *w)
  *
  */
 static void 
-glw_bar_render(glw_t *w, glw_rctx_t *rc)
+glw_bar_render(glw_t *w, const glw_rctx_t *rc)
 {
   glw_bar_t *gb = (void *)w;
   float a = rc->rc_alpha * w->glw_alpha;
@@ -62,7 +62,8 @@ glw_bar_render(glw_t *w, glw_rctx_t *rc)
     return;
   }
   if(a > 0.01) {
-    glw_renderer_draw(&gb->gb_gr, w->glw_root, rc, NULL, NULL, NULL, a, 0);
+    glw_renderer_draw(&gb->gb_gr, w->glw_root, rc,
+		      NULL, NULL, NULL, a, 0);
   }
 }
 

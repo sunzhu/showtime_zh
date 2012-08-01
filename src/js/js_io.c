@@ -205,9 +205,9 @@ js_http_request(JSContext *cx, jsval *rval,
 
   if(ctrlobj) {
     if(js_is_prop_true(cx, ctrlobj, "debug"))
-      flags |= HTTP_REQUEST_DEBUG;
+      flags |= FA_DEBUG;
     if(js_is_prop_true(cx, ctrlobj, "noFollow"))
-      flags |= HTTP_NOFOLLOW;
+      flags |= FA_NOFOLLOW;
     if(js_is_prop_true(cx, ctrlobj, "headRequest"))
       headreq = 1;
   }
@@ -290,7 +290,7 @@ js_http_request(JSContext *cx, jsval *rval,
 
   const js_context_private_t *jcp = JS_GetContextPrivate(cx);
   if(jcp != NULL && jcp->jcp_flags & JCP_DISABLE_AUTH)
-    flags |= HTTP_DISABLE_AUTH;
+    flags |= FA_DISABLE_AUTH;
 
   struct http_header_list response_headers;
 
@@ -301,7 +301,7 @@ js_http_request(JSContext *cx, jsval *rval,
 		       errbuf, sizeof(errbuf),
 		       postdata, postcontenttype,
 		       flags,
-		       &response_headers, &in_headers, NULL);
+		       &response_headers, &in_headers, NULL, NULL, NULL);
   JS_ResumeRequest(cx, s);
 
   if(httpargs != NULL)
@@ -438,7 +438,8 @@ js_readFile(JSContext *cx, JSObject *obj, uintN argc,
     return JS_FALSE;
 
   jsrefcount s = JS_SuspendRequest(cx);
-  result = fa_load(url, &size, NULL, errbuf, sizeof(errbuf), NULL);
+  result = fa_load(url, &size, NULL, errbuf, sizeof(errbuf), NULL, 0,
+		   NULL, NULL);
   JS_ResumeRequest(cx, s);
 
   if(result == NULL) {

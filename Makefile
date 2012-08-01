@@ -172,8 +172,9 @@ clean:
 	rm -rf ${BUILDDIR}/src ${BUILDDIR}/ext ${BUILDDIR}/bundles
 	find . -name "*~" | xargs rm -f
 
-distclean: clean
+distclean:
 	rm -rf build.*
+	find . -name "*~" | xargs rm -f
 
 reconfigure:
 	$(CURDIR)/configure.${CONFIGURE_POSTFIX} $(CONFIGURE_ARGS)
@@ -200,7 +201,7 @@ include support/${PLATFORM}.mk
 
 # Bundle files
 $(BUILDDIR)/bundles/%.o: $(BUILDDIR)/bundles/%.c $(ALLDEPS)
-	$(CC) -I${CURDIR}/src/fileaccess -c -o $@ $<
+	$(CC) $(CFLAGS_cfg) -I${CURDIR}/src/fileaccess -c -o $@ $<
 
 $(BUILDDIR)/bundles/%.c: % $(CURDIR)/support/mkbundle $(ALLDEPS)
 	@mkdir -p $(dir $@)

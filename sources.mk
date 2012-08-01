@@ -31,7 +31,6 @@ SRCS += src/main.c \
 	src/event.c \
 	src/keyring.c \
 	src/settings.c \
-	src/bookmarks.c \
 	src/service.c \
 	src/notifications.c \
 	src/playqueue.c \
@@ -154,6 +153,7 @@ SRCS += 		src/api/api.c \
 			src/api/soap.c \
 			src/api/opensubtitles.c \
 			src/api/lastfm.c \
+			src/api/tmdb.c \
 
 SRCS-$(CONFIG_HTTPSERVER) += src/api/httpcontrol.c \
 
@@ -187,8 +187,8 @@ SRCS += src/video/video_playback.c \
 	src/video/sub_ass.c \
 	src/video/ext_subtitles.c \
 	src/video/video_settings.c \
-
-SRCS-$(CONFIG_DVD) += src/video/video_dvdspu.c
+	src/video/video_dvdspu.c \
+	src/video/vobsub.c \
 
 SRCS-$(CONFIG_VDPAU) += src/video/vdpau.c
 
@@ -271,7 +271,7 @@ SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
 			src/ui/glw/glw_slider.c \
 			src/ui/glw/glw_rotator.c  \
 			src/ui/glw/glw_detachable.c  \
-			src/ui/glw/glw_throbber3d.c  \
+			src/ui/glw/glw_throbber.c  \
 			src/ui/glw/glw_slideshow.c \
 			src/ui/glw/glw_freefloat.c \
 			src/ui/glw/glw_multitile.c \

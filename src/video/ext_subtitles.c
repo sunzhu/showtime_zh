@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include "showtime.h"
 #include "ext_subtitles.h"
@@ -30,38 +31,20 @@
 #include "misc/string.h"
 #include "i18n.h"
 #include "video_overlay.h"
-
-/**
- *
- */
-static int
-ese_cmp(const ext_subtitle_entry_t *a, const ext_subtitle_entry_t *b)
-{
-  if(a->ese_start > b->ese_start)
-    return 1;
-  if(a->ese_start < b->ese_start)
-    return -1;
-  return 0;
-}
-
+#include "vobsub.h"
 
 /**
  *
  */
 static void
-ese_insert(ext_subtitles_t *es, char *txt, int64_t start, int64_t stop)
+es_insert_text(ext_subtitles_t *es, const char *text,
+	       int64_t start, int64_t stop, int tags)
 {
-  ext_subtitle_entry_t *ese = malloc(sizeof(ext_subtitle_entry_t));
-  ese->ese_start = start;
-  ese->ese_stop = stop;
-  ese->ese_text = txt;
-  if(RB_INSERT_SORTED(&es->es_entries, ese, ese_link, ese_cmp)) {
-    // Collision
-    free(ese);
-    free(txt);
-  }
+  video_overlay_t *vo;
+  vo = video_overlay_render_cleartext(text, start, stop, tags, 0);
+  TAILQ_INSERT_TAIL(&es->es_entries, vo, vo_link);
 }
-
+	       
 
 /**
  *
@@ -206,16 +189,15 @@ is_srt(const char *buf, size_t len)
 /**
  *
  */
-static void
-ext_srt_decode(struct video_decoder *vd, struct ext_subtitles *es,
-	       ext_subtitle_entry_t *ese)
+static int
+is_ass(const char *buf, size_t len)
 {
-  video_overlay_render_cleartext(vd, ese->ese_text,
-				 ese->ese_start, ese->ese_stop,
-				 1);
+  if(strstr(buf, "[Script Info]") == NULL)
+    return 0;
+  if(strstr(buf, "[Events]") == NULL)
+    return 0;
+  return 1;
 }
-
-
 
 /**
  *
@@ -231,7 +213,7 @@ load_srt(const char *url, const char *buf, size_t len, int force_utf8)
   char *txt = NULL, *tmp = NULL;
   size_t txtoff = 0;
   
-  RB_INIT(&es->es_entries);
+  TAILQ_INIT(&es->es_entries);
 
   if(force_utf8 || utf8_verify(buf)) {
     linereader_init(&lr, buf, len);
@@ -250,7 +232,8 @@ load_srt(const char *url, const char *buf, size_t len, int force_utf8)
     if(get_srt_timestamp(&lr, &start, &stop) == 0) {
       if(txt != NULL && pstart != -1 && pstop != -1) {
 	txt[txtoff] = 0;
-	ese_insert(es, txt, pstart, pstop);
+	es_insert_text(es, txt, pstart, pstop, 1);
+	free(txt);
 	txt = NULL;
 	tlen = 0;
 	txtoff = 0;
@@ -272,14 +255,10 @@ load_srt(const char *url, const char *buf, size_t len, int force_utf8)
 
   if(txt != NULL && pstart != -1 && pstop != -1) {
     txt[txtoff] = 0;
-    ese_insert(es, txt, pstart, pstop);
-    txt = NULL;
+    es_insert_text(es, txt, pstart, pstop, 1);
   }
   free(txt);
   free(tmp);
-  TRACE(TRACE_DEBUG, "Subtitles", "Loaded %s as SRT, %d pages", url,
-	es->es_entries.entries);
-  es->es_decode = ext_srt_decode;
   return es;
 }
 
@@ -322,19 +301,6 @@ ttml_time_expression(const char *str)
 
 
 /**
- *
- */
-static void
-ext_ttlm_decode(struct video_decoder *vd, struct ext_subtitles *es,
-		ext_subtitle_entry_t *ese)
-{
-  video_overlay_render_cleartext(vd, ese->ese_text,
-				 ese->ese_start, ese->ese_stop,
-				 0);
-}
-
-
-/**
  * TTML docs here: http://www.w3.org/TR/ttaf1-dfxp/
  */
 static ext_subtitles_t *
@@ -364,7 +330,7 @@ load_ttml(const char *url, char **buf, size_t len)
   }
 
   ext_subtitles_t *es = calloc(1, sizeof(ext_subtitles_t));
-  RB_INIT(&es->es_entries);
+  TAILQ_INIT(&es->es_entries);
 
   HTSMSG_FOREACH(f, subs) {
     if(f->hmf_type == HMF_MAP) {
@@ -385,13 +351,9 @@ load_ttml(const char *url, char **buf, size_t len)
       if((end = ttml_time_expression(str)) == -1)
 	continue;
 
-      ese_insert(es, strdup(txt), start, end);
+      es_insert_text(es, txt, start, end, 0);
     }
   }
-  TRACE(TRACE_DEBUG, "Subtitles", "Loaded %s as TTML, %d pages", url,
-	es->es_entries.entries);
-
-  es->es_decode = ext_ttlm_decode;
   return es;
 }
 
@@ -399,51 +361,20 @@ load_ttml(const char *url, char **buf, size_t len)
 /**
  *
  */
-static void __attribute__((unused))
-dump_subtitles(ext_subtitles_t *es)
+static int
+vocmp(const void *A, const void *B)
 {
-  ext_subtitle_entry_t *se;
-
-  RB_FOREACH(se, &es->es_entries, ese_link) {
-    printf("PAGE: %"PRId64" -> %"PRId64"\n--\n%s\n--\n",
-	   se->ese_start, se->ese_stop, se->ese_text);
-  }
-}
-
-/**
- *
- */
-static ext_subtitles_t *
-subtitles_create(const char *path, char **bufp, size_t len)
-{
-  ext_subtitles_t *s = NULL;
-
-  if(is_ttml(*bufp, len)) {
-    s = load_ttml(path, bufp, len);
-  } else {
-
-    int force_utf8 = 0;
-    const char *buf = *bufp;
-
-    if(len > 2 && ((buf[0] == 0xff && buf[1] == 0xfe) ||
-		   (buf[0] == 0xfe && buf[1] == 0xff))) {
-      // UTF-16 BOM
-      utf16_to_utf8(bufp, &len);
-      buf = *bufp;
-      force_utf8 = 1;
-    } else if(len > 3 && buf[0] == 0xef && buf[1] == 0xbb && buf[2] == 0xbf) {
-      // UTF-8 BOM
-      force_utf8 = 1;
-      buf += 3;
-      len -= 3;
-    }
-
-    if(is_srt(buf, len))
-      s = load_srt(path, buf, len, force_utf8);
-  }
-
-  //  if(s)dump_subtitles(s);
-  return s;
+  const video_overlay_t *a = *(const video_overlay_t **)A;
+  const video_overlay_t *b = *(const video_overlay_t **)B;
+  if(a->vo_start < b->vo_start)
+    return -1;
+  if(a->vo_start > b->vo_start)
+    return 1;
+  if(a->vo_stop < b->vo_stop)
+    return -1;
+  if(a->vo_stop > b->vo_stop)
+    return 1;
+  return 0;
 }
 
 
@@ -451,16 +382,68 @@ subtitles_create(const char *path, char **bufp, size_t len)
  *
  */
 static void
-subtitle_entry_destroy(ext_subtitle_entry_t *ese)
+es_sort(ext_subtitles_t *es)
 {
-  if(ese->ese_link.left != NULL)
-    subtitle_entry_destroy(ese->ese_link.left);
-  if(ese->ese_link.right != NULL)
-    subtitle_entry_destroy(ese->ese_link.right);
-  free(ese->ese_text);
-  free(ese);
+  video_overlay_t *vo, **vec;
+  int cnt = 0, i;
+
+  TAILQ_FOREACH(vo, &es->es_entries, vo_link)
+    cnt++;
+
+  vec = malloc(sizeof(video_overlay_t *) * cnt);
+  
+  cnt = 0;
+  TAILQ_FOREACH(vo, &es->es_entries, vo_link)
+    vec[cnt++] = vo;
+  
+  qsort(vec, cnt, sizeof(video_overlay_t *), vocmp);
+
+  TAILQ_INIT(&es->es_entries);
+  for(i = 0; i < cnt; i++)
+    TAILQ_INSERT_TAIL(&es->es_entries, vec[i], vo_link);
+  free(vec);
 }
 
+
+/**
+ *
+ */
+static ext_subtitles_t *
+subtitles_create(const char *path, char *buf, size_t len)
+{
+  ext_subtitles_t *s = NULL;
+  
+  if(is_ttml(buf, len)) {
+    s = load_ttml(path, &buf, len);
+  } else {
+
+    int force_utf8 = 0;
+    char *b0 = buf;
+    if(len > 2 && ((buf[0] == 0xff && buf[1] == 0xfe) ||
+		   (buf[0] == 0xfe && buf[1] == 0xff))) {
+      // UTF-16 BOM
+      utf16_to_utf8(&buf, &len);
+      force_utf8 = 1;
+      b0 = buf;
+    } else if(len > 3 && buf[0] == 0xef && buf[1] == 0xbb && buf[2] == 0xbf) {
+      // UTF-8 BOM
+      force_utf8 = 1;
+      b0 += 3;
+      len -= 3;
+    }
+
+    if(is_srt(buf, len))
+      s = load_srt(path, b0, len, force_utf8);
+    if(is_ass(buf, len))
+      s = load_ssa(path, b0, len);
+  }
+
+  //  if(s)dump_subtitles(s);
+  if(s)
+    es_sort(s);
+  free(buf);
+  return s;
+}
 
 
 /**
@@ -469,9 +452,14 @@ subtitle_entry_destroy(ext_subtitle_entry_t *ese)
 void
 subtitles_destroy(ext_subtitles_t *es)
 {
-  if(es->es_entries.root != NULL)
-    subtitle_entry_destroy(es->es_entries.root);
+  video_overlay_t *vo;
 
+  while((vo = TAILQ_FIRST(&es->es_entries)) != NULL) {
+    TAILQ_REMOVE(&es->es_entries, vo, vo_link);
+    video_overlay_destroy(vo);
+  }
+  if(es->es_dtor)
+    es->es_dtor(es);
   free(es);
 }
 
@@ -479,28 +467,49 @@ subtitles_destroy(ext_subtitles_t *es)
 /**
  *
  */
-ext_subtitle_entry_t *
-subtitles_pick(ext_subtitles_t *es, int64_t pts)
+static void
+vo_deliver(ext_subtitles_t *es, video_overlay_t *vo, video_decoder_t *vd,
+	   int64_t pts)
 {
-  ext_subtitle_entry_t skel, *ese = es->es_cur;
+  int64_t s = vo->vo_start;
+  do {
+    es->es_cur = vo;
 
-  if(ese != NULL && ese->ese_start <= pts && ese->ese_stop > pts)
-    return NULL; // Already sent
+    video_overlay_enqueue(vd, video_overlay_dup(vo));
+    vo = TAILQ_NEXT(vo, vo_link);
+  } while(vo != NULL && vo->vo_start == s && vo->vo_stop > pts);
+}
+
+
+/**
+ *
+ */
+void
+subtitles_pick(ext_subtitles_t *es, int64_t pts, video_decoder_t *vd)
+{
+  video_overlay_t *vo = es->es_cur;
+
+  if(es->es_picker)
+    return es->es_picker(es, pts, vd);
+
+  if(vo != NULL && vo->vo_start <= pts && vo->vo_stop > pts)
+    return; // Already sent
   
-  if(ese != NULL) {
-    ese = RB_NEXT(ese, ese_link);
-    if(ese != NULL && ese->ese_start <= pts && ese->ese_stop > pts)
-      return es->es_cur = ese;
-  }
-  
-  skel.ese_start = pts;
-  ese = RB_FIND_LE(&es->es_entries, &skel, ese_link, ese_cmp);
-  if(ese == NULL || ese->ese_stop <= pts) {
-    es->es_cur = NULL;
-    return NULL;
+  if(vo != NULL) {
+    vo = TAILQ_NEXT(vo, vo_link);
+    if(vo != NULL && vo->vo_start <= pts && vo->vo_stop > pts) {
+      vo_deliver(es, vo, vd, pts);
+      return;
+    }
   }
 
-  return es->es_cur = ese;
+  TAILQ_FOREACH(vo, &es->es_entries, vo_link) {
+    if(vo->vo_start <= pts && vo->vo_stop > pts) {
+      vo_deliver(es, vo, vd, pts);
+      return;
+    }
+  }
+  es->es_cur = NULL;
 }
 
 
@@ -508,13 +517,23 @@ subtitles_pick(ext_subtitles_t *es, int64_t pts)
  *
  */
 ext_subtitles_t *
-subtitles_load(const char *url)
+subtitles_load(media_pipe_t *mp, const char *url)
 {
   ext_subtitles_t *sub;
   char errbuf[256];
   size_t size;
   int datalen;
-  char *data = fa_load(url, &size, NULL, errbuf, sizeof(errbuf), DISABLE_CACHE);
+  const char *s;
+  if((s = mystrbegins(url, "vobsub:")) != NULL) {
+    sub = vobsub_load(s, errbuf, sizeof(errbuf), mp);
+    if(sub == NULL) 
+      TRACE(TRACE_ERROR, "Subtitles", "Unable to load %s -- %s", 
+	    s, errbuf);
+    return sub;
+  }
+
+  char *data = fa_load(url, &size, NULL, errbuf, sizeof(errbuf),
+		       DISABLE_CACHE, 0, NULL, NULL);
 
   if(data == NULL) {
     TRACE(TRACE_ERROR, "Subtitles", "Unable to load %s -- %s", 
@@ -543,9 +562,7 @@ subtitles_load(const char *url)
     datalen = size;
   }
 
-  sub = subtitles_create(url, &data, datalen);
-
-  free(data);
+  sub = subtitles_create(url, data, datalen);
 
   if(sub == NULL)
     TRACE(TRACE_ERROR, "Subtitles", "Unable to load %s -- Unknown format", 

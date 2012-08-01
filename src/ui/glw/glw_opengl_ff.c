@@ -34,7 +34,7 @@ const static float projection[16] = {
  *
  */
 static void
-hw_set_clip_conf(struct glw_rctx *rc, int which, const Vec4 v)
+hw_set_clip_conf(const struct glw_rctx *rc, int which, const Vec4 v)
 {
   double plane[4];
     
@@ -53,7 +53,7 @@ hw_set_clip_conf(struct glw_rctx *rc, int which, const Vec4 v)
  *
  */
 static void
-hw_clr_clip_conf(struct glw_rctx *rc, int which)
+hw_clr_clip_conf(int which)
 {
   glDisable(GL_CLIP_PLANE0 + which);
 }
@@ -63,8 +63,9 @@ hw_clr_clip_conf(struct glw_rctx *rc, int which)
 
 static void
 ff_render(struct glw_root *gr,
-	  Mtx m,
-	  struct glw_backend_texture *tex,
+	  const Mtx m,
+	  const struct glw_backend_texture *t0,
+	  const struct glw_backend_texture *t1,
 	  const struct glw_rgb *rgb_mul,
 	  const struct glw_rgb *rgb_off,
 	  float alpha, float blur,
@@ -77,7 +78,7 @@ ff_render(struct glw_root *gr,
   glw_backend_root_t *gbr = &gr->gr_be;
   float r,g,b;
 
-  switch(gbr->be_blendmode) {
+  switch(gbr->gbr_blendmode) {
   case GLW_BLEND_NORMAL:
     r = rgb_mul->r;
     g = rgb_mul->g;
@@ -100,25 +101,17 @@ ff_render(struct glw_root *gr,
   if(flags & GLW_RENDER_COLOR_ATTRIBUTES) {
     int i;
 
-    if(num_vertices > gr->gr_vtmp_capacity) {
-      gr->gr_vtmp_capacity = num_vertices;
-      gr->gr_vtmp_buffer = realloc(gr->gr_vtmp_buffer, sizeof(float) *
-				   VERTEX_SIZE * gr->gr_vtmp_capacity);
-    }
+    glw_vtmp_resize(gr, num_vertices * 4);
+
     for(i = 0; i < num_vertices; i++) {
-      gr->gr_vtmp_buffer[i * VERTEX_SIZE + 0] =
-	vertices[i * VERTEX_SIZE + 5] * r;
-      gr->gr_vtmp_buffer[i * VERTEX_SIZE + 1] =
-	vertices[i * VERTEX_SIZE + 6] * g;
-      gr->gr_vtmp_buffer[i * VERTEX_SIZE + 2] =
-	vertices[i * VERTEX_SIZE + 7] * b;
-      gr->gr_vtmp_buffer[i * VERTEX_SIZE + 3] =
-	vertices[i * VERTEX_SIZE + 8] * alpha;
+      gr->gr_vtmp_buffer[i * 4 + 0] = vertices[i * VERTEX_SIZE + 4] * r;
+      gr->gr_vtmp_buffer[i * 4 + 1] = vertices[i * VERTEX_SIZE + 5] * g;
+      gr->gr_vtmp_buffer[i * 4 + 2] = vertices[i * VERTEX_SIZE + 6] * b;
+      gr->gr_vtmp_buffer[i * 4 + 3] = vertices[i * VERTEX_SIZE + 7] * alpha;
     }
 
     glEnableClientState(GL_COLOR_ARRAY);
-    glColorPointer(4, GL_FLOAT, sizeof(float) * VERTEX_SIZE,
-		   gr->gr_vtmp_buffer);
+    glColorPointer(4, GL_FLOAT, 0, gr->gr_vtmp_buffer);
   } else {
     glColor4f(r, g, b, alpha);
   }
@@ -128,13 +121,13 @@ ff_render(struct glw_root *gr,
     glSecondaryColor3f(rgb_off->r, rgb_off->g, rgb_off->b);
   }
 
-  if(tex == NULL) {
+  if(t0 == NULL) {
     glBindTexture(gbr->gbr_primary_texture_mode, 0);
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
   } else {
-    glBindTexture(gbr->gbr_primary_texture_mode, tex->tex);
+    glBindTexture(gbr->gbr_primary_texture_mode, t0->tex);
     glTexCoordPointer(2, GL_FLOAT, sizeof(float) * VERTEX_SIZE,
-		      vertices + 3);
+		      vertices + 8);
   }
 
   if(indices != NULL)
@@ -149,7 +142,7 @@ ff_render(struct glw_root *gr,
   if(flags & GLW_RENDER_COLOR_ATTRIBUTES)
     glDisableClientState(GL_COLOR_ARRAY);
 
-  if(tex == NULL)
+  if(t0 == NULL)
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 }
 

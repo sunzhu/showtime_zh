@@ -150,7 +150,7 @@ glw_slider_layout(glw_t *w, glw_rctx_t *rc)
  *
  */
 static void
-glw_slider_render_x(glw_t *w, glw_rctx_t *rc)
+glw_slider_render_x(glw_t *w, const glw_rctx_t *rc)
 {
   glw_slider_t *s = (glw_slider_t *)w;
   glw_t *c;
@@ -179,7 +179,7 @@ glw_slider_render_x(glw_t *w, glw_rctx_t *rc)
  *
  */
 static void
-glw_slider_render_y(glw_t *w, glw_rctx_t *rc)
+glw_slider_render_y(glw_t *w, const glw_rctx_t *rc)
 {
   glw_slider_t *s = (glw_slider_t *)w;
   glw_t *c;
@@ -397,9 +397,9 @@ glw_slider_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
     c = extra;
     
     if(w->glw_class == &glw_slider_y) {
-      glw_set_constraints(w, c->glw_req_size_x, 0, 0, GLW_CONSTRAINT_X, 0);
+      glw_set_constraints(w, c->glw_req_size_x, 0, 0, GLW_CONSTRAINT_X);
     } else {
-      glw_set_constraints(w, 0, c->glw_req_size_y, 0, GLW_CONSTRAINT_Y, 0);
+      glw_set_constraints(w, 0, c->glw_req_size_y, 0, GLW_CONSTRAINT_Y);
     }
     return 1;
 

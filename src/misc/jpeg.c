@@ -33,7 +33,7 @@
 
 #include "jpeg.h"
 #include "pixmap.h"
-
+#include "rstr.h"
 
 /**
  *
@@ -86,6 +86,7 @@ jpeg_time(const char *d)
 	    &tm.tm_hour, &tm.tm_min, &tm.tm_sec) != 8)
     return 0;
 
+  tm.tm_mon--;
   tm.tm_year -= 1900;
   tm.tm_isdst = -1;
   
@@ -189,8 +190,8 @@ parse_app1(jpeginfo_t *ji, const uint8_t *buf, size_t len, int flags)
 	break;
       }
       
-      //      printf("  IFD%d  %04x (%d) * %d  ==  %d\n",  ifd, tag, type, c, value);
-
+      //      printf("  IFD%d  %04x (%d)  ==  %d\n",  ifd, tag, type, value);
+      
       switch(IFDTAG(ifd, tag)) {
       case IFDTAG(1, 0x201):  // JPEG Thumbnail offset
 	thumbnail_jpeg_offset = value;
@@ -203,6 +204,14 @@ parse_app1(jpeginfo_t *ji, const uint8_t *buf, size_t len, int flags)
 	break;
       case IFDTAG(0, 0x132):  // Datetime
 	ji->ji_time = jpeg_time(str);
+	break;
+      case IFDTAG(0, 0x10f):  // Manufacturer
+	rstr_release(ji->ji_manufacturer);
+	ji->ji_manufacturer = rstr_alloc(str);
+	break;
+      case IFDTAG(0, 0x110):  // Equipment
+	rstr_release(ji->ji_equipment);
+	ji->ji_equipment = rstr_alloc(str);
 	break;
 
       default:
@@ -367,9 +376,27 @@ jpeg_info_clear(jpeginfo_t *ji)
 {
   if(ji->ji_thumbnail != NULL)
     pixmap_release(ji->ji_thumbnail);
+  rstr_release(ji->ji_manufacturer);
+  rstr_release(ji->ji_equipment);
 }
 
 
+
+
+/**
+ *
+ */
+int
+jpeginfo_mem_reader(void *handle, void *buf, off_t offset, size_t size)
+{
+  jpeg_meminfo_t *mi = handle;
+
+  if(size + offset > mi->size)
+    return -1;
+
+  memcpy(buf, mi->data + offset, size);
+  return size;
+}
 
 
 

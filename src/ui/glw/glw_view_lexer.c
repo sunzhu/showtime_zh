@@ -30,10 +30,8 @@ lexer_link_token(token_t *prev, rstr_t *f, int line, token_t *t,
   t->type = type;
   prev->next = t;
 
-#ifdef GLW_VIEW_ERRORINFO
   t->file = rstr_dup(f);
   t->line = line;
-#endif
 }
 
 
@@ -146,6 +144,7 @@ lexer_single_char(glw_root_t *gr, token_t *next, rstr_t *f, int line, char s)
   case '&' : ty = TOKEN_AMPERSAND;                break;
   case '>' : ty = TOKEN_GT;                       break;
   case '<' : ty = TOKEN_LT;                       break;
+  case ':' : ty = TOKEN_COLON;                    break;
   default:
     return NULL;
   }
@@ -375,16 +374,20 @@ glw_view_load1(glw_root_t *gr, rstr_t *url, errorinfo_t *ei, token_t *prev)
   token_t *last;
   char errbuf[256];
 
-  if((src = fa_load(rstr_get(url), NULL, gr->gr_vpaths, 
-		    errbuf, sizeof(errbuf), NULL)) == NULL) {
+  rstr_t *p = fa_absolute_path(url, prev->file);
+  src = fa_load(rstr_get(p), NULL, gr->gr_vpaths, 
+		errbuf, sizeof(errbuf), NULL, 0, NULL, NULL);
+  if(src == NULL) {
     snprintf(ei->error, sizeof(ei->error), "Unable to open \"%s\" -- %s",
-	     rstr_get(url), errbuf);
+	     rstr_get(p), errbuf);
     snprintf(ei->file,  sizeof(ei->file),  "%s", rstr_get(prev->file));
     ei->line = prev->line;
+    rstr_release(p);
     return NULL;
   }
 
-  last = lexer(gr, src, ei, url, prev);
+  last = lexer(gr, src, ei, p, prev);
   free(src);
+  rstr_release(p);
   return last;
 }

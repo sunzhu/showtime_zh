@@ -27,6 +27,7 @@ typedef struct glw_view_loader {
   struct prop *prop_parent;
   struct prop *prop_clone;
   struct prop *prop_parent_override;
+  struct prop *prop_self_override;
   struct prop *args;
 
   float delta;
@@ -111,8 +112,8 @@ glw_view_loader_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extr
 
   case GLW_SIGNAL_DESTROY:
     prop_destroy(a->args);
-    if(a->prop_parent_override)
-      prop_ref_dec(a->prop_parent_override);
+    prop_ref_dec(a->prop_parent_override);
+    prop_ref_dec(a->prop_self_override);
     break;
 
   }
@@ -124,10 +125,10 @@ glw_view_loader_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extr
  *
  */
 static void
-glw_view_loader_render(glw_t *w, glw_rctx_t *rc)
+glw_view_loader_render(glw_t *w, const glw_rctx_t *rc)
 {
   float alpha = rc->rc_alpha * w->glw_alpha;
-  float blur  = rc->rc_blur  * w->glw_blur;
+  float sharpness  = rc->rc_sharpness  * w->glw_sharpness;
   glw_view_loader_t *a = (glw_view_loader_t *)w;
   glw_t *c;
   glw_rctx_t rc0;
@@ -137,7 +138,7 @@ glw_view_loader_render(glw_t *w, glw_rctx_t *rc)
     rc0 = *rc;
     if(c->glw_parent_vl_cur == 0) {
       rc0.rc_alpha = alpha;
-      rc0.rc_blur = blur;
+      rc0.rc_sharpness = sharpness;
       glw_render0(c, &rc0);
       continue;
     }
@@ -168,6 +169,7 @@ glw_view_loader_ctor(glw_t *w)
   glw_view_loader_t *a = (void *)w;
   a->time = 1.0;
   a->args = prop_create_root("args");
+  w->glw_flags2 |= GLW2_EXPEDITE_SUBSCRIPTIONS;
 }
 
 
@@ -205,7 +207,8 @@ set_source(glw_t *w, rstr_t *url)
     glw_suspend_subscriptions(c);
 
   if(url && rstr_get(url)[0]) {
-    glw_view_create(w->glw_root, url, w, a->prop, 
+    glw_view_create(w->glw_root, url, w, 
+		    a->prop_self_override ?: a->prop, 
 		    a->prop_parent_override ?: a->prop_parent, a->args, 
 		    a->prop_clone, 1);
   } else {
@@ -235,6 +238,7 @@ glw_view_loader_set(glw_t *w, va_list ap)
 
     case GLW_ATTRIB_TIME:
       a->time = va_arg(ap, double);
+      a->time = GLW_MAX(a->time, 0.00001);
       break;
 
     case GLW_ATTRIB_PROPROOTS3:
@@ -250,10 +254,15 @@ glw_view_loader_set(glw_t *w, va_list ap)
       break;
 
     case GLW_ATTRIB_PROP_PARENT:
-      if(a->prop_parent_override)
-	prop_ref_dec(a->prop_parent_override);
+      prop_ref_dec(a->prop_parent_override);
 
       a->prop_parent_override = prop_ref_inc(va_arg(ap, prop_t *));
+      break;
+
+    case GLW_ATTRIB_PROP_SELF:
+      prop_ref_dec(a->prop_self_override);
+
+      a->prop_self_override = prop_ref_inc(va_arg(ap, prop_t *));
       break;
 
     default:
@@ -269,7 +278,6 @@ glw_view_loader_set(glw_t *w, va_list ap)
  */
 static glw_class_t glw_view_loader = {
   .gc_name = "loader",
-  .gc_flags = GLW_EXPEDITE_SUBSCRIPTIONS,
   .gc_instance_size = sizeof(glw_view_loader_t),
   .gc_ctor = glw_view_loader_ctor,
   .gc_dtor = glw_view_loader_dtor,

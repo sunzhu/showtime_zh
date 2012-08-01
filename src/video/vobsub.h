@@ -1,6 +1,6 @@
 /*
- *  Bookmarks
- *  Copyright (C) 2009 Andreas Öman
+ *  VOBSUB (.idx and .sub) parser
+ *  Copyright (C) 2012 Andreas Öman
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -15,10 +15,20 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#pragma once
 
-#ifndef BOOKMARKS_H__
-#define BOOKMARKS_H__
+struct prop;
+struct ext_subtitles;
+struct media_pipe;
 
-void bookmarks_init(void);
+void vobsub_probe(const char *url, const char *filename,
+		  int score, struct prop *prop,
+		  const char *subfile);
 
-#endif /* BOOKMARKS_H__ */
+struct ext_subtitles *vobsub_load(const char *json, char *errbuf,
+				  size_t errlen, struct media_pipe *mp);
+
+
+void vobsub_decode_palette(uint32_t *clut, const char *str);
+
+void vobsub_decode_size(int *width, int *height, const char *str);

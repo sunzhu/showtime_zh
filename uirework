@@ -1,0 +1,35 @@
+
+-- Optional work
+
+* Replace ellipsis with fading
+* Fix horizontal aligning of fonts with multiple sizes
+* Improve PS3 controller buttons
+* Auto-upgrade of Showtime
+* Metadata loading throbber
+* Metadata switching
+* Metadata priority order
+* Persist view switching 
+* Fix list focus when destroying item via context menu
+* Standardize view elements so .view plugins have something to lean on
+* GLW .view plugins
+
+
+---- view plugins ------------------
+
+ - class -> path mapping
+
+      home
+      screensaver
+      directory
+      tracks (a list of tracks, such as Spotify playlist)
+      album  (a list of tracks on the same album)
+      albums (a list of albums)
+      movies
+      items
+      images
+      slideshow
+
+ Which one is active is configurable somewhere and results in
+
+  $ui.viewpath.home -> URL
+  $ui.viewpath.screensaver -> URL

@@ -104,8 +104,8 @@ static const struct {
   { NSLeftArrowFunctionKey,   NSCommandKeyMask, ACTION_SEEK_BACKWARD }, 
   { NSRightArrowFunctionKey,  NSCommandKeyMask, ACTION_SEEK_FORWARD }, 
   
-  { NSLeftArrowFunctionKey,   NSShiftKeyMask|NSCommandKeyMask, ACTION_PREV_TRACK }, 
-  { NSRightArrowFunctionKey,  NSShiftKeyMask|NSCommandKeyMask, ACTION_NEXT_TRACK }, 
+  { NSLeftArrowFunctionKey,   NSShiftKeyMask|NSCommandKeyMask, ACTION_SKIP_BACKWARD }, 
+  { NSRightArrowFunctionKey,  NSShiftKeyMask|NSCommandKeyMask, ACTION_SKIP_FORWARD }, 
   
   /* only used for fullscreen, in windowed mode we dont get events with
    * NSCommandKeyMask set */
@@ -126,8 +126,8 @@ static const struct {
    { XF86XK_Forward,          0,   ACTION_NAV_FWD },
    { XF86XK_AudioPlay,        0,   ACTION_PLAYPAUSE },
    { XF86XK_AudioStop,        0,   ACTION_STOP },
-   { XF86XK_AudioPrev,        0,   ACTION_PREV_TRACK },
-   { XF86XK_AudioNext,        0,   ACTION_NEXT_TRACK },
+   { XF86XK_AudioPrev,        0,   ACTION_SKIP_BACKWARD },
+   { XF86XK_AudioNext,        0,   ACTION_SKIP_FORWARD },
    { XF86XK_Eject,            0,   ACTION_EJECT },
    { XF86XK_AudioMedia,       0,   ACTION_HOME },
    { XK_Menu,                 0,   ACTION_HOME },
@@ -137,10 +137,11 @@ static const struct {
   { NSF2FunctionKey,         0,   ACTION_SHOW_MEDIA_STATS },
   { NSF3FunctionKey,         0,   ACTION_SYSINFO },
   { NSF4FunctionKey,         0,   ACTION_ENABLE_SCREENSAVER },
+  { NSF9FunctionKey,         0,   ACTION_SWITCH_VIEW },
   
-  { NSF1FunctionKey,          NSShiftKeyMask,   ACTION_PREV_TRACK },
+  { NSF1FunctionKey,          NSShiftKeyMask,   ACTION_SKIP_BACKWARD },
   { NSF2FunctionKey,          NSShiftKeyMask,   ACTION_PLAYPAUSE },
-  { NSF3FunctionKey,          NSShiftKeyMask,   ACTION_NEXT_TRACK },
+  { NSF3FunctionKey,          NSShiftKeyMask,   ACTION_SKIP_FORWARD },
   { NSF4FunctionKey,          NSShiftKeyMask,   ACTION_STOP },
   
   { NSF6FunctionKey,          NSShiftKeyMask,   ACTION_VOLUME_DOWN },
@@ -157,6 +158,7 @@ static const struct {
   
   { _NSBackspaceKey,          0,                ACTION_BS, ACTION_NAV_BACK },
   { _NSEnterKey,              0,                ACTION_ENTER, ACTION_ACTIVATE},
+  { _NSEnterKey,              NSShiftKeyMask,   ACTION_ITEMMENU },
   { _NSEscapeKey,             0,                ACTION_CANCEL },
   { _NSTabKey,                0,                ACTION_FOCUS_NEXT },
   
@@ -215,11 +217,14 @@ static void glw_cocoa_dispatch_event(uii_t *uii, event_t *e);
    * the first call and it is the same file as last argv argument */
   if(!gcocoa.skip_first_openfile_check) {
     gcocoa.skip_first_openfile_check = 1;
-    
-    if(_argc > 1 && strcmp(cfilename, _argv[_argc - 1]) == 0)
-      return NO;
+
+    int i;
+    for(i = 1; i < _argc; i++)
+      if(_argc > 1 && strcmp(cfilename, _argv[i]) == 0)
+	return NO;
   }
-  
+  return NO;
+
   /* stringWithFormat uses autorelease */
   nav_open([[NSString stringWithFormat:@"file://%@", filename] UTF8String], NULL);
   
@@ -429,8 +434,8 @@ static void glw_cocoa_dispatch_event(uii_t *uii, event_t *e);
   glw_rctx_init(&rc, gcocoa.gr.gr_width, gcocoa.gr.gr_height, 1);
   glw_layout0(gcocoa.gr.gr_universe, &rc);
   glw_render0(gcocoa.gr.gr_universe, &rc);
-  
   glw_unlock(&gcocoa.gr);
+  glw_post_scene(&gcocoa.gr);
 }
 
 - (void)glwWindowedTimerStart {
@@ -687,7 +692,6 @@ static void glw_cocoa_dispatch_event(uii_t *uii, event_t *e);
     unichar uc = [s characterAtIndex:i];
     NSString *su = [[NSString alloc] initWithCharacters:&uc length:1];
     event_t *e = NULL;
-    
     e = event_create_int(EVENT_UNICODE, uc);
     glw_cocoa_dispatch_event(&gcocoa.gr.gr_uii, e);
     [su release];
@@ -720,30 +724,28 @@ static void glw_cocoa_dispatch_event(uii_t *uii, event_t *e);
   event_t *e = NULL;
   action_type_t av[3];
   int i;
-  
-  if((mod & ~NSShiftKeyMask) == 0 && (c == _NSSpaceKey || isgraph(c))) {
-    e = event_create_int(EVENT_UNICODE, c);
-  } else {
-    for(i = 0; i < sizeof(keysym2action) / sizeof(keysym2action[0]); i++) {
-      if(keysym2action[i].key == cim &&
-         keysym2action[i].mod == (mod & ~NSFunctionKeyMask)) {
-        av[0] = keysym2action[i].action1;
-        av[1] = keysym2action[i].action2;
-        av[2] = keysym2action[i].action3;
-        
-        if(keysym2action[i].action3 != ACTION_NONE)
-          e = event_create_action_multi(av, 3);
-        if(keysym2action[i].action2 != ACTION_NONE)
-          e = event_create_action_multi(av, 2);
-        else
+
+  for(i = 0; i < sizeof(keysym2action) / sizeof(keysym2action[0]); i++) {
+    if(keysym2action[i].key == cim &&
+       keysym2action[i].mod == (mod & ~NSFunctionKeyMask)) {
+      av[0] = keysym2action[i].action1;
+      av[1] = keysym2action[i].action2;
+      av[2] = keysym2action[i].action3;
+      
+      if(keysym2action[i].action3 != ACTION_NONE)
+	e = event_create_action_multi(av, 3);
+      if(keysym2action[i].action2 != ACTION_NONE)
+	e = event_create_action_multi(av, 2);
+      else
           e = event_create_action_multi(av, 1);
-        break;
-      }
+      break;
     }
   }
-  
-  if(e != NULL)
-    glw_cocoa_dispatch_event(&gcocoa.gr.gr_uii, e);
+
+  if(e == NULL) 
+    e = event_create_int(EVENT_UNICODE, c);
+
+  glw_cocoa_dispatch_event(&gcocoa.gr.gr_uii, e);
 }
 
 - (void)reshape {

@@ -115,8 +115,21 @@ glw_video_widget_event(event_t *e, media_pipe_t *mp, int in_menu)
       mp_enqueue_event(mp, e);
       return 1;
     }
-  }
 
+    if(event_is_action(e, ACTION_LEFT)) {
+      e = event_create_action(ACTION_SEEK_BACKWARD);
+      mp_enqueue_event(mp, e);
+      event_release(e);
+      return 1;
+    }
+
+    if(event_is_action(e, ACTION_RIGHT)) {
+      e = event_create_action(ACTION_SEEK_FORWARD);
+      mp_enqueue_event(mp, e);
+      event_release(e);
+      return 1;
+    }
+  }
   return 0;
 }
 
@@ -248,7 +261,8 @@ glw_video_play(glw_video_t *gv)
 			   !!(gv->gv_flags & GLW_VIDEO_PRIMARY),
 			   gv->gv_priority,
 			   !!(gv->gv_flags & GLW_VIDEO_NO_AUDIO),
-			   gv->gv_model);
+			   gv->gv_model,
+			   gv->gv_how);
   mp_enqueue_event(gv->gv_mp, e);
   event_release(e);
 }
@@ -271,6 +285,7 @@ glw_video_dtor(glw_t *w)
 
   free(gv->gv_current_url);
   free(gv->gv_pending_url);
+  free(gv->gv_how);
 
   glw_video_overlay_deinit(gv);
   
@@ -414,7 +429,7 @@ glw_video_ctor(glw_t *w)
 		   NULL);
 
   // We like fullwindow mode if possible (should be confiurable perhaps)
-  glw_set_constraints(w, 0, 0, 0, GLW_CONSTRAINT_F, 0);
+  glw_set_constraints(w, 0, 0, 0, GLW_CONSTRAINT_F);
 }
 
 
@@ -428,6 +443,21 @@ mod_video_flags(glw_t *w, int set, int clr)
   gv->gv_flags = (gv->gv_flags | set) & ~clr;
 }
 
+
+/**
+ *
+ */
+static void
+set_how(glw_t *w, const char *how)
+{
+  glw_video_t *gv = (glw_video_t *)w;
+
+  if(how == NULL)
+    return;
+  
+  mystrset(&gv->gv_how, how);
+  glw_video_play(gv);
+}
 
 /**
  *
@@ -523,7 +553,7 @@ glw_video_set(glw_t *w, va_list ap)
  *
  */
 void 
-glw_video_render(glw_t *w, glw_rctx_t *rc)
+glw_video_render(glw_t *w, const glw_rctx_t *rc)
 {
   glw_video_t *gv = (glw_video_t *)w;
   glw_rctx_t rc0 = *rc;
@@ -562,6 +592,7 @@ static glw_class_t glw_video = {
   .gc_signal_handler = glw_video_widget_callback,
   .gc_mod_video_flags = mod_video_flags,
   .gc_set_source = set_source,
+  .gc_set_how = set_how,
   .gc_freeze = freeze,
   .gc_thaw = thaw,
 };

@@ -52,7 +52,7 @@ hc_open(http_connection_t *hc, const char *remain, void *opaque,
   const char *url = http_arg_get_req(hc, "url");
 
   if(url != NULL) {
-    event_dispatch(event_create_openurl(url, NULL, NULL, NULL));
+    event_dispatch(event_create_openurl(url, NULL, NULL, NULL, NULL));
     return http_redirect(hc, "/showtime/open");
   }
 
@@ -75,7 +75,8 @@ hc_image(http_connection_t *hc, const char *remain, void *opaque,
 
   rstr_t *url = rstr_alloc(remain);
 
-  pm = backend_imageloader(url, &im, NULL, errbuf, sizeof(errbuf), NULL);
+  pm = backend_imageloader(url, &im, NULL, errbuf, sizeof(errbuf), NULL,
+			   NULL, NULL);
   rstr_release(url);
   if(pm == NULL)
     return http_error(hc, 404, "Unable to load image %s : %s",
@@ -155,7 +156,7 @@ hc_prop(http_connection_t *hc, const char *remain, void *opaque,
       break;
     }
 
-    r = prop_get_string(p);
+    r = prop_get_string(p, NULL);
 
     if(r == NULL) {
 
@@ -362,7 +363,7 @@ hc_logfile(http_connection_t *hc, const char *remain, void *opaque,
 
   char p1[500];
   snprintf(p1, sizeof(p1), "%s/log/showtime.log.%d", showtime_cache_path, n);
-  char *buf = fa_load(p1, &size, NULL, NULL, 0, NULL);
+  char *buf = fa_load(p1, &size, NULL, NULL, 0, NULL, 0, NULL, NULL);
   
   if(buf == NULL)
     return 404;
