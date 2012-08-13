@@ -1050,6 +1050,39 @@ cloner_pagination_check(sub_cloner_t *sc)
 }
 
 
+/**
+ *
+ */
+static void
+clone_req_move(sub_cloner_t *sc, glw_t *w, const glw_move_op_t *mop)
+{
+  glw_t *b;
+  int steps = mop->steps;
+
+  if(steps == 0)
+    return;
+
+  if(steps < 0) {
+    glw_t *x;
+    b = x = w;
+    while(steps < 0 && x != NULL) {
+      x = TAILQ_PREV(x, glw_queue, glw_parent_link);
+      if(x != NULL)
+	b = x;
+      steps++;
+    }
+  } else {
+    b = TAILQ_NEXT(w, glw_parent_link);
+    while(steps > 0 && b != NULL) {
+      b = TAILQ_NEXT(b, glw_parent_link);
+      steps--;
+    }
+  }
+
+  glw_clone_t *d = b ? b->glw_clone : NULL;
+  prop_req_move(w->glw_clone->c_prop, d ? d->c_prop : NULL);
+}
+
 
 /**
  *
@@ -1086,6 +1119,10 @@ clone_sig_handler(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 
     cloner_pagination_check(sc);
     break;
+
+  case GLW_SIGNAL_MOVE:
+    clone_req_move(sc, w, extra);
+    return 1;
 
   case GLW_SIGNAL_DESTROY:
     gr = w->glw_root;
@@ -1226,7 +1263,7 @@ cloner_move_child0(sub_cloner_t *sc, prop_t *p, prop_t *before,
   glw_clone_t *b = before ? prop_tag_get(before, sc) : NULL;
 
   sc->sc_positions_valid = 0;
-  glw_move(c->c_w, b ? b->c_w : NULL);
+  glw_move(c->c_w, b ? b->c_w : sc->sc_anchor);
 }
 
 
@@ -1403,6 +1440,7 @@ prop_callback_cloner(void *opaque, prop_event_t event, ...)
     break;
 
   case PROP_ADD_CHILD_VECTOR:
+  case PROP_ADD_CHILD_VECTOR_DIRECT:
     pv = va_arg(ap, prop_vec_t *);
     for(i = 0; i < prop_vec_len(pv); i++)
       cloner_add_child(sc, prop_vec_get(pv, i), NULL, gps->gps_widget, NULL, 0);
@@ -1465,6 +1503,7 @@ prop_callback_cloner(void *opaque, prop_event_t event, ...)
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
   case PROP_WANT_MORE_CHILDS:
   case PROP_SET_STRING:
+  case PROP_REQ_MOVE_CHILD:
     break;
 
   }
@@ -1554,6 +1593,7 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
   case PROP_ADD_CHILD_VECTOR:
   case PROP_ADD_CHILD_BEFORE:
   case PROP_ADD_CHILD_VECTOR_BEFORE:
+  case PROP_ADD_CHILD_VECTOR_DIRECT:
   case PROP_MOVE_CHILD:
   case PROP_DEL_CHILD:
   case PROP_SELECT_CHILD:
@@ -1566,6 +1606,7 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
   case PROP_WANT_MORE_CHILDS:
   case PROP_SUGGEST_FOCUS:
   case PROP_SET_STRING:
+  case PROP_REQ_MOVE_CHILD:
     break;
   }
 
@@ -1617,6 +1658,7 @@ prop_callback_counter(void *opaque, prop_event_t event, ...)
 
   case PROP_ADD_CHILD_VECTOR:
   case PROP_ADD_CHILD_VECTOR_BEFORE:
+  case PROP_ADD_CHILD_VECTOR_DIRECT:
     pv = va_arg(ap, prop_vec_t *);
     sc->sc_entries += prop_vec_len(pv);
     break;
@@ -1636,6 +1678,7 @@ prop_callback_counter(void *opaque, prop_event_t event, ...)
   case PROP_WANT_MORE_CHILDS:
   case PROP_SUGGEST_FOCUS:
   case PROP_SET_STRING:
+  case PROP_REQ_MOVE_CHILD:
     break;
   }
 
@@ -2505,15 +2548,21 @@ static int
 glwf_playTrackFromSource(glw_view_eval_context_t *ec, struct token *self,
 			 token_t **argv, unsigned int argc)
 {
-  token_t *a, *b, *r;
+  token_t *a, *b, *c, *r;
+  int dontskip = 0;
 
   if((a = resolve_property_name2(ec, argv[0])) == NULL)
     return -1;
   if((b = resolve_property_name2(ec, argv[1])) == NULL)
     return -1;
+  if(argc > 2) {
+    if((c = token_resolve(ec, argv[2])) == NULL)
+      return -1;
+    dontskip = token2bool(c);
+  }
 
   r = eval_alloc(self, ec, TOKEN_EVENT);
-  r->t_gem = glw_event_map_playTrack_create(a->t_prop, b->t_prop, 0);
+  r->t_gem = glw_event_map_playTrack_create(a->t_prop, b->t_prop, dontskip);
   eval_push(ec, r);
   return 0;
 }
@@ -4926,7 +4975,12 @@ typedef struct glwf_multiopt_extra {
   prop_t *value;
   multiopt_item_t *cur;
 
-  prop_sub_t *sub;
+  prop_sub_t *setting_sub;
+
+  prop_t *storage;
+  prop_sub_t *storage_sub;
+
+  rstr_t *userval;
 
 } glwf_multiopt_extra_t;
 
@@ -4943,8 +4997,10 @@ multiopt_item_cycle(glwf_multiopt_extra_t *x)
   x->cur = TAILQ_NEXT(x->cur, mi_link);
   if(x->cur == NULL)
     x->cur = TAILQ_FIRST(&x->q);
-  if(x->cur->mi_item)
+  if(x->cur->mi_item) {
     prop_select(x->cur->mi_item);
+    prop_set_rstring(x->storage, x->cur->mi_value);
+  }
 }
 
 /**
@@ -4966,6 +5022,7 @@ multiopt_item_cb(void *opaque, prop_event_t event, ...)
     c = va_arg(ap, prop_t *);
     name = c ? prop_get_name(c) : NULL;
     prop_set_rstring(x->value, name);
+    prop_set_rstring(x->storage, name);
     rstr_release(name);
     break;
 
@@ -5036,8 +5093,23 @@ glwf_multiopt_dtor(glw_root_t *gr, struct token *self)
   prop_ref_dec(x->opts);
   prop_ref_dec(x->title);
   prop_destroy(x->value);
-  prop_unsubscribe(x->sub);
+  prop_unsubscribe(x->setting_sub);
+
+  prop_ref_dec(x->storage);
+  prop_unsubscribe(x->storage_sub);
+  rstr_release(x->userval);
   free(x);
+}
+
+/**
+ *
+ */
+static void
+multiopt_storage_cb(void *opaque, rstr_t *rstr)
+{
+  glwf_multiopt_extra_t *x = opaque;
+
+  rstr_set(&x->userval, rstr);
 }
 
 
@@ -5048,26 +5120,26 @@ static int
 glwf_multiopt(glw_view_eval_context_t *ec, struct token *self,
 		token_t **argv, unsigned int argc)
 {
-  token_t *dst, *setting, *title;
+  token_t *dst, *setting, *title, *storage;
   glwf_multiopt_extra_t *x = self->t_extra;
   int i;
   multiopt_item_t *mi, *n;
-  prop_t *p;
 
-  if(argc < 3)
+
+  if(argc < 4)
     return glw_view_seterr(ec->ei, self, 
 			   "multiopt(): Invalid number of args");
   if((dst     = resolve_property_name2(ec, argv[0])) == NULL)
     return -1;
   if((setting = resolve_property_name2(ec, argv[1])) == NULL)
     return -1;
-
   if((title = token_resolve(ec, argv[2])) == NULL)
     return -1;
+  if((storage = resolve_property_name2(ec, argv[3])) == NULL)
+    return -1;
 
-  p = setting->t_prop;
 
-  if(p != x->settings) {
+  if(setting->t_prop != x->settings) {
 
     TAILQ_FOREACH(mi, &x->q, mi_link) {
       if(mi->mi_item != NULL) {
@@ -5081,30 +5153,52 @@ glwf_multiopt(glw_view_eval_context_t *ec, struct token *self,
       prop_ref_dec(x->settings);
       prop_ref_dec(x->opts);
       prop_ref_dec(x->title);
-      x->settings = NULL;
       x->opts = NULL;
       x->title = NULL;
     }
 
-    prop_unsubscribe(x->sub);
-    x->sub = NULL;
+    prop_unsubscribe(x->setting_sub);
+    x->setting_sub = NULL;
 
-    x->settings = prop_ref_inc(p);
+    x->settings = prop_ref_inc(setting->t_prop);
 
-    if(p != NULL) {
+    if(x->settings != NULL) {
 
-      x->title = prop_create_r(prop_create(p, "metadata"), "title");
-      prop_set(p, "type", NULL, PROP_SET_STRING, "multiopt");
+      x->title = prop_create_r(prop_create(x->settings, "metadata"), "title");
+      prop_set(x->settings, "type", NULL, PROP_SET_STRING, "multiopt");
       
-      x->opts = prop_create_r(p, "options");
+      x->opts = prop_create_r(x->settings, "options");
 
-      x->sub = prop_subscribe(PROP_SUB_NO_INITIAL_UPDATE,
-			      PROP_TAG_CALLBACK, multiopt_item_cb, x, 
-			      PROP_TAG_ROOT, x->opts, 
-			      PROP_TAG_COURIER, ec->w->glw_root->gr_courier,
-			      NULL);
+      x->setting_sub =
+	prop_subscribe(PROP_SUB_NO_INITIAL_UPDATE,
+		       PROP_TAG_CALLBACK, multiopt_item_cb, x, 
+		       PROP_TAG_ROOT, x->opts, 
+		       PROP_TAG_COURIER, ec->w->glw_root->gr_courier,
+		       NULL);
     }
   }
+
+
+  if(storage->t_prop != x->storage) {
+
+    if(x->storage != NULL)
+      prop_ref_dec(x->storage);
+
+    prop_unsubscribe(x->storage_sub);
+    x->storage_sub = NULL;
+
+    x->storage = prop_ref_inc(storage->t_prop);
+
+    if(x->storage != NULL) {
+      x->storage_sub =
+	prop_subscribe(PROP_SUB_DIRECT_UPDATE,
+		       PROP_TAG_CALLBACK_RSTR, multiopt_storage_cb, x, 
+		       PROP_TAG_ROOT, x->storage, 
+		       PROP_TAG_COURIER, ec->w->glw_root->gr_courier,
+		       NULL);
+    }
+  }
+
 
   if(title->type == TOKEN_RSTRING)
     prop_set_rstring(x->title, title->t_rstring);
@@ -5112,9 +5206,10 @@ glwf_multiopt(glw_view_eval_context_t *ec, struct token *self,
   TAILQ_FOREACH(mi, &x->q, mi_link)
     mi->mi_mark = 1;
 
-  argv += 3;
-  argc -= 3;
+  argv += 4;
+  argc -= 4;
 
+  multiopt_item_t *u = NULL; // user preferred
 
   for(i = 0; i < argc; i++) {
     token_t *d;
@@ -5136,6 +5231,10 @@ glwf_multiopt(glw_view_eval_context_t *ec, struct token *self,
       TAILQ_REMOVE(&x->q, mi, mi_link);
       mi->mi_mark = 0;
     }
+
+    if(x->userval != NULL && !strcmp(rstr_get(x->userval), 
+				     rstr_get(mi->mi_value)))
+      u = mi;
     rstr_set(&mi->mi_title, d->t_link_rtitle);
     TAILQ_INSERT_TAIL(&x->q, mi, mi_link);
   }
@@ -5168,9 +5267,11 @@ glwf_multiopt(glw_view_eval_context_t *ec, struct token *self,
     }
   }
 
-  x->cur = TAILQ_FIRST(&x->q);
-  if(x->cur != NULL)
-    prop_select(x->cur->mi_item);
+  x->cur = u ?: TAILQ_FIRST(&x->q);
+  if(x->cur != NULL) {
+    prop_set_rstring(x->value, x->cur->mi_value);
+    prop_select_ex(x->cur->mi_item, NULL, x->setting_sub);
+  }
 
   prop_link(x->value, dst->t_prop);
   ec->dynamic_eval |= GLW_VIEW_DYNAMIC_KEEP;
@@ -5223,7 +5324,7 @@ static const token_func_t funcvec[] = {
   {"space", 1, glwf_space},
   {"onEvent", -1, glwf_onEvent},
   {"navOpen", -1, glwf_navOpen},
-  {"playTrackFromSource", 2, glwf_playTrackFromSource},
+  {"playTrackFromSource", -1, glwf_playTrackFromSource},
   {"enqueuetrack", 1, glwf_enqueueTrack},
   {"selectAudioTrack", 1, glwf_selectAudioTrack},
   {"selectSubtitleTrack", 1, glwf_selectSubtitleTrack},

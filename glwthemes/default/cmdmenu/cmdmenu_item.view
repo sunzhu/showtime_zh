@@ -25,14 +25,72 @@ commandMenuChrome(
 		    "image",     "Pictures"
 		   ) + ".svg");
 
-  cloner($args.options, loader, {
-    time: 0.1;
-    noInitialTransform: true;
-    effect: blend;
-    source: "cmditems/" + $self.type + ".view";
-    hidden: !$self.enabled;
-    args: $view;
-  });
+
+  // Enqueue track
+
+  ITEM(_("Queue"),  {
+    fireEvent(enqueuetrack($args));
+  }, "dataroot://resources/svg/Enqueue.svg",
+       $args.type == "audio");
+
+  // Play (video) from beginning
+
+  ITEM(_("Play from beginning"),  {
+    fireEvent(navOpen($args.url, void, void, $self.model, "beginning"));
+    $clone.itemMenu = false;
+  }, "dataroot://resources/svg/Play.svg",
+       $args.type == "video");
+
+  // Continue (video) playback
+
+  ITEM(fmt(_("Continue from %s"), value2duration($args.restartpos)),  {
+    fireEvent(navOpen($args.url, void, void, $self.model, "resume"));
+    $clone.itemMenu = false;
+  }, "dataroot://resources/svg/Play.svg",
+       $args.type == "video" && $args.restartpos > 0);
+
+  // Play (video) from beginning
+
+  ITEM(_("Play until end of list"), {
+    fireEvent(navOpen($args.url, void, void, $self.model, "continuous"));
+    $clone.itemMenu = false;
+  }, "dataroot://resources/svg/Play.svg",
+       $args.type == "video");
+
+  // Continue here after track ends
+
+  ITEM(_("Continue playback here"), {
+    fireEvent(playTrackFromSource($args, $self.model, true));
+    $clone.itemMenu = false;
+  }, "dataroot://resources/svg/Enqueue.svg",
+       $args.type == "audio");
+
+  // Mark as unseen (video)
+
+  ITEM(_("Mark as unseen"), {
+    $args.playcount = false; 
+    $clone.itemMenu = false;
+  }, "dataroot://resources/svg/Check.svg",
+       $args.type == "video" && $args.playcount > 0);
+
+  // Mark as seen (video)
+
+  ITEM(_("Mark as seen"), {
+    $args.playcount = true;
+    $clone.itemMenu = false;
+  }, "dataroot://resources/svg/Check.svg",
+       $args.type == "video" && $args.playcount < 1);
+
+  // Star / Unstar feature
+
+  ITEMTOGGLE(_("Star"), _("Unstar"), 
+	     $args.metadata.starred,
+	     deliverEvent($args, "starToggle"),
+	     !isVoid($args.metadata.starred),
+	     "dataroot://resources/svg/Star.svg",
+	     "dataroot://resources/svg/Nostar.svg",
+	     [1,1,0]);
+
 
   // Goto artist
 
@@ -50,56 +108,6 @@ commandMenuChrome(
   }, "dataroot://resources/svg/Disc.svg",
        isLink($args.metadata.album));
 
-  // Enqueue track
-
-  ITEM(_("Queue"),  {
-    fireEvent(enqueuetrack($args));
-  }, "dataroot://resources/svg/Enqueue.svg",
-       $args.type == "audio");
-
-  // Play (video) from beginning
-
-  ITEM(_("Play from beginning"),  {
-    fireEvent(navOpen($args.url, void, void, void, "beginning"));
-    $clone.itemMenu = false;
-  }, "dataroot://resources/svg/Play.svg",
-       $args.type == "video");
-
-  // Continue (video) playback
-
-  ITEM(fmt(_("Continue from %s"), value2duration($args.restartpos)),  {
-    fireEvent(navOpen($args.url, void, void, void, "continue"));
-    $clone.itemMenu = false;
-  }, "dataroot://resources/svg/Play.svg",
-       $args.type == "video" && $args.restartpos > 0);
-
-  // Mark as unseen (video)
-
-  ITEM(_("Mark as unseen"), {
-    $args.playcount = 0; 
-    $clone.itemMenu = false;
-  }, "dataroot://resources/svg/Check.svg",
-       $args.type == "video" && $args.playcount > 0);
-
-  // Mark as seen (video)
-
-  ITEM(_("Mark as seen"), {
-    $args.playcount = 1; 
-    $clone.itemMenu = false;
-  }, "dataroot://resources/svg/Check.svg",
-       $args.type == "video" && $args.playcount < 1);
-
-  // Star / Unstar feature
-
-  ITEMTOGGLE(_("Star"), _("Unstar"), 
-	     $args.metadata.starred,
-	     deliverEvent($args, "starToggle"),
-	     !isVoid($args.metadata.starred),
-	     "dataroot://resources/svg/Star.svg",
-	     "dataroot://resources/svg/Nostar.svg",
-	     [1,1,0]);
-
-
   // Delete item
 
   ITEM(_("Delete"), { 
@@ -107,6 +115,16 @@ commandMenuChrome(
   }, "dataroot://resources/svg/Delete.svg",
        $self.model.canDelete,
        [1,0.8,0.8]);
+
+
+  cloner($args.options, loader, {
+    time: 0.1;
+    noInitialTransform: true;
+    effect: blend;
+    source: "cmditems/" + $self.type + ".view";
+    hidden: !$self.enabled;
+    args: $view;
+  });
 
 
 )

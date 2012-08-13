@@ -217,6 +217,8 @@ vq_add_node(video_queue_t *vq, prop_t *p, video_queue_entry_t *before)
 {
   video_queue_entry_t *vqe = calloc(1, sizeof(video_queue_entry_t));
 
+  prop_tag_set(p, vq, vqe);
+
   vqe->vqe_root = prop_ref_inc(p);
 
   vqe->vqe_url_sub = 
@@ -396,10 +398,12 @@ video_queue_destroy(video_queue_t *vq)
  *
  */
 static rstr_t *
-video_queue_find_next(video_queue_t *vq, const char *url)
+video_queue_find_next(video_queue_t *vq, const char *url, int reverse)
 {
   rstr_t *r = NULL;
   video_queue_entry_t *vqe;
+  if(url == NULL)
+    return NULL;
   hts_mutex_lock(&video_queue_mutex);
   TAILQ_FOREACH(vqe, &vq->vq_entries, vqe_link) {
     if(vqe->vqe_url != NULL && !strcmp(url, rstr_get(vqe->vqe_url)) &&
@@ -408,7 +412,8 @@ video_queue_find_next(video_queue_t *vq, const char *url)
   }
 
   if(vqe != NULL)
-    vqe = TAILQ_NEXT(vqe, vqe_link);
+    vqe = reverse ? TAILQ_PREV(vqe, video_queue_entry_queue, vqe_link) : 
+      TAILQ_NEXT(vqe, vqe_link);
   if(vqe != NULL)
     r = rstr_dup(vqe->vqe_url);
   hts_mutex_unlock(&video_queue_mutex);
@@ -431,9 +436,9 @@ video_player_idle(void *aux)
   int play_flags = 0;
   int play_priority = 0;
   rstr_t *play_url = NULL;
+  int force_continuous = 0;
 
   while(run) {
-
     
     if(play_url != NULL) {
       e = play_video(rstr_get(play_url), mp, 
@@ -447,6 +452,7 @@ video_player_idle(void *aux)
       e = mp_dequeue_event(mp);
 
     if(event_is_type(e, EVENT_PLAY_URL)) {
+      force_continuous = 0;
       prop_set_void(errprop);
       event_playurl_t *ep = (event_playurl_t *)e;
       play_flags = 0;
@@ -469,17 +475,27 @@ video_player_idle(void *aux)
       if(ep->how) {
 	if(!strcmp(ep->how, "beginning"))
 	  play_flags |= BACKEND_VIDEO_START_FROM_BEGINNING;
-	if(!strcmp(ep->how, "continue"))
-	  play_flags |= BACKEND_VIDEO_CONTINUE;
+	if(!strcmp(ep->how, "resume"))
+	  play_flags |= BACKEND_VIDEO_RESUME;
+	if(!strcmp(ep->how, "continuous"))
+	  force_continuous = 1;
       }
 
     } else if(event_is_type(e, EVENT_EXIT)) {
       event_release(e);
       break;
-    } else if(event_is_type(e, EVENT_EOF)) {
+    } else if(event_is_type(e, EVENT_EOF) || 
+	      event_is_action(e, ACTION_SKIP_FORWARD) || 
+	      event_is_action(e, ACTION_SKIP_BACKWARD)) {
       rstr_t *next = NULL;
-      if(vq && video_settings.continuous_playback)
-	next = video_queue_find_next(vq, rstr_get(play_url));
+      int skp = event_is_action(e, ACTION_SKIP_FORWARD) ||
+	event_is_action(e, ACTION_SKIP_BACKWARD);
+      if(vq && (video_settings.continuous_playback || force_continuous || skp))
+	next = video_queue_find_next(vq, rstr_get(play_url),
+				     event_is_action(e, ACTION_SKIP_BACKWARD));
+      
+      if(skp)
+	play_flags |= BACKEND_VIDEO_START_FROM_BEGINNING;
 
       rstr_release(play_url);
       play_url = rstr_dup(next);

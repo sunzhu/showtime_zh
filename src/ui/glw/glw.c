@@ -1077,7 +1077,8 @@ glw_focus_set(glw_root_t *gr, glw_t *w, int how)
     for(x = w; x->glw_parent != NULL; x = x->glw_parent) {
 
       if(how != GLW_SIGNAL_FOCUS_CHILD_INTERACTIVE &&
-	 x->glw_flags & GLW_FOCUS_BLOCKED) {
+	 (x->glw_flags & GLW_FOCUS_BLOCKED || 
+	  x->glw_flags & GLW_HIDDEN)) {
 	gr->gr_focus_work = 0;
 	return;
       }
@@ -1345,20 +1346,20 @@ glw_focus_open_path_close_all_other(glw_t *w)
 {
   glw_t *c;
 
-  TAILQ_FOREACH(c, &w->glw_parent->glw_childs, glw_parent_link)
+  TAILQ_FOREACH(c, &w->glw_parent->glw_childs, glw_parent_link) {
+    if(c == w)
+      continue;
     c->glw_flags |= GLW_FOCUS_BLOCKED;
-  
+    if(c->glw_flags & GLW_IN_FOCUS_PATH) {
+      glw_focus_set(w->glw_root, NULL, GLW_FOCUS_SET_AUTOMATIC);
+    }
+  }
+
   w->glw_flags &= ~GLW_FOCUS_BLOCKED;
   c = glw_focus_by_path(w);
 
   if(c != NULL)
     glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_AUTOMATIC);
-  else {
-    c = glw_focus_crawl1(w, 1);
-
-    if(c != NULL)
-      glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_AUTOMATIC);
-  }
 }
 
 
@@ -1779,9 +1780,7 @@ glw_dispatch_event(uii_t *uii, event_t *e)
     return;
   }
 
-  if(!(event_is_action(e, ACTION_SEEK_FAST_BACKWARD) ||
-       event_is_action(e, ACTION_SEEK_BACKWARD) ||
-       event_is_action(e, ACTION_SEEK_FAST_FORWARD) ||
+  if(!(event_is_action(e, ACTION_SEEK_BACKWARD) ||
        event_is_action(e, ACTION_SEEK_FORWARD) ||
        event_is_action(e, ACTION_PLAYPAUSE) ||
        event_is_action(e, ACTION_PLAY) ||
@@ -2092,6 +2091,46 @@ glw_get_a_name(glw_t *w)
   glw_get_a_name_r(w, buf);
   if(buf[0] == 0)
     return "<no name>";
+  return buf;
+}
+
+
+/**
+ *
+ */
+static void
+glw_get_path_r(char *buf, size_t buflen, glw_t *w)
+{
+  if(w->glw_parent)
+    glw_get_path_r(buf, buflen, w->glw_parent);
+  const char *ident = w->glw_class->gc_get_identity ? 
+    w->glw_class->gc_get_identity(w) : NULL;
+
+  snprintf(buf + strlen(buf), buflen - strlen(buf), "%s%s%s%s%s%s%s%s",
+	   strlen(buf) ? "." : "", w->glw_class->gc_name,
+	   w->glw_flags & GLW_FOCUS_BLOCKED ? "<B>" : "",
+	   w->glw_flags & GLW_DESTROYING    ? "<D>" : "",
+	   w->glw_flags & GLW_HIDDEN        ? "<H>" : "",
+	   ident ? "(" : "",
+	   ident ?: "",
+	   ident ? ")" : "");
+}
+
+/**
+ *
+ */
+const char *
+glw_get_path(glw_t *w)
+{
+  if(w == NULL)
+    return "<null>";
+
+  if(w->glw_id != NULL)
+    return w->glw_id;
+
+  static char buf[1024];
+  buf[0] = 0;
+  glw_get_path_r(buf, sizeof(buf), w);
   return buf;
 }
 

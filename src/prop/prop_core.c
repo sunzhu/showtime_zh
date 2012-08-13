@@ -376,13 +376,13 @@ prop_notify_free(prop_notify_t *n)
   case PROP_ADD_CHILD:
   case PROP_DEL_CHILD:
   case PROP_REQ_NEW_CHILD:
-  case PROP_DESTROYED:
   case PROP_SUGGEST_FOCUS:
     prop_ref_dec(n->hpn_prop);
     break;
 
   case PROP_ADD_CHILD_BEFORE:
   case PROP_MOVE_CHILD:
+  case PROP_REQ_MOVE_CHILD:
   case PROP_SELECT_CHILD:
     prop_ref_dec(n->hpn_prop);
     prop_ref_dec(n->hpn_prop2);
@@ -396,6 +396,7 @@ prop_notify_free(prop_notify_t *n)
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
   case PROP_WANT_MORE_CHILDS:
   case PROP_HAVE_MORE_CHILDS:
+  case PROP_DESTROYED:
     break;
 
   case PROP_ADD_CHILD_VECTOR_BEFORE:
@@ -403,6 +404,7 @@ prop_notify_free(prop_notify_t *n)
     // FALLTHRU
   case PROP_REQ_DELETE_VECTOR:
   case PROP_ADD_CHILD_VECTOR:
+  case PROP_ADD_CHILD_VECTOR_DIRECT:
     prop_vec_release(n->hpn_propv);
     break;
   case PROP_SET_STRING:
@@ -522,7 +524,7 @@ trampoline_string(prop_sub_t *s, prop_event_t event, ...)
     cb(s->hps_opaque, va_arg(ap, const char *));
   } else if(event == PROP_SET_RLINK) {
     cb(s->hps_opaque, rstr_get(va_arg(ap, const rstr_t *)));
-  } else {
+  } else if(!(s->hps_flags & PROP_SUB_IGNORE_VOID)) {
     cb(s->hps_opaque, NULL);
   }
 }
@@ -543,7 +545,7 @@ trampoline_rstr(prop_sub_t *s, prop_event_t event, ...)
     cb(s->hps_opaque, va_arg(ap, rstr_t *));
   } else if(event == PROP_SET_RLINK) {
     cb(s->hps_opaque, va_arg(ap, rstr_t *));
-  } else {
+  } else if(!(s->hps_flags & PROP_SUB_IGNORE_VOID)) {
     cb(s->hps_opaque, NULL);
   }
 }
@@ -656,6 +658,7 @@ prop_notify_dispatch(struct prop_notify_queue *q)
     case PROP_ADD_CHILD_BEFORE:
     case PROP_MOVE_CHILD:
     case PROP_SELECT_CHILD:
+    case PROP_REQ_MOVE_CHILD:
       if(pt != NULL)
 	cb(s, n->hpn_event, n->hpn_prop, n->hpn_prop2, n->hpn_flags);
       else
@@ -680,10 +683,9 @@ prop_notify_dispatch(struct prop_notify_queue *q)
  
     case PROP_DESTROYED:
       if(pt != NULL)
-	pt(s, n->hpn_event, n->hpn_prop, s);
+	pt(s, n->hpn_event, s);
       else
-	cb(s->hps_opaque, n->hpn_event, n->hpn_prop, s);
-      prop_ref_dec(n->hpn_prop);
+	cb(s->hps_opaque, n->hpn_event, s);
       break;
 
     case PROP_EXT_EVENT:
@@ -706,6 +708,7 @@ prop_notify_dispatch(struct prop_notify_queue *q)
 
     case PROP_REQ_DELETE_VECTOR:
     case PROP_ADD_CHILD_VECTOR:
+    case PROP_ADD_CHILD_VECTOR_DIRECT:
       if(pt != NULL)
 	pt(s, n->hpn_event, n->hpn_propv);
       else
@@ -1039,24 +1042,22 @@ prop_notify_void(prop_sub_t *s)
  *
  */
 static void
-prop_notify_destroyed(prop_sub_t *s, prop_t *p)
+prop_notify_destroyed(prop_sub_t *s)
 {
   if(s->hps_flags & PROP_SUB_INTERNAL) {
     prop_callback_t *cb = s->hps_callback;
     prop_trampoline_t *pt = s->hps_trampoline;
 
     if(pt != NULL)
-      pt(s, PROP_DESTROYED, p, s);
+      pt(s, PROP_DESTROYED, s);
     else
-      cb(s->hps_opaque, PROP_DESTROYED, p, s);
+      cb(s->hps_opaque, PROP_DESTROYED, s);
     return;
   }
 
   prop_notify_t *n = get_notify(s);
 
   n->hpn_event = PROP_DESTROYED;
-  n->hpn_prop = p;
-  atomic_add(&p->hp_refcount, 1);
 
   prop_courier_t *pc = s->hps_courier;  
   if(s->hps_flags & (PROP_SUB_EXPEDITE | PROP_SUB_TRACK_DESTROY_EXP))
@@ -1192,9 +1193,9 @@ prop_notify_child2(prop_t *child, prop_t *parent, prop_t *sibling,
  */
 static void
 prop_build_notify_childv(prop_sub_t *s, prop_vec_t *pv, prop_event_t event,
-			 prop_t *p2)
+			 prop_t *p2, int direct)
 {
-  if(s->hps_flags & PROP_SUB_INTERNAL) {
+  if(direct || s->hps_flags & PROP_SUB_INTERNAL) {
     prop_callback_t *cb = s->hps_callback;
     prop_trampoline_t *pt = s->hps_trampoline;
 
@@ -1226,7 +1227,7 @@ prop_notify_childv(prop_vec_t *pv, prop_t *parent, prop_event_t event,
 
   LIST_FOREACH(s, &parent->hp_value_subscriptions, hps_value_prop_link)
     if(s != skipme)
-      prop_build_notify_childv(s, pv, event, p2);
+      prop_build_notify_childv(s, pv, event, p2, 0);
 }
 
 
@@ -1697,7 +1698,7 @@ prop_destroy0(prop_t *p)
     s->hps_canonical_prop = NULL;
 
     if(s->hps_flags & (PROP_SUB_TRACK_DESTROY | PROP_SUB_TRACK_DESTROY_EXP))
-      prop_notify_destroyed(s, p);
+      prop_notify_destroyed(s);
   }
 
   while((s = LIST_FIRST(&p->hp_value_subscriptions)) != NULL) {
@@ -1745,6 +1746,8 @@ prop_destroy0(prop_t *p)
 void
 prop_destroy(prop_t *p)
 {
+  if(p == NULL)
+    return;
   hts_mutex_lock(&prop_mutex);
   prop_destroy0(p);
   hts_mutex_unlock(&prop_mutex);
@@ -1779,10 +1782,19 @@ prop_destroy_by_name(prop_t *p, const char *name)
   hts_mutex_lock(&prop_mutex);
   if(p->hp_type == PROP_DIR) {
     prop_t *c;
-    TAILQ_FOREACH(c, &p->hp_childs, hp_parent_link) {
-      if(c->hp_name != NULL && !strcmp(c->hp_name, name)) {
-	prop_destroy_child(p, c);
-	break;
+    if(name == NULL) {
+      prop_t *n;
+      for(c = TAILQ_FIRST(&p->hp_childs); c != NULL; c = n) {
+	n = TAILQ_NEXT(c, hp_parent_link);
+	if(c->hp_name == NULL)
+	  prop_destroy_child(p, c);
+      }
+    } else {
+      TAILQ_FOREACH(c, &p->hp_childs, hp_parent_link) {
+	if(c->hp_name != NULL && !strcmp(c->hp_name, name)) {
+	  prop_destroy_child(p, c);
+	  break;
+	}
       }
     }
   }
@@ -1880,6 +1892,37 @@ prop_move(prop_t *p, prop_t *before)
 {
   hts_mutex_lock(&prop_mutex);
   prop_move0(p, before, NULL);
+  hts_mutex_unlock(&prop_mutex);
+}
+
+
+/**
+ *
+ */
+void
+prop_req_move0(prop_t *p, prop_t *before, prop_sub_t *skipme)
+{
+  prop_t *parent;
+
+  assert(p != before);
+
+  if(TAILQ_NEXT(p, hp_parent_link) != before) {
+    parent = p->hp_parent;
+    prop_notify_child2(p, parent, before, PROP_REQ_MOVE_CHILD, skipme, 0);
+  }
+}
+
+
+/**
+ *
+ */
+void
+prop_req_move(prop_t *p, prop_t *before)
+{
+  if(p == before)
+    return;
+  hts_mutex_lock(&prop_mutex);
+  prop_req_move0(p, before, NULL);
   hts_mutex_unlock(&prop_mutex);
 }
 
@@ -2095,8 +2138,7 @@ prop_subscribe(int flags, ...)
 
 	for(s = s0; *s != 0; s++) {
 	  if(*s == '.') {
-	    if(s == s0)
-	      return NULL;
+	    assert(s != s0);
 	    len = s - s0;
 	    nv[ptr] = alloca(len + 1);
 	    memcpy(nv[ptr], s0, len);
@@ -2199,38 +2241,29 @@ prop_subscribe(int flags, ...)
   if(name == NULL) {
     /* No name given, just subscribe to the supplied prop */
 
-    if((pr = LIST_FIRST(&proproots)) == NULL)
-      return NULL;
+    pr = LIST_FIRST(&proproots);
 
-    canonical = value = pr->p;
+    canonical = value = pr ? pr->p : NULL;
     if(dolock)
       hts_mutex_lock(&prop_mutex);
 
-
-    if(value->hp_type == PROP_ZOMBIE) {
-      hts_mutex_unlock(&prop_mutex);
-      return NULL;
-    }
-
   } else {
 
-    if((p = prop_resolve_tree(name[0], &proproots)) == NULL) 
-      return NULL;
-
+    p = prop_resolve_tree(name[0], &proproots);
+    
     name++;
 
     if(dolock)
       hts_mutex_lock(&prop_mutex);
 
-    /* Canonical name is the resolved props without following symlinks */
-    canonical = prop_subfind(p, name, 0, 0);
-  
-    /* ... and value will follow links */
-    value     = prop_subfind(p, name, 1, 0);
-
-    if(canonical == NULL || value == NULL) {
-      hts_mutex_unlock(&prop_mutex);
-      return NULL;
+    if(p != NULL) {
+      /* Canonical name is the resolved props without following symlinks */
+      canonical = prop_subfind(p, name, 0, 0);
+      
+      /* ... and value will follow links */
+      value     = prop_subfind(p, name, 1, 0);
+    } else {
+      canonical = value = NULL;
     }
   }
 
@@ -2243,10 +2276,21 @@ prop_subscribe(int flags, ...)
     }
   }
 
+  if(value && value->hp_type == PROP_ZOMBIE)
+    value = NULL;
+
+  if(canonical && canonical->hp_type == PROP_ZOMBIE)
+    canonical = NULL;
+
   s = malloc(sizeof(prop_sub_t));
 
   s->hps_zombie = 0;
   s->hps_flags = flags;
+  s->hps_trampoline = trampoline;
+  s->hps_callback = cb;
+  s->hps_opaque = opaque;
+  s->hps_refcount = 1;
+
   if(pc != NULL) {
     s->hps_courier = pc;
     s->hps_lock = pc->pc_entry_lock;
@@ -2257,56 +2301,90 @@ prop_subscribe(int flags, ...)
     s->hps_lockmgr = lockmgr;
   }
 
-  LIST_INSERT_HEAD(&canonical->hp_canonical_subscriptions, s, 
-		   hps_canonical_prop_link);
   s->hps_canonical_prop = canonical;
+  if(canonical != NULL) {
+    LIST_INSERT_HEAD(&canonical->hp_canonical_subscriptions, s, 
+		     hps_canonical_prop_link);
 
-  if(s->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR &&
-     (canonical->hp_flags & PROP_MONITORED) == 0) {
-    canonical->hp_flags |= PROP_MONITORED;
+    if(s->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR &&
+       (canonical->hp_flags & PROP_MONITORED) == 0) {
+      canonical->hp_flags |= PROP_MONITORED;
 
-    LIST_FOREACH(t, &canonical->hp_value_subscriptions, hps_value_prop_link) {
-      if(!(t->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR))
-	break;
+      LIST_FOREACH(t, &canonical->hp_value_subscriptions, hps_value_prop_link) {
+	if(!(t->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR))
+	  break;
+      }
+      if(t != NULL) {
+	// monitor was enabled but there are already subscribers
+	activate_on_canonical = 1;
+      }
     }
-    if(t != NULL) {
-      // monitor was enabled but there are already subscribers
-      activate_on_canonical = 1;
-    }
+
+    if(s->hps_flags & PROP_SUB_MULTI)
+      prop_set_multi(canonical);
   }
 
-  if(s->hps_flags & PROP_SUB_MULTI)
-    prop_set_multi(canonical);
-
-  LIST_INSERT_HEAD(&value->hp_value_subscriptions, s, 
-		   hps_value_prop_link);
   s->hps_value_prop = value;
+  if(value != NULL) {
 
-  s->hps_trampoline = trampoline;
-  s->hps_callback = cb;
-  s->hps_opaque = opaque;
-  s->hps_refcount = 1;
+    LIST_INSERT_HEAD(&value->hp_value_subscriptions, s, 
+		     hps_value_prop_link);
 
-  if(notify_now) {
 
-    prop_build_notify_value(s, direct, "prop_subscribe()", 
-			    s->hps_value_prop, NULL, 0);
+    if(notify_now) {
 
-    if(value->hp_type == PROP_DIR && !(s->hps_flags & PROP_SUB_MULTI)) {
-      TAILQ_FOREACH(c, &value->hp_childs, hp_parent_link)
-	prop_build_notify_child(s, c, PROP_ADD_CHILD, direct,
-				gen_add_flags(c, value));
+      prop_build_notify_value(s, direct, "prop_subscribe()", 
+			      s->hps_value_prop, NULL, 0);
+
+      if(value->hp_type == PROP_DIR && !(s->hps_flags & PROP_SUB_MULTI)) {
+
+	if(value->hp_selected == NULL && direct) {
+
+	  int cnt = 0;
+	  TAILQ_FOREACH(c, &value->hp_childs, hp_parent_link)
+	    cnt++;
+	
+	  prop_vec_t *pv = prop_vec_create(cnt);
+	  TAILQ_FOREACH(c, &value->hp_childs, hp_parent_link)
+	    pv = prop_vec_append(pv, c);
+
+	  prop_build_notify_childv(s, pv, PROP_ADD_CHILD_VECTOR_DIRECT,
+				   NULL, 1);
+	  prop_vec_release(pv);
+
+	} else {
+	  TAILQ_FOREACH(c, &value->hp_childs, hp_parent_link)
+	    prop_build_notify_child(s, c, PROP_ADD_CHILD, direct,
+				    gen_add_flags(c, value));
+	}
+      }
     }
+  
+    /* If we have any subscribers monitoring for subscriptions, notify them */
+    if(!(s->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR) && 
+       value->hp_flags & PROP_MONITORED)
+      prop_send_subscription_monitor_active(value);
   }
-
-  /* If we have any subscribers monitoring for subscriptions, notify them */
-  if(!(s->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR) && 
-     value->hp_flags & PROP_MONITORED)
-    prop_send_subscription_monitor_active(value);
 
   if(activate_on_canonical)
     prop_send_subscription_monitor_active(canonical);
 
+  if(canonical == NULL && 
+     s->hps_flags & (PROP_SUB_TRACK_DESTROY | PROP_SUB_TRACK_DESTROY_EXP)) {
+
+    if(direct) {
+      prop_callback_t *cb = s->hps_callback;
+      prop_trampoline_t *pt = s->hps_trampoline;
+      if(pt != NULL)
+	pt(s, PROP_DESTROYED, s);
+      else
+	cb(s->hps_opaque, PROP_DESTROYED, s);
+      s = NULL;
+
+    } else {
+      prop_notify_destroyed(s);
+    }
+  }
   if(dolock)
     hts_mutex_unlock(&prop_mutex);
   return s;
@@ -3329,7 +3407,7 @@ prop_suggest_focus(prop_t *p)
 static prop_t *
 prop_find0(prop_t *p, va_list ap)
 {
-  prop_t *c = NULL;
+  prop_t *c = p;
   const char *n;
 
   while((n = va_arg(ap, const char *)) != NULL) {
@@ -3668,7 +3746,7 @@ prop_set_ex(prop_sub_t *skipme, prop_t *p, ...)
   prop_t *c = p;
   const char *n;
 
-  if(p == NULL)
+  if(p == NULL || p->hp_type == PROP_ZOMBIE)
     return;
 
   va_start(ap, p);
@@ -3676,6 +3754,8 @@ prop_set_ex(prop_sub_t *skipme, prop_t *p, ...)
   hts_mutex_lock(&prop_mutex);
 
   while((n = va_arg(ap, const char *)) != NULL) {
+    if(p->hp_type == PROP_ZOMBIE)
+      goto bad;
     if(p->hp_type == PROP_DIR) {
       TAILQ_FOREACH(c, &p->hp_childs, hp_parent_link)
 	if(c->hp_name != NULL && !strcmp(c->hp_name, n))
@@ -3700,6 +3780,7 @@ prop_set_ex(prop_sub_t *skipme, prop_t *p, ...)
    assert(0);
    break;
   }
+ bad:
   hts_mutex_unlock(&prop_mutex);
   va_end(ap);
 }

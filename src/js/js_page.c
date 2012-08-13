@@ -91,6 +91,7 @@ typedef struct js_model {
   prop_t *jm_entries;
   prop_t *jm_source;
   prop_t *jm_metadata;
+  prop_t *jm_options;
 
   prop_t *jm_eventsink;
 
@@ -110,6 +111,8 @@ typedef struct js_model {
   int jm_subs;
 
   jsval jm_item_proto;
+
+  char *jm_url;
 
 } js_model_t;
 
@@ -152,11 +155,12 @@ js_model_destroy(js_model_t *jm)
   if(jm->jm_entries)   prop_ref_dec(jm->jm_entries);
   if(jm->jm_source)    prop_ref_dec(jm->jm_source);
   if(jm->jm_metadata)  prop_ref_dec(jm->jm_metadata);
+  if(jm->jm_options)   prop_ref_dec(jm->jm_options);
   if(jm->jm_eventsink) prop_ref_dec(jm->jm_eventsink);
 
   if(jm->jm_pc != NULL)
     prop_courier_destroy(jm->jm_pc);
-
+  free(jm->jm_url);
   free(jm);
 }
 
@@ -459,12 +463,41 @@ js_item_addOptAction(JSContext *cx, JSObject *obj,
 /**
  *
  */
+static JSBool 
+js_item_addOptSeparator(JSContext *cx, JSObject *obj,
+		     uintN argc, jsval *argv, jsval *rval)
+{
+  js_item_t *ji = JS_GetPrivate(cx, obj);
+  const char *title;
+
+  if (!JS_ConvertArguments(cx, argc, argv, "s", &title))
+    return JS_FALSE;
+  
+  prop_t *p = prop_create_root(NULL);
+  prop_set_string(prop_create(prop_create(p, "metadata"), "title"), title);
+  prop_set_string(prop_create(p, "type"), "separator");
+  prop_set_int(prop_create(p, "enabled"), 1);
+
+  prop_t *opts = prop_create_r(ji->ji_root, "options");
+  if(prop_set_parent(p, opts))
+    prop_destroy(p);
+  prop_ref_dec(opts);
+
+  *rval = JSVAL_VOID;
+  return JS_TRUE;
+}
+
+
+/**
+ *
+ */
 static JSFunctionSpec item_proto_functions[] = {
-  JS_FS("onEvent",            js_item_onEvent,      2, 0, 0),
-  JS_FS("destroy",            js_item_destroy,      0, 0, 0),
-  JS_FS("addOptURL",          js_item_addOptURL,    2, 0, 0),
-  JS_FS("addOptAction",       js_item_addOptAction, 2, 0, 0),
-  JS_FS("dump",               js_item_dump,         0, 0, 0),
+  JS_FS("onEvent",            js_item_onEvent,         2, 0, 0),
+  JS_FS("destroy",            js_item_destroy,         0, 0, 0),
+  JS_FS("addOptURL",          js_item_addOptURL,       2, 0, 0),
+  JS_FS("addOptAction",       js_item_addOptAction,    2, 0, 0),
+  JS_FS("addOptSeparator",    js_item_addOptSeparator, 1, 0, 0),
+  JS_FS("dump",               js_item_dump,            0, 0, 0),
   JS_FS_END
 };
 
@@ -632,6 +665,7 @@ init_model_props(js_model_t *jm, prop_t *model)
   jm->jm_contents= prop_ref_inc(prop_create(model, "contents"));
   jm->jm_entries = prop_ref_inc(prop_create(model, "entries"));
   jm->jm_metadata= prop_ref_inc(prop_create(model, "metadata"));
+  jm->jm_options = prop_ref_inc(prop_create(model, "options"));
 
   pnf = prop_nf_create(prop_create(model, "nodes"),
 		       jm->jm_nodes,
@@ -995,6 +1029,8 @@ js_open_invoke(JSContext *cx, js_model_t *jm)
   JSObject *obj = make_model_object(cx, jm, &pageobj);
 
   JS_DefineFunctions(cx, obj, page_functions);
+  if(jm->jm_url != NULL)
+    js_createPageOptions(cx, obj, jm->jm_url, jm->jm_options);
 
   if(jm->jm_args != NULL) {
     argfmt[0] = 'o';
@@ -1137,7 +1173,8 @@ js_backend_open(prop_t *page, const char *url)
   jm->jm_eventsink = prop_ref_inc(prop_create(page, "eventSink"));
   jm->jm_loading   = prop_ref_inc(prop_create(model, "loading"));
   jm->jm_root      = prop_ref_inc(page);
-  
+  jm->jm_url       = strdup(url);
+
   model_launch(jm);
   return 0;
 }

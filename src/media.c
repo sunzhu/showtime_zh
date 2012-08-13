@@ -556,6 +556,41 @@ mp_ref_dec(media_pipe_t *mp)
 }
 
 
+
+/**
+ *
+ */
+static void
+mp_direct_seek(media_pipe_t *mp, int64_t ts)
+{
+  event_t *e;
+  event_ts_t *ets;
+
+  ts = MAX(ts, 0);
+
+  prop_set_float_ex(mp->mp_prop_currenttime, mp->mp_sub_currenttime,
+		    ts / 1000000.0, 0);
+
+  /* If there already is a seek event enqueued, update it */
+  TAILQ_FOREACH(e, &mp->mp_eq, e_link) {
+    if(!event_is_type(e, EVENT_SEEK))
+      continue;
+
+    ets = (event_ts_t *)e;
+    ets->ts = ts;
+    return;
+  }
+
+  ets = event_create(EVENT_SEEK, sizeof(event_ts_t));
+  ets->ts = ts;
+  mp->mp_seek_base = ts;
+
+  e = &ets->h;
+  TAILQ_INSERT_TAIL(&mp->mp_eq, e, e_link);
+  hts_cond_signal(&mp->mp_backpressure);
+}
+
+
 /**
  *
  */
@@ -574,6 +609,17 @@ mp_enqueue_event_locked(media_pipe_t *mp, event_t *e)
   default:
     break;
   }
+
+  if(event_is_action(e, ACTION_SEEK_BACKWARD)) {
+    mp_direct_seek(mp, mp->mp_seek_base -= 15000000);
+    return;
+  }
+
+  if(event_is_action(e, ACTION_SEEK_FORWARD)) {
+    mp_direct_seek(mp, mp->mp_seek_base += 15000000);
+    return;
+  }
+
   atomic_add(&e->e_refcount, 1);
   TAILQ_INSERT_TAIL(&mp->mp_eq, e, e_link);
   hts_cond_signal(&mp->mp_backpressure);
@@ -1090,7 +1136,7 @@ media_codec_deref(media_codec_t *cw)
   if(cw->close != NULL)
     cw->close(cw);
 
-  if(fw == NULL)
+  if(cw->codec_ctx_alloced)
     free(cw->codec_ctx);
 
   if(cw->parser_ctx != NULL)
@@ -1116,7 +1162,12 @@ media_codec_create_lavc(media_codec_t *cw, enum CodecID id,
   if(cw->codec == NULL)
     return -1;
   
-  cw->codec_ctx = ctx ?: avcodec_alloc_context();
+  if(ctx == NULL || id == CODEC_ID_AC3) {
+    cw->codec_ctx = avcodec_alloc_context();
+    cw->codec_ctx_alloced = 1;
+  } else {
+    cw->codec_ctx = ctx;
+  }
 
   //  cw->codec_ctx->debug = FF_DEBUG_PICT_INFO | FF_DEBUG_BUGS;
 
@@ -1414,8 +1465,6 @@ media_get_codec_info(AVCodecContext *ctx, char *buf, size_t size)
 static void
 seek_by_propchange(void *opaque, prop_event_t event, ...)
 {
-  event_ts_t *ets;
-  event_t *e;
   media_pipe_t *mp = opaque;
   int64_t t;
   int how = 0;
@@ -1438,20 +1487,7 @@ seek_by_propchange(void *opaque, prop_event_t event, ...)
   if(how == PROP_SET_TENTATIVE)
     return;
 
-  /* If there already is a seek event enqueued, update it */
-  TAILQ_FOREACH(e, &mp->mp_eq, e_link) {
-    if(!event_is_type(e, EVENT_SEEK))
-      continue;
-
-    ets = (event_ts_t *)e;
-    ets->ts = t;
-    return;
-  }
-
-  ets = event_create(EVENT_SEEK, sizeof(event_ts_t));
-  ets->ts = t;
-  mp_enqueue_event_locked(mp, &ets->h);
-  event_release(&ets->h);
+  mp_direct_seek(mp, t);
 }
 
 /**
@@ -1482,14 +1518,18 @@ update_sv_delta(void *opaque, int v)
  *
  */
 void
-mp_set_current_time(media_pipe_t *mp, int64_t pts)
+mp_set_current_time(media_pipe_t *mp, int64_t ts)
 {
-  mp->mp_current_time = pts;
-  if(pts != AV_NOPTS_VALUE)
-    prop_set_float_ex(mp->mp_prop_currenttime, mp->mp_sub_currenttime,
-		      pts / 1000000.0, 0);
-  else
-    prop_set_void_ex(mp->mp_prop_currenttime, mp->mp_sub_currenttime);
+  if(ts == AV_NOPTS_VALUE)
+    return;
+
+  prop_set_float_ex(mp->mp_prop_currenttime, mp->mp_sub_currenttime,
+		    ts / 1000000.0, 0);
+
+  event_ts_t *ets = event_create(EVENT_CURRENT_TIME, sizeof(event_ts_t));
+  ets->ts = ts;
+  mp_enqueue_event(mp, &ets->h);
+  event_release(&ets->h);
 }
 
 
