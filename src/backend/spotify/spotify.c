@@ -2695,7 +2695,6 @@ playlist_container_delete_callback(void *opaque, prop_event_t event, ...)
     break;
 
   case PROP_DESTROYED:
-    (void)va_arg(ap, prop_t *);
     prop_unsubscribe(va_arg(ap, prop_sub_t *));
     break;
 
@@ -2738,6 +2737,8 @@ playlist_destroy_sub(void *opaque, prop_event_t event, ...)
 
   free(pl->pl_tracks.vec);
   LIST_REMOVE(pl, pl_link);
+  prop_ref_dec(pl->pl_prop_offline);
+  prop_ref_dec(pl->pl_prop_collab);
   free(pl);
 }
 
@@ -4127,19 +4128,6 @@ be_spotify_open(prop_t *page, const char *url)
 
 
 /**
- *
- */
-static void
-delta_seek(media_pipe_t *mp, int64_t d)
-{
-  int64_t n = mp->mp_current_time + d;
-  if(n < 0)
-    n = 0;
-  spotify_msg_enq_one(spotify_msg_build_int(SPOTIFY_SEEK, n / 1000));
-}
-
-
-/**
  * Play given track.
  *
  * We only expect this to be called from the playqueue system.
@@ -4218,7 +4206,7 @@ be_spotify_play(const char *url, media_pipe_t *mp,
 
     if(event_is_action(e, ACTION_SKIP_BACKWARD)) {
 
-      if(mp->mp_current_time < 1500000)
+      if(mp->mp_seek_base < 1500000)
 	goto skip;
 
       spotify_msg_enq_one(spotify_msg_build_int(SPOTIFY_SEEK, 0));
@@ -4250,21 +4238,6 @@ be_spotify_play(const char *url, media_pipe_t *mp,
       mp_send_cmd_head(mp, mq, MB_CTRL_PAUSE);
       mp_set_playstatus_by_hold(mp, hold, e->e_payload);
 
-    } else if(event_is_action(e, ACTION_SEEK_FAST_BACKWARD)) {
-
-      delta_seek(mp, -60000000);
-
-    } else if(event_is_action(e, ACTION_SEEK_BACKWARD)) {
-
-      delta_seek(mp, -15000000);
-
-    } else if(event_is_action(e, ACTION_SEEK_FAST_FORWARD)) {
-
-      delta_seek(mp,  60000000);
-
-    } else if(event_is_action(e, ACTION_SEEK_FORWARD)) {
-
-      delta_seek(mp,  15000000);
     }
     event_release(e);
   }
@@ -4532,8 +4505,10 @@ be_spotify_init(void)
 		       iconurl,
 		       _p("Spotify offers you legal and free access to a huge library of music. To use Spotify in Showtime you need a Spotify Preemium account.\nFor more information about Spotify, visit http://www.spotify.com/\n\nYou will be prompted for your Spotify username and password when first accessing any of the Spotify features in Showtime."));
 
-  spotify_service = service_create("Spotify", "spotify:start",
-				   "music", iconurl, 0, 0);
+  spotify_service = service_create("showtime:spotify",
+				   "Spotify", "spotify:start",
+				   "music", iconurl, 0, 0,
+				   SVC_ORIGIN_APP);
 
   settings_create_divider(s, NULL);
 

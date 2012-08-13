@@ -31,6 +31,9 @@ struct media_queue;
 struct media_pipe;
 struct video_decoder;
 
+#define MP_SKIP_LIMIT 2000000 /* µs that must before a skip back is
+				 actually considered a restart */
+
 typedef struct event_ts {
   event_t h;
   int64_t ts;
@@ -59,6 +62,9 @@ typedef struct media_codec {
   int refcount;
   media_format_t *fw;
   int codec_id;
+  int codec_ctx_alloced; /* Set if this struct owns the allocation
+			    of codec_ctx */
+
   struct AVCodec *codec; // This may be NULL for HW accelerated decoders
   struct AVCodecContext *codec_ctx;
   struct AVCodecParserContext *parser_ctx;
@@ -136,7 +142,7 @@ typedef struct media_buf {
   uint8_t mb_disable_deinterlacer : 1;
   uint8_t mb_skip : 2;
   uint8_t mb_keyframe : 1;
-  uint8_t mb_send_pts : 1;
+  //  uint8_t mb_send_time : 1;
 
   uint8_t mb_stream;
 
@@ -304,7 +310,8 @@ typedef struct media_pipe {
   int mp_cur_channels;
   int64_t mp_cur_chlayout;
 
-  int64_t mp_current_time;
+  int64_t mp_seek_base;
+  int mp_seek_epoch;
 
   struct vdpau_dev *mp_vdpau_dev;
 
@@ -423,8 +430,7 @@ void media_set_metatree(media_pipe_t *mp, prop_t *src);
 
 void media_clear_metatree(media_pipe_t *mp);
 
-void mp_set_current_time(media_pipe_t *mp, int64_t mts);
-
+void mp_set_current_time(media_pipe_t *mp, int64_t ts);
 
 extern media_pipe_t *media_primary;
 

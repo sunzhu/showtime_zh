@@ -101,6 +101,11 @@ static struct strtab actionnames[] = {
   { "Backspace",             ACTION_BS },
   { "Delete",                ACTION_DELETE },
 
+  { "MoveUp",                ACTION_MOVE_UP },
+  { "MoveDown",              ACTION_MOVE_DOWN },
+  { "MoveLeft",              ACTION_MOVE_LEFT },
+  { "MoveRight",             ACTION_MOVE_RIGHT },
+
   { "Forward",               ACTION_NAV_FWD },
   { "Back",                  ACTION_NAV_BACK },
 
@@ -127,8 +132,6 @@ static struct strtab actionnames[] = {
   { "NextTrack",             ACTION_SKIP_FORWARD },
   { "SeekForward",           ACTION_SEEK_FORWARD },
   { "SeekReverse",           ACTION_SEEK_BACKWARD },
-  { "SeekFastForward",       ACTION_SEEK_FAST_FORWARD },
-  { "SeekFastReverse",       ACTION_SEEK_FAST_BACKWARD },
 
   { "VolumeUp",              ACTION_VOLUME_UP },
   { "VolumeDown",            ACTION_VOLUME_DOWN },
@@ -485,9 +488,7 @@ event_dispatch(event_t *e)
     prop_toggle_int(p);
     prop_ref_dec(p);
 
-  } else if(event_is_action(e, ACTION_SEEK_FAST_BACKWARD) ||
-	    event_is_action(e, ACTION_SEEK_BACKWARD) ||
-	    event_is_action(e, ACTION_SEEK_FAST_FORWARD) ||
+  } else if(event_is_action(e, ACTION_SEEK_BACKWARD) ||
 	    event_is_action(e, ACTION_SEEK_FORWARD) ||
 	    event_is_action(e, ACTION_PLAYPAUSE) ||
 	    event_is_action(e, ACTION_PLAY) ||
@@ -506,7 +507,6 @@ event_dispatch(event_t *e)
 	    event_is_type(e, EVENT_SELECT_AUDIO_TRACK) || 
 	    event_is_type(e, EVENT_SELECT_SUBTITLE_TRACK)
 	    ) {
-
     event_to_prop(prop_get_by_name(PNVEC("global", "media", "eventsink"),
 				   1, NULL), e);
   } else if(event_is_type(e, EVENT_PLAYTRACK)) {

@@ -269,6 +269,7 @@ js_prop_from_object(JSContext *cx, JSObject *obj, prop_t *p)
   JSIdArray *ida;
   int i, r = 0;
   const char *n;
+  int array_zapped = 0;
 
   if((ida = JS_Enumerate(cx, obj)) == NULL)
     return -1;
@@ -287,6 +288,10 @@ js_prop_from_object(JSContext *cx, JSObject *obj, prop_t *p)
       if(!JS_GetElement(cx, obj, JSVAL_TO_INT(name), &value) ||
 	 JSVAL_IS_VOID(value))
 	continue;
+      if(!array_zapped) {
+	array_zapped = 1;
+	prop_destroy_by_name(p, NULL);
+      }
       n = NULL;
     } else {
       continue;
@@ -486,7 +491,7 @@ js_textDialog(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval
   obj = JS_NewObject(cx, NULL, NULL, NULL);
   *rval = OBJECT_TO_JSVAL(obj);
 
-  if(r == -1) {
+  if(r == -1 || input == NULL) {
     val = BOOLEAN_TO_JSVAL(1);
     JS_SetProperty(cx, obj, "rejected", &val);
   } else {

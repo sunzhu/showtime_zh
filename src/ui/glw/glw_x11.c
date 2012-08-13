@@ -39,6 +39,10 @@
 #include "ui/linux/nvidia.h"
 #include "settings.h"
 
+#if WITH_VALGRIND
+#include <valgrind/callgrind.h>
+#endif
+
 #if ENABLE_VDPAU
 #include "video/vdpau.h"
 #endif
@@ -724,6 +728,11 @@ static const struct {
   { XK_Up,           0,           ACTION_UP },
   { XK_Down,         0,           ACTION_DOWN },
 
+  { XK_Left,         ShiftMask,   ACTION_MOVE_LEFT },
+  { XK_Right,        ShiftMask,   ACTION_MOVE_RIGHT },
+  { XK_Up,           ShiftMask,   ACTION_MOVE_UP },
+  { XK_Down,         ShiftMask,   ACTION_MOVE_DOWN },
+
   { XK_ISO_Left_Tab, ShiftMask,   ACTION_FOCUS_PREV },
 
   { XK_Left,         Mod1Mask,    ACTION_NAV_BACK},
@@ -732,8 +741,8 @@ static const struct {
   { XK_Left,         ShiftMask,   ACTION_SEEK_BACKWARD},
   { XK_Right,        ShiftMask,   ACTION_SEEK_FORWARD},
 
-  { XK_Left,         ShiftMask | ControlMask,   ACTION_SKIP_FORWARD},
-  { XK_Right,        ShiftMask | ControlMask,   ACTION_SKIP_BACKWARD},
+  { XK_Left,         ShiftMask | ControlMask,   ACTION_SKIP_BACKWARD},
+  { XK_Right,        ShiftMask | ControlMask,   ACTION_SKIP_FORWARD},
   
   { XK_Prior,        0,            ACTION_PAGE_UP},
   { XK_Next,         0,            ACTION_PAGE_DOWN},
@@ -839,6 +848,18 @@ gl_keypress(glw_x11_t *gx11, XEvent *event)
       break;
     }
   }
+#if WITH_VALGRIND
+  if(keysym == XK_F5 && state == Mod1Mask) {
+    CALLGRIND_START_INSTRUMENTATION;
+    printf("Callgrind started\n");
+    return 0;
+  }
+  if(keysym == XK_F6 && state == Mod1Mask) {
+    CALLGRIND_STOP_INSTRUMENTATION;
+    printf("Callgrind stopped\n");
+    return 0;
+  }
+#endif
 
   if(e == NULL) {
 
@@ -846,7 +867,7 @@ gl_keypress(glw_x11_t *gx11, XEvent *event)
       
       if(keysym2action[i].XK == keysym &&
 	 keysym2action[i].modifier == state) {
-	
+
 	av[0] = keysym2action[i].action1;
 	av[1] = keysym2action[i].action2;
 	av[2] = keysym2action[i].action3;

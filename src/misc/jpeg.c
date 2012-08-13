@@ -163,7 +163,7 @@ parse_app1(jpeginfo_t *ji, const uint8_t *buf, size_t len, int flags)
     for(i = 0; i < entries; i++) {
       uint16_t tag     = EXIF16(ifdbase + 2 + i * 12 + 0);
       uint16_t type    = EXIF16(ifdbase + 2 + i * 12 + 2);
-      //      uint32_t c       = EXIF32(ifdbase + 2 + i * 12 + 4);
+      uint32_t c       = EXIF32(ifdbase + 2 + i * 12 + 4);
 
       int po = ifdbase + 2 + i * 12 + 8;
       int value = 0;
@@ -173,8 +173,18 @@ parse_app1(jpeginfo_t *ji, const uint8_t *buf, size_t len, int flags)
 	value = (uint8_t)  EXIF8(po);
 	break;
       case 2:
-	value = (uint32_t) EXIF32(po);
-	str = (const char *)buf + value;
+	if(c > 0) {
+	  c--;
+	  if(c < 4) {
+	    str = (const char *)buf + po;
+	  } else {
+	    value = (uint32_t) EXIF32(po);
+	    if(value + c > len)
+	      str = NULL;
+	    else
+	      str = (const char *)buf + value;
+	  }
+	}
 	break;
       case 3:
 	value = (uint16_t) EXIF16(po);
@@ -190,7 +200,7 @@ parse_app1(jpeginfo_t *ji, const uint8_t *buf, size_t len, int flags)
 	break;
       }
       
-      //      printf("  IFD%d  %04x (%d)  ==  %d\n",  ifd, tag, type, value);
+      //      printf("  IFD%d  %04x (%d) %d ==  %d\n",  ifd, tag, type, c, value);
       
       switch(IFDTAG(ifd, tag)) {
       case IFDTAG(1, 0x201):  // JPEG Thumbnail offset
@@ -207,11 +217,11 @@ parse_app1(jpeginfo_t *ji, const uint8_t *buf, size_t len, int flags)
 	break;
       case IFDTAG(0, 0x10f):  // Manufacturer
 	rstr_release(ji->ji_manufacturer);
-	ji->ji_manufacturer = rstr_alloc(str);
+	ji->ji_manufacturer = str ? rstr_allocl(str, c) : NULL;
 	break;
       case IFDTAG(0, 0x110):  // Equipment
 	rstr_release(ji->ji_equipment);
-	ji->ji_equipment = rstr_alloc(str);
+	ji->ji_equipment = str ? rstr_allocl(str, c) : NULL;
 	break;
 
       default:

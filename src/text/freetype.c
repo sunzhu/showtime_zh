@@ -159,15 +159,27 @@ family_get(const char *name, int font_domain)
 /**
  *
  */
-static const char *
+static const family_t *
 family_get_by_id(int id)
 {
-  family_t *f;
+  const family_t *f;
 
   LIST_FOREACH(f, &families, link)
     if(f->id == id)
-      return f->name;
+      return f;
   return NULL;
+}
+
+
+
+/**
+ *
+ */
+static const char *
+family_get_name_by_id(int id)
+{
+  const family_t *f = family_get_by_id(id);
+  return f ? f->name : NULL;
 }
 
 
@@ -206,6 +218,7 @@ face_destroy(face_t *f)
 	f->face->family_name, f->face->style_name, f->url ?: "memory");
   TAILQ_REMOVE(&faces, f, link);
   free(f->url);
+  free(f->family_id_vec);
   FT_Done_Face(f->face);
   free(f);
 }
@@ -410,12 +423,12 @@ face_set_family(face_t *f, int family_id)
 	return;
       else
 	len++;
-#if 0
-  printf("Font %s alias to %s\n",
-	 f->family_id_vec ? family_get_by_id(f->family_id_vec[0]) : "<yet unnamed>",
-	 family_get_by_id(family_id));
-#endif
 
+#if 0
+  TRACE(TRACE_DEBUG, "FT", "Font %s alias to %s\n",
+	f->family_id_vec ? family_get_name_by_id(f->family_id_vec[0]) : "<yet unnamed>",
+	family_get_by_id(family_id));
+#endif
   f->family_id_vec = realloc(f->family_id_vec, sizeof(int) * (len + 2));
   f->family_id_vec[len] = family_id;
   f->family_id_vec[len+1] = 0;
@@ -457,7 +470,7 @@ face_find2(int uc, uint8_t style, int family_id)
 #if ENABLE_LIBFONTCONFIG
   if(f == NULL) {
     char url[URL_MAX];
-    if(!fontconfig_resolve(uc, style, family_get_by_id(family_id),
+    if(!fontconfig_resolve(uc, style, family_get_name_by_id(family_id),
 			   url, sizeof(url)))
       f = face_create_from_uri(url, FONT_DOMAIN_FALLBACK, NULL);
   }
@@ -470,7 +483,7 @@ face_find2(int uc, uint8_t style, int family_id)
       if(FT_Get_Char_Index(f->face, uc))
 	break;
 
-  if(f != NULL)
+  if(f != NULL && f->font_domain != FONT_DOMAIN_FALLBACK)
     face_set_family(f, family_id);
 
   return f;
@@ -484,10 +497,11 @@ static face_t *
 face_find(int uc, uint8_t style, int family_id)
 {
   face_t *f = face_find2(uc, style, family_id);
+
 #if 0
-  printf("Resolv %C (%d %s) -> %s\n",
-	 uc, style, family_get_by_id(family_id),
-	 f ? f->url ? f->url : "<memory>" : "<none>");
+  TRACE(TRACE_DEBUG, "FT", "Resolv %c (0x%x) (%d %s) -> %s\n",
+	uc, uc, style, family_get_by_id(family_id),
+	f ? f->url ? f->url : "<memory>" : "<none>");
 #endif
   return f;
 }
@@ -635,6 +649,7 @@ typedef struct line {
   int outline;
   int default_height;
   uint32_t color;
+  int xoffset;
   enum {
     LINE_TYPE_TEXT = 0,
     LINE_TYPE_HR,
@@ -653,6 +668,7 @@ typedef struct item {
   int16_t adv_x;
   uint16_t outline;
   uint16_t shadow;
+  char set_margin;
 } item_t;
 
 
@@ -747,7 +763,7 @@ draw_glyphs(pixmap_t *pm, struct line_queue *lq, int target_height,
       continue;
     }
 
-    pen_x = 0;
+    pen_x = li->xoffset;
     
     switch(li->alignment) {
     case TR_ALIGN_LEFT:
@@ -924,6 +940,7 @@ text_render0(const uint32_t *uc, const int len,
 
   int out = 0;
   int alignment = global_alignment;
+  int set_margin = 0;
 
   for(i = 0; i < len; i++) {
 
@@ -934,6 +951,7 @@ text_render0(const uint32_t *uc, const int len,
       li->start = -1;
       li->count = 0;
       li->xspace = 0;
+      li->xoffset = 0;
       li->alignment = alignment;
       TAILQ_INSERT_TAIL(&lq, li, link);
       prev = 0;
@@ -957,6 +975,7 @@ text_render0(const uint32_t *uc, const int len,
       li->start = -1;
       li->count = 0;
       li->xspace = 0;
+      li->xoffset = 0;
       li->alignment = 0;
       li->height = 4;
       li->color = current_color | current_alpha;
@@ -1058,6 +1077,10 @@ text_render0(const uint32_t *uc, const int len,
       current_size = legacy_size_mult[uc[i] & 0xf] * default_size * scale;
       break;
 
+    case TR_CODE_SET_MARGIN:
+      set_margin = 1;
+      break;
+
     default:
       break;
     }
@@ -1093,6 +1116,9 @@ text_render0(const uint32_t *uc, const int len,
     else
       items[out].shadow = current_shadow;
 
+    items[out].set_margin = set_margin;
+    set_margin = 0;
+
     need_shadow_pass |= items[out].shadow;
 
     items[out].shadow_color = current_shadow_color | current_shadow_alpha;
@@ -1104,10 +1130,11 @@ text_render0(const uint32_t *uc, const int len,
 
   lines = 0;
   siz_x = 0;
+  int wrap_margin = 0;
 
   TAILQ_FOREACH(li, &lq, link) {
 
-    int w = 0;
+    int w = li->xoffset;
 
     if(li->type == LINE_TYPE_HR)
       continue;
@@ -1118,6 +1145,9 @@ text_render0(const uint32_t *uc, const int len,
 	w += g->bbox.xMin;
 	bbox.xMin = MIN(g->bbox.xMin, bbox.xMin);
       }
+
+      if(items[li->start + j].set_margin)
+	wrap_margin = w;
 
       if(j == li->count - 1 && (g = items[li->start + j].g) != NULL)
 	w += g->bbox.xMax;
@@ -1142,6 +1172,7 @@ text_render0(const uint32_t *uc, const int len,
 	  lix->start = li->start + k;
 	  lix->count = li->count - k;
 	  lix->xspace = 0;
+	  lix->xoffset = wrap_margin;
 	  lix->alignment = global_alignment;
 	  TAILQ_INSERT_AFTER(&lq, li, lix, link);
 
@@ -1425,7 +1456,7 @@ freetype_get_family(void *handle)
 {
   face_t *f = handle;
   hts_mutex_lock(&text_mutex);
-  rstr_t *r = rstr_alloc(family_get_by_id(f->family_id_vec[0]));
+  rstr_t *r = rstr_alloc(family_get_name_by_id(f->family_id_vec[0]));
   hts_mutex_unlock(&text_mutex);
   return r;
 }

@@ -1,18 +1,11 @@
 
--- Optional work
-
-* Replace ellipsis with fading
-* Fix horizontal aligning of fonts with multiple sizes
-* Improve PS3 controller buttons
+* Fix all the playdecks!
 * Auto-upgrade of Showtime
-* Metadata loading throbber
-* Metadata switching
 * Metadata priority order
-* Persist view switching 
 * Fix list focus when destroying item via context menu
 * Standardize view elements so .view plugins have something to lean on
 * GLW .view plugins
-
+* filtering in ui
 
 ---- view plugins ------------------
 

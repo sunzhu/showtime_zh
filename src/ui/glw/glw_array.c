@@ -59,12 +59,22 @@ typedef struct glw_array {
   int16_t border_top;
   int16_t border_bottom;
 
+  char noclip;
+
   int num_visible_childs;
+
+  float alpha_falloff;
+  float blur_falloff;
 
 } glw_array_t;
 
 #define glw_parent_pos_x glw_parent_val[0].i32
 #define glw_parent_pos_y glw_parent_val[1].i32
+
+#define glw_parent_pos_fx glw_parent_val[2].f
+#define glw_parent_pos_fy glw_parent_val[3].f
+
+#define glw_parent_inst   glw_parent_val[4].i32
 
 /**
  *
@@ -140,16 +150,16 @@ glw_array_layout(glw_array_t *a, glw_rctx_t *rc)
     a->yentries = a->child_tiles_y;
 
     if(a->yentries == 0) {
-      a->yentries = a->xentries * height / width;
+      a->yentries = a->xentries * height / (width ?: 1);
     } else if(a->xentries == 0) {
-      a->xentries = a->yentries * width / height;
+      a->xentries = a->yentries * width / (height ?: 1);
     }
 
     a->child_width_px  = (rc0.rc_width - (a->xentries - 1) * xspacing) /
-      a->xentries;
+      (a->xentries ?: 1);
 
     a->child_height_px = (rc0.rc_height - (a->yentries - 1) * yspacing) /
-      a->yentries;
+      (a->yentries ?: 1);
 
     if(a->child_width_fixed && a->child_width_px > a->child_width_fixed) {
       int e = a->child_width_px - a->child_width_fixed;
@@ -169,9 +179,8 @@ glw_array_layout(glw_array_t *a, glw_rctx_t *rc)
 
     rows = (a->num_visible_childs - 1) / a->child_tiles_x + 1;
 
-    if(rows < a->child_tiles_y)
-      ypos = (a->child_tiles_y - rows) * 
-	(yspacing + a->child_height_px) / 2;
+    if(w->glw_alignment == LAYOUT_ALIGN_CENTER && rows < a->child_tiles_y)
+      ypos = (a->child_tiles_y - rows) * (yspacing + a->child_height_px) / 2;
 
   } else {
 
@@ -214,6 +223,17 @@ glw_array_layout(glw_array_t *a, glw_rctx_t *rc)
 
     c->glw_parent_pos_y = ypos;
     c->glw_parent_pos_x = column * (xspacing + a->child_width_px) + xpos;
+
+    if(c->glw_parent_inst) {
+      c->glw_parent_pos_fy = c->glw_parent_pos_y;
+      c->glw_parent_pos_fx = c->glw_parent_pos_x;
+      c->glw_parent_inst = 0;
+    } else {
+      c->glw_parent_pos_fy =
+	GLW_LP(4, c->glw_parent_pos_fy, c->glw_parent_pos_y);
+      c->glw_parent_pos_fx =
+	GLW_LP(4, c->glw_parent_pos_fx, c->glw_parent_pos_x);
+    }
 
     if(ypos - a->filtered_pos > -height &&
        ypos - a->filtered_pos <  height * 2)
@@ -285,6 +305,67 @@ glw_array_layout(glw_array_t *a, glw_rctx_t *rc)
 }
 
 
+const static float top_plane[4] = {0,-1,0,1};
+const static float bottom_plane[4] = {0,1,0,1};
+
+/**
+ *
+ */
+static void
+glw_array_render_one(glw_array_t *a, glw_t *c, int height,
+		     const glw_rctx_t *rc0, const glw_rctx_t *rc2)
+{
+  glw_rctx_t rc3;
+  const float y = c->glw_parent_pos_fy - a->filtered_pos;
+  int ct, cb, ft, fb;
+  glw_root_t *gr = a->w.glw_root;
+
+  if(y + a->child_height_px < 0 || y > height) {
+    c->glw_flags |= GLW_CLIPPED;
+    return;
+  } else {
+    c->glw_flags &= ~GLW_CLIPPED;
+  }
+
+  ct = cb = ft = fb = -1;
+  
+  if(a->noclip) {
+    if(y < 0) 
+      ft = glw_fader_enable(gr, rc0, top_plane,
+			    a->alpha_falloff, a->blur_falloff);
+    
+    if(y + a->child_height_px > height)
+      ft = glw_fader_enable(gr, rc0, bottom_plane,
+			    a->alpha_falloff, a->blur_falloff);
+    
+  } else {
+    if(y < 0)
+      ct = glw_clip_enable(gr, rc0, GLW_CLIP_TOP, 0);
+    
+    if(y + a->child_height_px > height)
+      cb = glw_clip_enable(gr, rc0, GLW_CLIP_BOTTOM, 0);
+  }
+
+
+  rc3 = *rc2;
+  glw_reposition(&rc3,
+		 c->glw_parent_pos_fx,
+		 height - c->glw_parent_pos_fy,
+		 c->glw_parent_pos_fx + a->child_width_px,
+		 height - c->glw_parent_pos_fy - a->child_height_px);
+
+  glw_render0(c, &rc3);
+
+  if(ct != -1)
+    glw_clip_disable(gr, ct);
+  if(cb != -1)
+    glw_clip_disable(gr, cb);
+  if(ft != -1)
+    glw_fader_disable(gr, ft);
+  if(fb != -1)
+    glw_fader_disable(gr, fb);
+}
+
 /**
  *
  */
@@ -293,9 +374,8 @@ glw_array_render(glw_t *w, const glw_rctx_t *rc)
 {
   glw_array_t *a = (glw_array_t *)w;
   glw_t *c;
-  glw_rctx_t rc0, rc1, rc2, rc3;
-  int t, b, height;
-  float y;
+  glw_rctx_t rc0, rc1, rc2;
+  int height;
 
   if(rc->rc_alpha < 0.01f)
     return;
@@ -320,41 +400,14 @@ glw_array_render(glw_t *w, const glw_rctx_t *rc)
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
     if(c->glw_flags & GLW_HIDDEN)
       continue;
-
-    y = c->glw_parent_pos_y - a->filtered_pos;
-
-    if(y + a->child_height_px < 0 || y > height) {
-      c->glw_flags |= GLW_CLIPPED;
-      continue;
-    } else {
-      c->glw_flags &= ~GLW_CLIPPED;
-    }
-
-    if(y < 0)
-      t = glw_clip_enable(w->glw_root, &rc0, GLW_CLIP_TOP, 0);
-    else
-      t = -1;
-
-    if(y + a->child_height_px > height)
-      b = glw_clip_enable(w->glw_root, &rc0, GLW_CLIP_BOTTOM, 0);
-    else
-      b = -1;
-
-    rc3 = rc2;
-    glw_reposition(&rc3,
-		   c->glw_parent_pos_x,
-		   height - c->glw_parent_pos_y,
-		   c->glw_parent_pos_x + a->child_width_px,
-		   height - c->glw_parent_pos_y - a->child_height_px);
-
-    glw_render0(c, &rc3);
-
-    if(t != -1)
-      glw_clip_disable(w->glw_root, t);
-    if(b != -1)
-      glw_clip_disable(w->glw_root, b);
-
+    if(w->glw_focused != c)
+      glw_array_render_one(a, c, height, &rc0, &rc2);
   }
+  
+  // Render the focused widget last so it stays on top
+  // until we have decent Z ordering
+  if(w->glw_focused)
+    glw_array_render_one(a, w->glw_focused, height, &rc0, &rc2);
 }
 
 
@@ -377,6 +430,7 @@ glw_array_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
   glw_rctx_t *rc = extra;
   glw_array_t *a = (glw_array_t *)w;
   glw_pointer_event_t *gpe;
+  glw_t *c;
 
   switch(signal) {
   default:
@@ -391,7 +445,9 @@ glw_array_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 
   case GLW_SIGNAL_CHILD_CREATED:
   case GLW_SIGNAL_CHILD_UNHIDDEN:
+    c = extra;
     a->num_visible_childs++;
+    c->glw_parent_inst = 1;
     break;
 
 
@@ -417,6 +473,11 @@ glw_array_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 
   case GLW_SIGNAL_EVENT_BUBBLE:
     w->glw_flags2 &= ~GLW2_FLOATING_FOCUS;
+    break;
+
+  case GLW_SIGNAL_CHILD_MOVED:
+    if(w->glw_focused == extra)
+      a->scroll_to_me = extra;
     break;
 
   }
@@ -462,6 +523,15 @@ glw_array_set(glw_t *w, va_list ap)
       break;
     case GLW_ATTRIB_Y_SPACING:
       a->yspacing = va_arg(ap, int);
+      break;
+    case GLW_ATTRIB_ALPHA_FALLOFF:
+      a->alpha_falloff = va_arg(ap, double);
+      a->noclip = 1;
+      break;
+
+    case GLW_ATTRIB_BLUR_FALLOFF:
+      a->blur_falloff = va_arg(ap, double);
+      a->noclip = 1;
       break;
 
     default:

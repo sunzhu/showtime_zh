@@ -46,6 +46,7 @@ SRCS += src/main.c \
 	src/prop/prop_vector.c \
 	src/prop/prop_grouper.c \
 	src/prop/prop_concat.c \
+	src/prop/prop_reorder.c \
 	src/metadata/metadata.c \
 	src/metadata/metadb.c \
 	src/metadata/decoration.c \
@@ -62,7 +63,7 @@ endif
 SRCS-${CONFIG_EMU_THREAD_SPECIFICS} += src/arch/emu_thread_specifics.c
 
 BUNDLES += resources/metadb
-BUNDLES += resources/cachedb
+BUNDLES += resources/kvstore
 
 #
 # Misc support
@@ -91,6 +92,7 @@ SRCS-${CONFIG_TREX} += ext/trex/trex.c
 #
 SRCS += ext/sqlite/sqlite3.c \
 	src/db/db_support.c \
+	src/db/kvstore.c \
 
 SRCS-$(CONFIG_SQLITE_VFS) += src/db/vfs.c
 

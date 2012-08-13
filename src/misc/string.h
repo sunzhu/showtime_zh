@@ -94,4 +94,6 @@ void GB2312StrToUtf8(
 //GB2312
 const char *dvd_langcode_to_string(uint16_t langcode);
 
+struct rstr *get_random_string(void);
+
 #endif
