@@ -466,6 +466,8 @@ const static action_type_t *btn_to_action_sel[BTN_max] = {
   [BTN_RIGHT]      = AVEC(ACTION_MOVE_RIGHT),
   [BTN_DOWN]       = AVEC(ACTION_MOVE_DOWN),
   [BTN_TRIANGLE]   = AVEC(ACTION_SWITCH_VIEW),
+  [BTN_CIRCLE]     = AVEC(ACTION_STOP),
+  [BTN_START]      = AVEC(ACTION_PLAYQUEUE),
 };
 
 
@@ -497,7 +499,7 @@ handle_btn(glw_ps3_t *gp, int pad, int code, int pressed, int sel, int pre)
   
   if(pressed) {
 
-    if(pre > 200)
+    if(pre > 200 && *store > KEY_REPEAT_DELAY)
       xrep = 1;
     if(pre > 150)
       rate = 1;
