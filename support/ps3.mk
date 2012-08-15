@@ -58,7 +58,6 @@ self: ${SELF}
 
 install: $(BUILDDIR)/showtime.pkg
 	cp $< $(PS3INSTALL)/showtime.pkg
-	sync
 
 $(BUILDDIR)/dist/showtime-$(VERSION).self: ${SELF}
 	@mkdir -p $(dir $@)
