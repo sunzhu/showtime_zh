@@ -167,7 +167,7 @@ fa_probe_playlist(metadata_t *md, const char *url, uint8_t *pb, size_t pbsize)
  * Probe SPC files
  */
 static void
-fa_probe_spc(metadata_t *md, uint8_t *pb)
+fa_probe_spc(metadata_t *md, const uint8_t *pb, const char *filename)
 {
   char buf[33];
   buf[32] = 0;
@@ -188,6 +188,7 @@ fa_probe_spc(metadata_t *md, uint8_t *pb)
   buf[3] = 0;
 
   md->md_duration = atoi(buf);
+  md->md_track = filename ? atoi(filename) : 0;
 }
 
 
@@ -254,7 +255,8 @@ fa_probe_exif(metadata_t *md, const char *url, uint8_t *pb, fa_handle_t *fh)
  * pb is guaranteed to point to at least 256 bytes of valid data
  */
 static int
-fa_probe_header(metadata_t *md, const char *url, fa_handle_t *fh)
+fa_probe_header(metadata_t *md, const char *url, fa_handle_t *fh,
+		const char *filename)
 {
   uint16_t flags;
   uint8_t buf[256];
@@ -263,7 +265,7 @@ fa_probe_header(metadata_t *md, const char *url, fa_handle_t *fh)
     return 0;
 
   if(!memcmp(buf, "SNES-SPC700 Sound File Data", 27)) {
-    fa_probe_spc(md, buf);
+    fa_probe_spc(md, buf, filename);
     md->md_contenttype = CONTENT_AUDIO;
     return 1;
   }
@@ -497,7 +499,8 @@ gme_probe(metadata_t *md, const char *url, fa_handle_t *fh)
  *
  */
 static void
-fa_lavf_load_meta(metadata_t *md, AVFormatContext *fctx, const char *url)
+fa_lavf_load_meta(metadata_t *md, AVFormatContext *fctx, const char *url,
+		  const char *filename)
 {
   int i;
   char tmp1[1024];
@@ -520,7 +523,8 @@ fa_lavf_load_meta(metadata_t *md, AVFormatContext *fctx, const char *url)
     md->md_contenttype = CONTENT_AUDIO;
 
     md->md_title = ffmpeg_metadata_rstr(fctx->metadata, "title");
-    md->md_track = ffmpeg_metadata_int(fctx->metadata, "track", 0);
+    md->md_track = ffmpeg_metadata_int(fctx->metadata, "track",
+				       filename ? atoi(filename) : 0);
   } else {
 
     int atrack = 0;
@@ -588,7 +592,8 @@ fa_lavf_load_meta(metadata_t *md, AVFormatContext *fctx, const char *url)
  *
  */
 metadata_t *
-fa_probe_metadata(const char *url, char *errbuf, size_t errsize)
+fa_probe_metadata(const char *url, char *errbuf, size_t errsize,
+		  const char *filename)
 {
   AVFormatContext *fctx;
 
@@ -606,7 +611,7 @@ fa_probe_metadata(const char *url, char *errbuf, size_t errsize)
 
   fa_seek(fh, 0, SEEK_SET);
 
-  if(fa_probe_header(md, url, fh)) {
+  if(fa_probe_header(md, url, fh, filename)) {
     fa_close(fh);
     return md;
   }
@@ -619,7 +624,7 @@ fa_probe_metadata(const char *url, char *errbuf, size_t errsize)
     return NULL;
   }
 
-  fa_lavf_load_meta(md, fctx, url);
+  fa_lavf_load_meta(md, fctx, url, filename);
   fa_libav_close_format(fctx);
   return md;
 }
@@ -632,7 +637,7 @@ metadata_t *
 fa_metadata_from_fctx(AVFormatContext *fctx, const char *url)
 {
   metadata_t *md = metadata_create();
-  fa_lavf_load_meta(md, fctx, url);
+  fa_lavf_load_meta(md, fctx, url, NULL);
   return md;
 }
 
