@@ -778,6 +778,9 @@ eval_assign(glw_view_eval_context_t *ec, struct token *self, int conditional)
   token_t *b = eval_pop(ec), *a = eval_pop(ec);
   int r = 0;
 
+  if(a == NULL || b == NULL)
+    return glw_view_seterr(ec->ei, self, "Invalid assignment");
+
   /* Catch some special cases here */
   if(b->type == TOKEN_PROPERTY_VALUE_NAME && 
      !strcmp(rstr_get(b->t_rstring), "event")) {
@@ -4630,7 +4633,7 @@ glwf_getWidth(glw_view_eval_context_t *ec, struct token *self,
 
   ec->dynamic_eval |= GLW_VIEW_DYNAMIC_EVAL_EVERY_FRAME;
 
-  if(w->glw_flags & GLW_CONSTRAINT_X) {
+  if(w->glw_flags & GLW_CONSTRAINT_CONF_X) {
     r = eval_alloc(self, ec, TOKEN_INT);
     r->t_int = w->glw_req_size_x;
   } else if(ec->rc == NULL) {
@@ -4656,7 +4659,7 @@ glwf_getHeight(glw_view_eval_context_t *ec, struct token *self,
 
   ec->dynamic_eval |= GLW_VIEW_DYNAMIC_EVAL_EVERY_FRAME;
 
-  if(w->glw_flags & GLW_CONSTRAINT_X) {
+  if(w->glw_flags & GLW_CONSTRAINT_CONF_Y) {
     r = eval_alloc(self, ec, TOKEN_INT);
     r->t_int = w->glw_req_size_y;
   } else if(ec->rc == NULL) {
@@ -4855,11 +4858,12 @@ glwf_join(glw_view_eval_context_t *ec, struct token *self,
   for(i = 1; i < argc; i++)  {
     if((t = token_resolve(ec, argv[i])) == NULL)
       continue;
-    if(t->type != TOKEN_RSTRING)
+    const char *x = token_as_string(t);
+    if(x == NULL)
       continue;
     if(s != NULL)
       strappend(&ret, s);
-    strappend(&ret, rstr_get(t->t_rstring));
+    strappend(&ret, x);
     if(s == NULL)
       s = rstr_get(sep->t_rstring);
   }
@@ -5064,7 +5068,7 @@ multiopt_item_destroy(glwf_multiopt_extra_t *x, multiopt_item_t *mi)
     if(x->cur == NULL)
       x->cur = TAILQ_FIRST(&x->q);
     if(x->cur != NULL && x->cur->mi_item)
-      prop_select(x->cur->mi_item);
+      prop_select_ex(x->cur->mi_item, NULL, x->setting_sub);
   }
 
   TAILQ_REMOVE(&x->q, mi, mi_link);
