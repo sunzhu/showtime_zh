@@ -505,6 +505,7 @@ event_dispatch(event_t *e)
 	    event_is_action(e, ACTION_PREV_CHANNEL) ||
 	    event_is_action(e, ACTION_CYCLE_AUDIO) ||
 	    event_is_action(e, ACTION_CYCLE_SUBTITLE) ||
+	    event_is_type(e, EVENT_DELTA_SEEK) || 
 	    event_is_type(e, EVENT_SELECT_AUDIO_TRACK) || 
 	    event_is_type(e, EVENT_SELECT_SUBTITLE_TRACK)
 	    ) {
@@ -535,10 +536,10 @@ const static int action_from_fkey[13][2] = {
   { 0, 0 },
   { 0, 0 },
 
-  { ACTION_SWITCH_VIEW,      0 },
-  { 0, 0 },
-  { ACTION_FULLSCREEN_TOGGLE,      0 },
-  { 0, 0 },
+  { ACTION_SWITCH_VIEW,       0 },
+  { 0,                        ACTION_VOLUME_MUTE_TOGGLE },
+  { ACTION_FULLSCREEN_TOGGLE, ACTION_VOLUME_DOWN },
+  { 0,                        ACTION_VOLUME_UP },
 };
 
 
