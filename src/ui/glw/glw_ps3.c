@@ -312,7 +312,7 @@ osk_destroyed(glw_ps3_t *gp)
   assert(w != NULL);
 
   if(!(w->glw_flags & GLW_DESTROYING)) {
-    event_t *e = event_create_action(ACTION_ENTER);
+    event_t *e = event_create_action(ACTION_SUBMIT);
     glw_event_to_widget(w, e, 0);
     event_release(e);
   }
@@ -363,6 +363,8 @@ osk_open(glw_root_t *gr, const char *title, const char *input, glw_t *w,
 
   if(lv2MemContinerCreate(&gp->osk_container, 2 * 1024 * 1024))
     gp->osk_container = 0xFFFFFFFFU;
+
+  oskSetKeyLayoutOption(3);
 
   int ret = oskLoadAsync(gp->osk_container, &param, &ifi);
 
