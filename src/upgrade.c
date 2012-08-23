@@ -48,6 +48,7 @@ static char *download_url;
 static uint8_t download_digest[20];
 static int download_size;
 //static int autocheck;
+static int inhibit_checks = 1;
 
 
 /**
@@ -85,6 +86,9 @@ check_upgrade(void)
   char *result;
   htsmsg_t *json;
   char errbuf[1024];
+
+  if(inhibit_checks)
+    return;
 
   if(upgrade_track == NULL) {
     prop_set_string(upgrade_error, "No release track specified");
@@ -233,8 +237,8 @@ install_error(const char *str)
 /**
  *
  */
-static void
-install(void)
+static void *
+install_thread(void *aux)
 {
   char errbuf[1024];
 
@@ -247,12 +251,12 @@ install(void)
   size_t result_size;
 
   int r = http_request(download_url, NULL, &result, &result_size,
-		       errbuf, sizeof(errbuf), NULL, NULL, FA_DEBUG,
+		       errbuf, sizeof(errbuf), NULL, NULL, 0,
 		       NULL, NULL, NULL, download_callback, NULL);
   
   if(r) {
     install_error(errbuf);
-    return;
+    return NULL;
   }
 
   TRACE(TRACE_DEBUG, "upgrade", "Verifying SHA-1 of %d bytes",
@@ -262,22 +266,24 @@ install(void)
 
   sha1_decl(shactx);
   uint8_t digest[20];
+  char digeststr[41];
+  int match;
+
   sha1_init(shactx);
   sha1_update(shactx, (void *)result, result_size);
   sha1_final(shactx, digest);
 
-  char digeststr[41];
-  bin2hex(digeststr, sizeof(digeststr), digest, sizeof(digest));
-  
-  int match = !memcmp(digest, download_digest, 20);
 
+  match = !memcmp(digest, download_digest, 20);
+
+  bin2hex(digeststr, sizeof(digeststr), digest, sizeof(digest));
   TRACE(TRACE_DEBUG, "upgrade", "SHA-1 of downloaded file: %s (%s)", digeststr,
 	match ? "match" : "no match");
 
   if(!match) {
     install_error("SHA-1 sum mismatch");
     free(result);
-    return;
+    return NULL;
   }
 
   const char *fname = showtime_bin;
@@ -285,11 +291,19 @@ install(void)
   TRACE(TRACE_INFO, "upgrade", "Replacing %s with %d bytes received",
 	fname, (int)result_size);
 
-  int fd = open(fname, O_TRUNC | O_RDWR, 0777);
+  if(unlink(fname)) {
+    install_error("Unlink failed");
+    free(result);
+    return NULL;
+  }
+
+  TRACE(TRACE_DEBUG, "upgrade", "Executable removed, rewriting");
+
+  int fd = open(fname, O_CREAT | O_RDWR, 0777);
   if(fd == -1) {
     install_error("Unable to open file");
     free(result);
-    return;
+    return NULL;
   }
 
   int fail = write(fd, result, result_size) != result_size || close(fd);
@@ -297,11 +311,10 @@ install(void)
 
   if(fail) {
     install_error("Unable to write to file");
-    return;
+    return NULL;
   }
 
   TRACE(TRACE_INFO, "upgrade", "All done, restarting");
-
   prop_set_string(upgrade_status, "countdown");
   prop_t *cnt = prop_create(upgrade_root, "countdown");
   int i;
@@ -310,6 +323,15 @@ install(void)
     sleep(1);
   }
   showtime_shutdown(13);
+  return NULL;
+}
+
+
+static void
+install(void)
+{
+  hts_thread_create_detached("upgrade", install_thread, NULL,
+			     THREAD_PRIO_LOW);
 }
 
 
@@ -425,6 +447,7 @@ upgrade_init(void)
   if(prop_set_parent(p, prop_create(settings_general, "nodes")))
      abort();
 
+  inhibit_checks = 0;
   check_upgrade();
 
   prop_subscribe(0,
