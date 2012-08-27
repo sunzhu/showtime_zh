@@ -1,6 +1,7 @@
 /*
  *  Plugin mananger
  *  Copyright (C) 2010 Andreas Öman
+ *  Copyright (C) 2012 Fábio Ferreira
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -39,7 +40,8 @@
 #endif
 
 
-const char *plugin_repo_url = "http://showtime.lonelycoder.com/plugins/plugins-v1.json";
+static const char *plugin_repo_url = "http://showtime.lonelycoder.com/plugins/plugins-v1.json";
+static char *plugin_alt_repo_url;
 extern char *showtime_persistent_path;
 static hts_mutex_t plugin_mutex;
 static char *devplugin;
@@ -93,6 +95,26 @@ static void plugin_remove(plugin_t *pl);
 static void plugin_autoupgrade(void);
 
 static int autoupgrade;
+
+/**
+ *
+ */
+static const char *
+get_repo(void)
+{
+  return plugin_alt_repo_url ?: plugin_repo_url;
+}
+
+/**
+ *
+ */
+static void
+set_alt_repo_url(void *opaque, const char *value) 
+{
+  hts_mutex_lock(&plugin_mutex);
+  mystrset(&plugin_alt_repo_url, value);
+  hts_mutex_unlock(&plugin_mutex);
+}
 
 /**
  *
@@ -325,7 +347,7 @@ plugin_fill_prop0(struct htsmsg *pm, struct prop *p,
       snprintf(url, sizeof(url), "%s/%s", basepath, icon);
       prop_set_string(prop_create(metadata, "icon"), url);
     } else {
-      char *iconurl = url_resolve_relative_from_base(plugin_repo_url, icon);
+      char *iconurl = url_resolve_relative_from_base(get_repo(), icon);
       prop_set_string(prop_create(metadata, "icon"), iconurl);
       free(iconurl);
     }
@@ -600,11 +622,10 @@ static void
 plugins_load(void)
 {
   char errbuf[512];
-  const char *repo = plugin_repo_url;
 
   plugin_load_installed();
   
-  htsmsg_t *r = repo_get(repo, errbuf, sizeof(errbuf));
+  htsmsg_t *r = repo_get(get_repo(), errbuf, sizeof(errbuf));
   
   if(r != NULL) {
     htsmsg_field_t *f;
@@ -625,7 +646,7 @@ plugins_load(void)
 
       const char *dlurl = htsmsg_get_str(pm, "downloadURL");
       if(dlurl != NULL) {
-	char *package = url_resolve_relative_from_base(repo, dlurl);
+	char *package = url_resolve_relative_from_base(get_repo(), dlurl);
 	free(pl->pl_package);
 	pl->pl_package = package;
       }
@@ -635,7 +656,7 @@ plugins_load(void)
 
   } else {
     TRACE(TRACE_ERROR, "plugins", "Unable to load repo %s -- %s",
-	  repo, errbuf);
+	  get_repo(), errbuf);
   }
   update_global_state();
   plugin_autoupgrade();
@@ -700,13 +721,6 @@ plugins_setup_root_props(void)
 	    prop_create(prop_create(p, "metadata"), "title"));
   prop_set_string(prop_create(p, "url"), "plugin:repo");
 
-  settings_create_bool(sta, "autoupgrade", _p("Automatically upgrade plugins"),
-		       1, store, set_autoupgrade, NULL,
-		       SETTINGS_RAW_NODES | SETTINGS_INITIAL_UPDATE, NULL,
-		       settings_generic_save_settings, 
-		       (void *)"pluginconf");
-
-
   prop_concat_add_source(pc, sta, NULL);
 
   // Installed plugins
@@ -721,6 +735,28 @@ plugins_setup_root_props(void)
 	    prop_create(prop_create(d, "metadata"), "title"));
   prop_set_string(prop_create(d, "type"), "divider");
   prop_concat_add_source(pc, inst, d);
+
+
+  // Settings
+
+  settings_create_divider(settings_general,
+			  _p("Plugins"));
+
+  settings_create_string(settings_general, "alt_repo",
+			 _p("Alternate plugin Repository URL"),
+			 NULL, store, set_alt_repo_url, NULL,
+			 SETTINGS_INITIAL_UPDATE, NULL,
+			 settings_generic_save_settings, 
+			 (void *)"pluginconf");
+
+  settings_create_bool(settings_general,
+		       "autoupgrade", _p("Automatically upgrade plugins"),
+		       1, store, set_autoupgrade, NULL,
+		       SETTINGS_INITIAL_UPDATE, NULL,
+		       settings_generic_save_settings, 
+		       (void *)"pluginconf");
+
+
 }
 
 
@@ -744,8 +780,6 @@ plugin_thread(void *aux)
 void
 plugins_init(const char *loadme, const char *repo, int sync_init)
 {
-  if(repo)
-     plugin_repo_url = repo;
   hts_mutex_init(&plugin_mutex);
   plugin_courier = prop_courier_create_waitable();
 
