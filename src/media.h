@@ -227,6 +227,7 @@ typedef struct media_pipe {
 #define MP_VIDEO         0x4
 
   int mp_eof;   // End of file: We don't expect to need to read more data
+  int mp_hold;  // Paused
 
   pool_t *mp_mb_pool;
 
@@ -312,6 +313,7 @@ typedef struct media_pipe {
 
   int64_t mp_seek_base;
   int64_t mp_start_time;
+  int64_t mp_duration;  // Duration of currently played (0 if unknown)
   int mp_epoch;
 
   struct vdpau_dev *mp_vdpau_dev;
@@ -452,7 +454,8 @@ void mp_set_url(media_pipe_t *mp, const char *url);
 #define MP_BUFFER_SHALLOW 2
 #define MP_BUFFER_DEEP    3
 
-void mp_configure(media_pipe_t *mp, int caps, int buffer_mode);
+void mp_configure(media_pipe_t *mp, int caps, int buffer_mode,
+		  int64_t duration);
 
 void mp_load_ext_sub(media_pipe_t *mp, const char *url);
 
