@@ -601,6 +601,38 @@ mp_direct_seek(media_pipe_t *mp, int64_t ts)
   hts_cond_signal(&mp->mp_backpressure);
 }
 
+
+
+
+/**
+ *
+ */
+static void
+mb_enq_tail(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb)
+{
+  TAILQ_INSERT_TAIL(&mq->mq_q, mb, mb_link);
+  mq->mq_packets_current++;
+  mb->mb_epoch = mp->mp_epoch;
+  mp->mp_buffer_current += mb->mb_size;
+  mq_update_stats(mp, mq);
+  hts_cond_signal(&mq->mq_avail);
+}
+
+/**
+ *
+ */
+static void
+mb_enq_head(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb)
+{
+  TAILQ_INSERT_HEAD(&mq->mq_q, mb, mb_link);
+  mq->mq_packets_current++;
+  mb->mb_epoch = mp->mp_epoch;
+  mp->mp_buffer_current += mb->mb_size;
+  mq_update_stats(mp, mq);
+  hts_cond_signal(&mq->mq_avail);
+}
+
+
 /**
  *
  */
@@ -617,10 +649,35 @@ mp_bump_epoch(media_pipe_t *mp)
  *
  */
 static void
+mp_send_cmd_head_locked(media_pipe_t *mp, media_queue_t *mq, int cmd)
+{
+  media_buf_t *mb = media_buf_alloc_locked(mp, 0);
+  mb->mb_data_type = cmd;
+  mb_enq_head(mp, mq, mb);
+}
+
+
+/**
+ *
+ */
+static void
+send_hold(media_pipe_t *mp)
+{
+  event_t *e = event_create_int(EVENT_HOLD, mp->mp_hold);
+  TAILQ_INSERT_TAIL(&mp->mp_eq, e, e_link);
+  hts_cond_signal(&mp->mp_backpressure);
+}
+
+
+/**
+ *
+ */
+static void
 mp_enqueue_event_locked(media_pipe_t *mp, event_t *e)
 {
   event_select_track_t *est = (event_select_track_t *)e;
-  event_int_t *ei;
+  event_int3_t *ei3;
+  int64_t d;
 
   switch(e->e_type_x) {
   case EVENT_SELECT_AUDIO_TRACK:
@@ -633,15 +690,50 @@ mp_enqueue_event_locked(media_pipe_t *mp, event_t *e)
 
     //    mp->mp_subtitle_track_mgr.mtm_user_set |= est->manual;
     break;
-  case EVENT_DELTA_SEEK:
-    ei = (event_int_t *)e;
-    mp_direct_seek(mp, mp->mp_seek_base += ei->val);
+  case EVENT_DELTA_SEEK_REL:
+    // We want to seek thru the entire feature in 3 seconds
+
+#define TOTAL_SEEK_TIME_IN_SECONDS 2
+
+    ei3 = (event_int3_t *)e;
+
+    int pre  = ei3->val1;
+    int sign = ei3->val2;
+    int rate = ei3->val3;
+
+    d = pre * pre * mp->mp_duration /
+      (rate*TOTAL_SEEK_TIME_IN_SECONDS*255*255);
+
+    mp_direct_seek(mp, mp->mp_seek_base += d*sign);
     return;
   default:
     break;
   }
 
-  if(event_is_action(e, ACTION_SEEK_BACKWARD)) {
+  if(event_is_action(e, ACTION_PLAYPAUSE ) ||
+     event_is_action(e, ACTION_PLAY ) ||
+     event_is_action(e, ACTION_PAUSE)) {
+    
+    mp->mp_hold = action_update_hold_by_event(mp->mp_hold, e);
+    if(mp->mp_flags & MP_VIDEO)
+      mp_send_cmd_head_locked(mp, &mp->mp_video, mp->mp_hold ? MB_CTRL_PAUSE : MB_CTRL_PLAY);
+    mp_send_cmd_head_locked(mp, &mp->mp_audio, mp->mp_hold ? MB_CTRL_PAUSE : MB_CTRL_PLAY);
+    mp_set_playstatus_by_hold(mp, mp->mp_hold, NULL);
+    send_hold(mp);
+    return;
+      
+  } else if(event_is_type(e, EVENT_INTERNAL_PAUSE)) {
+
+    mp->mp_hold = 1;
+
+    if(mp->mp_flags & MP_VIDEO)
+      mp_send_cmd_head_locked(mp, &mp->mp_video, mp->mp_hold ? MB_CTRL_PAUSE : MB_CTRL_PLAY);
+    mp_send_cmd_head_locked(mp, &mp->mp_audio, mp->mp_hold ? MB_CTRL_PAUSE : MB_CTRL_PLAY);
+    mp_set_playstatus_by_hold(mp, mp->mp_hold, e->e_payload);
+    send_hold(mp);
+    return;
+
+  } else if(event_is_action(e, ACTION_SEEK_BACKWARD)) {
     mp_direct_seek(mp, mp->mp_seek_base -= 15000000);
     return;
   }
@@ -757,36 +849,6 @@ mq_update_stats(media_pipe_t *mp, media_queue_t *mq)
     prop_set_int(mp->mp_prop_buffer_current, mp->mp_buffer_current);
   }
 }
-
-
-/**
- *
- */
-static void
-mb_enq_tail(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb)
-{
-  TAILQ_INSERT_TAIL(&mq->mq_q, mb, mb_link);
-  mq->mq_packets_current++;
-  mb->mb_epoch = mp->mp_epoch;
-  mp->mp_buffer_current += mb->mb_size;
-  mq_update_stats(mp, mq);
-  hts_cond_signal(&mq->mq_avail);
-}
-
-/**
- *
- */
-static void
-mb_enq_head(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb)
-{
-  TAILQ_INSERT_HEAD(&mq->mq_q, mb, mb_link);
-  mq->mq_packets_current++;
-  mb->mb_epoch = mp->mp_epoch;
-  mp->mp_buffer_current += mb->mb_size;
-  mq_update_stats(mp, mq);
-  hts_cond_signal(&mq->mq_avail);
-}
-
 
 /**
  *
@@ -1071,19 +1133,16 @@ mp_send_cmd(media_pipe_t *mp, media_queue_t *mq, int cmd)
   hts_mutex_unlock(&mp->mp_mutex);
 }
 
-/*
+
+
+/**
  *
  */
 void
 mp_send_cmd_head(media_pipe_t *mp, media_queue_t *mq, int cmd)
 {
-  media_buf_t *mb;
-
   hts_mutex_lock(&mp->mp_mutex);
-
-  mb = media_buf_alloc_locked(mp, 0);
-  mb->mb_data_type = cmd;
-  mb_enq_head(mp, mq, mb);
+  mp_send_cmd_head_locked(mp, mq, cmd);
   hts_mutex_unlock(&mp->mp_mutex);
 }
 
@@ -1188,8 +1247,6 @@ static int
 media_codec_create_lavc(media_codec_t *cw, enum CodecID id,
 			AVCodecContext *ctx, media_codec_params_t *mcp)
 {
-  extern int concurrency;
-
   cw->codec = avcodec_find_decoder(id);
 
   if(cw->codec == NULL)
@@ -1215,8 +1272,8 @@ media_codec_create_lavc(media_codec_t *cw, enum CodecID id,
     cw->codec_ctx->extradata_size = mcp->extradata_size;
   }
 
-  if(id == CODEC_ID_H264 && concurrency > 1) {
-    cw->codec_ctx->thread_count = concurrency;
+  if(id == CODEC_ID_H264 && gconf.concurrency > 1) {
+    cw->codec_ctx->thread_count = gconf.concurrency;
     if(mcp && mcp->cheat_for_speed)
       cw->codec_ctx->flags2 |= CODEC_FLAG2_FAST;
   }
@@ -1647,7 +1704,7 @@ mp_set_url(media_pipe_t *mp, const char *url)
  *
  */
 void
-mp_configure(media_pipe_t *mp, int caps, int buffer_size)
+mp_configure(media_pipe_t *mp, int caps, int buffer_size, int64_t duration)
 {
   mp->mp_max_realtime_delay = 0;
 
@@ -1669,6 +1726,7 @@ mp_configure(media_pipe_t *mp, int caps, int buffer_size)
     break;
   }
 
+  mp->mp_duration = duration;
   prop_set_int(mp->mp_prop_buffer_limit, mp->mp_buffer_limit);
 }
 

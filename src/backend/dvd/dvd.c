@@ -727,9 +727,9 @@ dvd_play(const char *url, media_pipe_t *mp, char *errstr, size_t errlen,
   mp_become_primary(mp);
 
   mp_configure(mp, MP_PLAY_CAPS_PAUSE | MP_PLAY_CAPS_EJECT,
-	       MP_BUFFER_SHALLOW); /* Might wanna use deep buffering
-				      but it requires some modification
-				      to buffer draining code */
+	       MP_BUFFER_SHALLOW, 0); /* Might wanna use deep buffering
+					 but it requires some modification
+					 to buffer draining code */
 
   mp_set_playstatus_by_hold(mp, dp->dp_hold, NULL);
 
@@ -900,19 +900,6 @@ dvd_process_event(dvd_player_t *dp, event_t *e)
 
     if(!strncmp(est->id, "sub:", strlen("sub:")))
       dvd_set_spu_stream(dp, est->id + strlen("sub:"));
-
-  } else if(!dvd_in_menu(dp) && 
-     (event_is_action(e, ACTION_PLAYPAUSE) ||
-      event_is_action(e, ACTION_PLAY) ||
-      event_is_action(e, ACTION_PAUSE))) {
-
-    mp_become_primary(mp);
-    dp->dp_hold = action_update_hold_by_event(dp->dp_hold, e);
-    mp_send_cmd_head(mp, &mp->mp_video, 
-		     dp->dp_hold ? MB_CTRL_PAUSE : MB_CTRL_PLAY);
-    mp_send_cmd_head(mp, &mp->mp_audio, 
-		     dp->dp_hold ? MB_CTRL_PAUSE : MB_CTRL_PLAY);
-    mp_set_playstatus_by_hold(mp, dp->dp_hold, NULL);
 
   } else if(event_is_action(e, ACTION_ACTIVATE)) {
 
