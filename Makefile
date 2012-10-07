@@ -188,7 +188,8 @@ SRCS += 		src/api/api.c \
 			src/api/tmdb.c \
 			src/api/tvdb.c \
 
-SRCS-$(CONFIG_HTTPSERVER) += src/api/httpcontrol.c \
+SRCS-$(CONFIG_HTTPSERVER) += src/api/httpcontrol.c
+SRCS-$(CONFIG_AIRPLAY) += src/api/airplay.c
 
 ##############################################################
 # Networking
@@ -258,6 +259,11 @@ SRCS-$(CONFIG_CDDA)      += src/backend/dvd/cdda.c
 # TV
 ##############################################################
 SRCS  += src/backend/htsp/htsp.c \
+
+##############################################################
+# Shoutcast
+##############################################################
+SRCS  += src/backend/shoutcast/shoutcast.c \
 
 ##############################################################
 # Spotify

@@ -106,6 +106,7 @@ typedef enum {
   GLW_ATTRIB_ANGLE,
   GLW_ATTRIB_MODE,
   GLW_ATTRIB_TIME,
+  GLW_ATTRIB_TRANSITION_TIME,
   GLW_ATTRIB_INT_STEP,
   GLW_ATTRIB_INT_MIN,
   GLW_ATTRIB_INT_MAX,
@@ -547,6 +548,11 @@ typedef struct glw_class {
   /**
    *
    */
+  void (*gc_set_fs)(struct glw *w, rstr_t *str);
+
+  /**
+   *
+   */
   void (*gc_bind_to_property)(struct glw *w,
 			      prop_t *p,
 			      const char **pname,
@@ -624,6 +630,7 @@ static void  __attribute__((constructor)) widgetclassinit ## n(void) \
 
 const glw_class_t *glw_class_find_by_name(const char *name);
 
+typedef struct glw_program glw_program_t;
 
 /**
  * GLW root context
@@ -671,9 +678,12 @@ typedef struct glw_root {
   int gr_mouse_valid;
 
   struct glw_video_list gr_video_decoders;
+  int64_t gr_ui_start;        // Timestamp UI was initialized
   int64_t gr_frame_start;     // Timestamp when we started rendering frame
   int64_t gr_hz_sample;
   prop_t *gr_is_fullscreen;   // Set if our window is in fullscreen
+
+  float gr_time;
 
   /**
    * Screensaver
@@ -813,7 +823,9 @@ typedef struct glw_root {
 		    int num_vertices,
 		    const uint16_t *indices,
 		    int num_triangles,
-		    int flags);
+		    int flags,
+		    glw_program_t *p,
+		    const struct glw_rctx *rc);
 
 #define GLW_RENDER_COLOR_ATTRIBUTES 0x1 /* set if the color attributes
 					   are != [1,1,1,1] */
@@ -830,6 +842,8 @@ typedef struct glw_root {
   void (*gr_open_osk)(struct glw_root *gr, 
 		      const char *title, const char *str, struct glw *w,
 		      int password);
+
+  int gr_random;
 
 } glw_root_t;
 
@@ -988,6 +1002,7 @@ typedef struct glw {
 #define GLW2_AUTOFADE        0x40
 #define GLW2_EXPEDITE_SUBSCRIPTIONS     0x80
 #define GLW2_AUTOMARGIN                 0x100
+#define GLW2_REVERSE_RENDER             0x200
 
 #define GLW2_LEFT_EDGE            0x10000000
 #define GLW2_TOP_EDGE             0x20000000
@@ -1191,6 +1206,7 @@ do {						\
     break;					\
   case GLW_ATTRIB_ANGLE:			\
   case GLW_ATTRIB_TIME:                         \
+  case GLW_ATTRIB_TRANSITION_TIME:              \
   case GLW_ATTRIB_EXPANSION:                    \
   case GLW_ATTRIB_VALUE:                        \
   case GLW_ATTRIB_INT_STEP:                     \
@@ -1349,6 +1365,11 @@ void glw_blendmode(struct glw_root *gr, int mode);
 #define GLW_CCW 1
 void glw_frontface(struct glw_root *gr, int how);
 
+struct glw_program *glw_make_program(struct glw_root *gr, 
+				     const char *vertex_shader,
+				     const char *fragment_shader);
+
+void glw_destroy_program(struct glw_root *gr, struct glw_program *gp);
 
 
 // text bitmap semi-private stuff
