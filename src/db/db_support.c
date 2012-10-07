@@ -85,13 +85,19 @@ db_step(sqlite3_stmt *pStmt)
 }
 
 int
-db_prepare(sqlite3 *db, const char *zSql, int nSql,
-	   sqlite3_stmt **ppStmt, const char **pz)
+db_preparex(sqlite3 *db, sqlite3_stmt **ppStmt, const char *zSql, 
+	    const char *file, int line)
 {
   int rc;
-  while( SQLITE_LOCKED==(rc = sqlite3_prepare_v2(db, zSql, nSql, ppStmt, pz)) ){
+
+  while(SQLITE_LOCKED==(rc = sqlite3_prepare_v2(db, zSql, -1, ppStmt, NULL))) {
     rc = wait_for_unlock_notify(db);
     if( rc!=SQLITE_OK ) break;
+  }
+
+  if(rc != SQLITE_OK) {
+    TRACE(TRACE_ERROR, "SQLITE", "SQL Error %d at %s:%d",
+	  rc, file, line);
   }
   return rc;
 }
@@ -126,7 +132,7 @@ db_get_int64_from_query(sqlite3 *db, const char *query, int64_t *v)
   sqlite3_stmt *stmt;
 
  restart:
-  rc = db_prepare(db, query, -1, &stmt, NULL);
+  rc = db_prepare(db, &stmt, query);
   if(rc) {
     if(rc == SQLITE_LOCKED)
       goto restart;
@@ -439,6 +445,18 @@ rstr_t *
 db_rstr(sqlite3_stmt *stmt, int col)
 {
   return rstr_alloc((const char *)sqlite3_column_text(stmt, col));
+}
+
+
+/**
+ *
+ */
+int
+db_posint(sqlite3_stmt *stmt, int col)
+{
+  if(sqlite3_column_type(stmt, col) == SQLITE_INTEGER)
+    return sqlite3_column_int(stmt, col);
+  return -1;
 }
 
 

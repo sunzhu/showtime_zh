@@ -380,14 +380,14 @@ glw_text_bitmap_render(glw_t *w, const glw_rctx_t *rc)
   if(glw_is_tex_inited(&gtb->gtb_texture) && pm != NULL) {
     glw_renderer_draw(&gtb->gtb_text_renderer, w->glw_root, rc, 
 		      &gtb->gtb_texture,
-		      &gtb->gtb_color, NULL, alpha, blur);
+		      &gtb->gtb_color, NULL, alpha, blur, NULL);
   }
 
   if(gtb->gtb_paint_cursor) {
     glw_root_t *gr = w->glw_root;
     float a = cos((gr->gr_frames & 2047) * (360.0f / 2048.0f)) * 0.5f + 0.5f;
     glw_renderer_draw(&gtb->gtb_cursor_renderer, w->glw_root, rc,
-		      NULL, NULL, NULL, alpha * a, blur);
+		      NULL, NULL, NULL, alpha * a, blur, NULL);
   }
 }
 
@@ -607,16 +607,18 @@ glw_text_bitmap_callback(glw_t *w, void *opaque, glw_signal_t signal,
       if(gtb->gtb_edit_ptr > 0) {
 	gtb->gtb_edit_ptr--;
 	gtb->gtb_update_cursor = 1;
+	return 1;
       }
-      return 1;
+      return 0;
 
     } else if(event_is_action(e, ACTION_RIGHT)) {
 
       if(gtb->gtb_edit_ptr < gtb->gtb_uc_len) {
 	gtb->gtb_edit_ptr++;
 	gtb->gtb_update_cursor = 1;
+	return 1;
       }
-      return 1;
+      return 0;
 
     } else if(event_is_action(e, ACTION_ACTIVATE)) {
       if(w->glw_root->gr_open_osk != NULL) {

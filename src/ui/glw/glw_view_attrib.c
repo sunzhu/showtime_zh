@@ -158,6 +158,30 @@ set_font(glw_view_eval_context_t *ec, const token_attrib_t *a,
 }
 
 
+
+/**
+ *
+ */
+static int
+set_fs(glw_view_eval_context_t *ec, const token_attrib_t *a,
+       struct token *t)
+{
+  rstr_t *str;
+
+  if(t->type == TOKEN_RSTRING)
+    str = t->t_rstring;
+  else
+    str = NULL;
+
+  str = str ? fa_absolute_path(str, t->file) : NULL;
+
+  if(ec->w->glw_class->gc_set_fs != NULL)
+    ec->w->glw_class->gc_set_fs(ec->w, str);
+  rstr_release(str);
+  return 0;
+}
+
+
 /**
  *
  */
@@ -958,6 +982,7 @@ static const token_attrib_t attribtab[] = {
   {"how",             set_string, 0, set_how},
   {"caption",         set_caption, 0},
   {"font",            set_font, 0},
+  {"fragmentShader",  set_fs, 0},
   {"source",          set_source},
 
   {"debug",                   mod_flag, GLW_DEBUG, mod_flags1},
@@ -979,6 +1004,7 @@ static const token_attrib_t attribtab[] = {
   {"autofade",                mod_flag, GLW2_AUTOFADE, mod_flags2},
   {"automargin",              mod_flag, GLW2_AUTOMARGIN, mod_flags2},
   {"expediteSubscriptions",   mod_flag, GLW2_EXPEDITE_SUBSCRIPTIONS, mod_flags2},
+  {"reverseRender",           mod_flag, GLW2_REVERSE_RENDER, mod_flags2},
 
   {"fixedSize",       mod_flag, GLW_IMAGE_FIXED_SIZE, mod_img_flags},
   {"bevelLeft",       mod_flag, GLW_IMAGE_BEVEL_LEFT, mod_img_flags},
@@ -1007,6 +1033,7 @@ static const token_attrib_t attribtab[] = {
   {"saturation",      set_float,  GLW_ATTRIB_SATURATION},
   {"weight",          set_float,  0, set_weight},
   {"time",            set_float,  GLW_ATTRIB_TIME},
+  {"transitionTime",  set_float,  GLW_ATTRIB_TRANSITION_TIME},
   {"angle",           set_float,  GLW_ATTRIB_ANGLE},
   {"expansion",       set_float,  GLW_ATTRIB_EXPANSION},
   {"min",             set_float,  GLW_ATTRIB_INT_MIN},

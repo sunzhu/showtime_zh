@@ -70,15 +70,15 @@ typedef struct glw_image {
 #define GI_MODE_ALPHA_EDGES      3
 #define GI_MODE_BORDER_ONLY_SCALING  4
 
-  uint8_t gi_update;
 
   uint8_t gi_alpha_edge;
 
-  uint8_t gi_is_ready;
+  uint8_t gi_is_ready : 1;
+  uint8_t gi_update : 1;
+  uint8_t gi_need_reload : 1;
+  uint8_t gi_loading_new_url : 1;
+  uint8_t gi_recompile : 1;
 
-  uint8_t gi_need_reload;
-
-  uint8_t gi_loading_new_url;
   int16_t gi_fixed_size;
 
   glw_renderer_t gi_gr;
@@ -104,6 +104,9 @@ typedef struct glw_image {
 
   int gi_switch_cnt;
   int gi_switch_tgt;
+
+  glw_program_t *gi_prog;
+  rstr_t *gi_fs;
 
 } glw_image_t;
 
@@ -161,6 +164,21 @@ glw_image_dtor(glw_t *w)
   if(gi->gi_pending != NULL)
     glw_tex_deref(w->glw_root, gi->gi_pending);
   glw_renderer_free(&gi->gi_gr);
+  rstr_release(gi->gi_fs);
+  glw_destroy_program(w->glw_root, gi->gi_prog);
+}
+
+
+/**
+ *
+ */
+static void 
+glw_image_set_fs(glw_t *w, rstr_t *fs)
+{
+  glw_image_t *gi = (glw_image_t *)w;
+  rstr_set(&gi->gi_fs, fs);
+  gi->gi_recompile = 1;
+
 }
 
 /**
@@ -242,6 +260,12 @@ glw_image_render(glw_t *w, const glw_rctx_t *rc)
   float blur = 1 - (rc->rc_sharpness * w->glw_sharpness);
   glw_rctx_t rc0;
   
+  if(gi->gi_recompile) {
+    glw_destroy_program(w->glw_root, gi->gi_prog);
+    gi->gi_prog = glw_make_program(w->glw_root, NULL, rstr_get(gi->gi_fs));
+    gi->gi_recompile = 0;
+  }
+
   alpha_self = rc->rc_alpha * w->glw_alpha * gi->gi_alpha_self * gi->gi_autofade;
 
   if(gi->gi_mode == GI_MODE_NORMAL || gi->gi_mode == GI_MODE_ALPHA_EDGES) {
@@ -281,7 +305,7 @@ glw_image_render(glw_t *w, const glw_rctx_t *rc)
 
 	glw_renderer_draw(&gi->gi_gr, w->glw_root, &rc0,
 			  &glt->glt_texture,
-			  &black, NULL, alpha_self * 0.75f, 1);
+			  &black, NULL, alpha_self * 0.75f, 1, NULL);
 	glw_Translatef(&rc0, -xd, -yd, 0.0f);
       }
 
@@ -290,7 +314,8 @@ glw_image_render(glw_t *w, const glw_rctx_t *rc)
 
       glw_renderer_draw(&gi->gi_gr, w->glw_root, &rc0,
 			&glt->glt_texture,
-			&gi->gi_col_mul, &gi->gi_col_off, alpha_self, blur);
+			&gi->gi_col_mul, &gi->gi_col_off, alpha_self, blur,
+			gi->gi_prog);
 
       if(gi->gi_bitmap_flags & GLW_IMAGE_ADDITIVE)
 	glw_blendmode(w->glw_root, GLW_BLEND_NORMAL);
@@ -314,7 +339,8 @@ glw_image_render(glw_t *w, const glw_rctx_t *rc)
 
       glw_renderer_draw(&gi->gi_gr, w->glw_root, rc,
 			&glt->glt_texture,
-			&gi->gi_col_mul, &gi->gi_col_off, alpha_self, blur);
+			&gi->gi_col_mul, &gi->gi_col_off, alpha_self, blur,
+			gi->gi_prog);
 
       if(gi->gi_bitmap_flags & GLW_IMAGE_ADDITIVE)
 	glw_blendmode(w->glw_root, GLW_BLEND_NORMAL);
@@ -364,6 +390,34 @@ glw_image_layout_tesselated(glw_root_t *gr, glw_rctx_t *rc, glw_image_t *gi,
 	gi->gi_automargin_bottom = vspill / 2;
       }
 
+    } else if(c != NULL && c->glw_flags & GLW_CONSTRAINT_W &&
+	      c->glw_req_weight < 0) {
+      float aspect = -c->glw_req_weight;
+
+      float cw = rc->rc_width - gi->gi_box_left - gi->gi_box_right;
+      float ch = rc->rc_height - gi->gi_box_top - gi->gi_box_bottom;
+
+      float myaspect = cw / ch;
+
+      if(myaspect > aspect) {
+	// We are wider than our child wants
+	
+	int cwidth = ch * aspect;
+	int hspill = cw - cwidth;
+      
+	if(hspill > 0) {
+	  gi->gi_automargin_left = hspill / 2 + (hspill & 1);
+	  gi->gi_automargin_right = hspill / 2;
+	}
+      } else {
+	int cheight = cw / aspect;
+	int vspill = ch - cheight;
+
+	if(vspill > 0) {
+	  gi->gi_automargin_top = vspill / 2 + (vspill & 1);
+	  gi->gi_automargin_bottom = vspill / 2;
+	}
+      }
     } else if(gi->gi_child_aspect > 0) {
       
       int px = rc->rc_height * gi->gi_child_aspect;
@@ -614,19 +668,15 @@ glw_image_update_constraints(glw_image_t *gi)
     float aspect = (float)glt->glt_xs / glt->glt_ys;
 
     if(gi->gi_bitmap_flags & GLW_IMAGE_SET_ASPECT) {
-      // This is unstable and should be removed
-      glw_set_constraints(&gi->w, 0, 0, -aspect,
-			  GLW_CONSTRAINT_W);
+      glw_set_constraints(&gi->w, 0, 0, -aspect, GLW_CONSTRAINT_W);
     } else if(gi->w.glw_flags & GLW_CONSTRAINT_CONF_X) {
 
       int ys = gi->w.glw_req_size_x / aspect;
-      glw_set_constraints(&gi->w, 0, ys, 0,
-			  GLW_CONSTRAINT_Y);
+      glw_set_constraints(&gi->w, 0, ys, 0, GLW_CONSTRAINT_Y);
     } else if(gi->w.glw_flags & GLW_CONSTRAINT_CONF_Y) {
 
       int xs = gi->w.glw_req_size_y * aspect;
-      glw_set_constraints(&gi->w, xs, 0, 0,
-			  GLW_CONSTRAINT_X);
+      glw_set_constraints(&gi->w, xs, 0, 0, GLW_CONSTRAINT_X);
     }
   }
 }
@@ -870,13 +920,20 @@ glw_image_layout(glw_t *w, glw_rctx_t *rc)
       int xs = -1, ys = -1, rescale;
 	
       if(rc->rc_width < rc->rc_height) {
-	rescale = rc->rc_width != glt->glt_xs;
+	rescale = abs(rc->rc_width - glt->glt_xs);
 	xs = rc->rc_width;
       } else {
-	rescale = rc->rc_height != glt->glt_ys;
+	rescale = abs(rc->rc_height - glt->glt_ys);
 	ys = rc->rc_height;
       }
-      
+
+
+      // Requesting aspect cause a lot of rounding errors
+      // so to avoid ending up in infinite reload loops,
+      // consider 1px off as nothing
+      if(gi->gi_bitmap_flags & GLW_IMAGE_SET_ASPECT && rescale == 1)
+	rescale = 0;
+
       if(rescale) {
 	int flags = 0;
 	if(w->glw_class == &glw_repeatedimage)
@@ -1355,6 +1412,7 @@ static glw_class_t glw_image = {
   .gc_set_sources = set_sources,
   .gc_set_alpha_self = set_alpha_self,
   .gc_get_identity = get_identity,
+  .gc_set_fs = glw_image_set_fs,
 };
 
 GLW_REGISTER_CLASS(glw_image);
@@ -1381,6 +1439,7 @@ static glw_class_t glw_icon = {
   .gc_set_size_scale = set_size_scale,
   .gc_set_default_size = set_default_size,
   .gc_get_identity = get_identity,
+  .gc_set_fs = glw_image_set_fs,
 };
 
 GLW_REGISTER_CLASS(glw_icon);
@@ -1407,6 +1466,7 @@ static glw_class_t glw_backdrop = {
   .gc_set_sources = set_sources,
   .gc_set_alpha_self = set_alpha_self,
   .gc_get_identity = get_identity,
+  .gc_set_fs = glw_image_set_fs,
 };
 
 GLW_REGISTER_CLASS(glw_backdrop);
@@ -1434,6 +1494,7 @@ static glw_class_t glw_frontdrop = {
   .gc_set_sources = set_sources,
   .gc_set_alpha_self = set_alpha_self,
   .gc_get_identity = get_identity,
+  .gc_set_fs = glw_image_set_fs,
 };
 
 GLW_REGISTER_CLASS(glw_frontdrop);
@@ -1458,6 +1519,7 @@ static glw_class_t glw_repeatedimage = {
   .gc_set_source = set_source,
   .gc_set_alpha_self = set_alpha_self,
   .gc_get_identity = get_identity,
+  .gc_set_fs = glw_image_set_fs,
 };
 
 GLW_REGISTER_CLASS(glw_repeatedimage);
