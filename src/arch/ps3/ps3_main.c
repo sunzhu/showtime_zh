@@ -131,6 +131,16 @@ showtime_get_ts(void)
   return mftb() / ticks_per_us;
 }
 
+
+/**
+ *
+ */
+int64_t
+showtime_get_avtime(void)
+{
+  return mftb() / ticks_per_us;
+}
+
 /**
  *
  */
@@ -539,7 +549,6 @@ main(int argc, char **argv)
 #if ENABLE_PS3_VDEC
   TRACE(TRACE_DEBUG, "SPU", "Initializing SPUs");
   lv2SpuInitialize(6, 0);
-  video_ps3_vdec_init();
 #endif
 
   preload_fonts();

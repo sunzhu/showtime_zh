@@ -647,10 +647,10 @@ http_client_oauth(struct http_auth_req *har,
   snprintf(str, sizeof(str), "%lu", time(NULL));
   const char *oauth_timestamp = mystrdupa(str);
 
-  struct AVSHA *shactx = alloca(av_sha_size);
-  av_sha_init(shactx, 160);
-  av_sha_update(shactx, nonce, sizeof(nonce));
-  av_sha_final(shactx, nonce);
+  sha1_decl(shactx);
+  sha1_init(shactx);
+  sha1_update(shactx, nonce, sizeof(nonce));
+  sha1_final(shactx, nonce);
 
   snprintf(str, sizeof(str),
 	   "%02x%02x%02x%02x%02x%02x%02x%02x"
@@ -776,6 +776,27 @@ http_client_set_header(struct http_auth_req *har, const char *key,
 }
 
 
+/**
+ *
+ */
+static void
+http_send_verb(htsbuf_queue_t *q, http_file_t *hf, const char *method)
+{
+  char *r, *path = hf->hf_path;
+  if(strchr(path, ' ')) {
+    path = strdup(hf->hf_path);
+    for(r = path; *r; r++) {
+      if(*r == ' ')
+	*r = '+';
+    }
+  }
+
+  htsbuf_qprintf(q, "%s %s HTTP/1.%d\r\n", method, 
+		 path, hf->hf_version);
+
+  if(path != hf->hf_path)
+    free(path);
+}
 
 /**
  *
@@ -1380,15 +1401,15 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
   http_headers_init(&headers, hf);
 
   if(hf->hf_streaming) {
-    htsbuf_qprintf(&q, "GET %s HTTP/1.%d\r\n", hf->hf_path, hf->hf_version);
+    http_send_verb(&q, hf, "GET");
     http_headers_auth(&headers, hf, "GET", NULL);
     tcp_huge_buffer(hf->hf_connection->hc_tc);
   } else if(nohead) {
-    htsbuf_qprintf(&q, "GET %s HTTP/1.%d\r\n", hf->hf_path, hf->hf_version);
+    http_send_verb(&q, hf, "GET");
     htsbuf_qprintf(&q, "Range: bytes=0-1\r\n");
     http_headers_auth(&headers, hf, "GET", NULL);
   } else {
-    htsbuf_qprintf(&q, "HEAD %s HTTP/1.%d\r\n", hf->hf_path, hf->hf_version);
+    http_send_verb(&q, hf, "HEAD");
     http_headers_auth(&headers, hf, "HEAD", NULL);
   }
 
@@ -1397,7 +1418,7 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
 
 
   if(hf->hf_debug)
-    htsbuf_dump_raw_stderr(&q);
+    htsbuf_hexdump(&q, "HTTP");
 
   tcp_write_queue(hf->hf_connection->hc_tc, &q);
 
@@ -1631,8 +1652,7 @@ reconnect:
   
 again:
 
-
-  htsbuf_qprintf(&q, "GET %s HTTP/1.%d\r\n", hf->hf_path, hf->hf_version);
+  http_send_verb(&q, hf, "GET");
 
   http_headers_init(&headers, hf);
   http_headers_auth(&headers, hf, "GET", NULL);
@@ -1707,7 +1727,7 @@ http_open_ex(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
   http_file_t *hf = calloc(1, sizeof(http_file_t));
   hf->hf_version = 1;
   hf->hf_url = strdup(url);
-  hf->hf_debug = !!(flags & FA_DEBUG);
+  hf->hf_debug = !!(flags & FA_DEBUG) || gconf.enable_http_debug;
   hf->hf_streaming = !!(flags & FA_STREAMING);
 
   if(stats != NULL) {
@@ -1800,7 +1820,7 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
 
       htsbuf_queue_init(&q, 0);
 
-      htsbuf_qprintf(&q, "GET %s HTTP/1.%d\r\n", hf->hf_path, hf->hf_version);
+      http_send_verb(&q, hf, "GET");
 
       http_headers_init(&headers, hf);
       http_headers_auth(&headers, hf, "GET", NULL);
@@ -1833,7 +1853,7 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
       http_cookie_append(hc->hc_hostname, hf->hf_path, &headers);
       http_headers_send(&q, &headers, NULL);
       if(hf->hf_debug)
-	htsbuf_dump_raw_stderr(&q);
+	htsbuf_hexdump(&q, "HTTP");
 
       tcp_write_queue(hc->hc_tc, &q);
 
@@ -2649,7 +2669,7 @@ http_request(const char *url, const char **arguments,
   if(headers_out != NULL)
     LIST_INIT(headers_out);
   hf->hf_version = 1;
-  hf->hf_debug = !!(flags & FA_DEBUG);
+  hf->hf_debug = !!(flags & FA_DEBUG) || gconf.enable_http_debug;
   hf->hf_req_compression = !!(flags & FA_COMPRESSION);
   hf->hf_url = strdup(url);
 
@@ -2707,13 +2727,13 @@ http_request(const char *url, const char **arguments,
   http_headers_send(&q, &headers, headers_in);
 
   if(hf->hf_debug)
-    htsbuf_dump_raw_stderr(&q);
+    htsbuf_hexdump(&q, "HTTP");
 
   tcp_write_queue(hf->hf_connection->hc_tc, &q);
 
   if(postdata != NULL) {
     if(hf->hf_debug)
-      htsbuf_dump_raw_stderr(postdata);
+      htsbuf_hexdump(&q, "HTTP-POSTDATA");
 
     tcp_write_queue_dontfree(hf->hf_connection->hc_tc, postdata);
   }

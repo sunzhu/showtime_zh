@@ -129,6 +129,18 @@ glw_video_widget_event(event_t *e, media_pipe_t *mp, int in_menu)
       event_release(e);
       return 1;
     }
+
+    if(event_is_action(e, ACTION_UP)) {
+      e = event_create_action(ACTION_VOLUME_UP);
+      event_dispatch(e);
+      return 1;
+    }
+
+    if(event_is_action(e, ACTION_DOWN)) {
+      e = event_create_action(ACTION_VOLUME_DOWN);
+      event_dispatch(e);
+      return 1;
+    }
   }
   return 0;
 }
@@ -190,8 +202,8 @@ glw_video_compute_avdiff(glw_root_t *gr, video_decoder_t *vd, media_pipe_t *mp,
 
   hts_mutex_lock(&mp->mp_clock_mutex);
 
-  aclock = mp->mp_audio_clock + gr->gr_frame_start
-    - mp->mp_audio_clock_realtime;
+  aclock = mp->mp_audio_clock + gr->gr_frame_start_avtime
+    - mp->mp_audio_clock_avtime;
 
   hts_mutex_unlock(&mp->mp_clock_mutex);
 

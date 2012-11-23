@@ -45,7 +45,6 @@ CONFIG_LIST="
  lirc
  stdin
  release
- coreaudio
  avahi
  appleremote
  bonjour
@@ -312,7 +311,7 @@ libav_setup() {
     mkdir -p "${LIBAV_BUILD_DIR}"
     mkdir -p "${LIBAV_INSTALL_DIR}"
 
-    LIBAV_COMMON_FLAGS="--disable-encoders --disable-bsfs --disable-filters --disable-muxers --disable-devices --disable-protocols --disable-network --disable-shared --enable-static --disable-bzlib --disable-decoder=twinvq --disable-decoder=snow --disable-decoder=cavs --enable-encoder=png --disable-ffmpeg --disable-demuxer=applehttp --disable-avconv --disable-avprobe"
+    LIBAV_COMMON_FLAGS="--disable-encoders --disable-bsfs --disable-filters --disable-muxers --disable-devices --disable-protocols --disable-network --disable-shared --enable-static --disable-bzlib --disable-decoder=twinvq --disable-decoder=snow --disable-decoder=cavs --enable-encoder=png --disable-demuxer=applehttp --disable-avconv --disable-avprobe --disable-avfilter"
 
     (cd ${LIBAV_BUILD_DIR} && ${TOPDIR}/ext/libav/configure ${LIBAV_ARCH_FLAGS} ${LIBAV_COMMON_FLAGS} --prefix=${LIBAV_INSTALL_DIR} --extra-cflags="${LIBAV_CFLAGS} ${EXTRA_CFLAGS}" --extra-ldflags="${LIBAV_LDFLAGS} ${EXTRA_LDFLAGS}" --cc="${CC}") || die
 
@@ -368,7 +367,7 @@ finalize() {
 
     if enabled libav; then
 	echo >>${CONFIG_MAK} "CFLAGS_cfg += -I${LIBAV_PATH}/include"
-	echo >>${CONFIG_MAK} "LDFLAGS_cfg += -L${LIBAV_PATH}/lib -lswscale -lavformat -lavcodec -lavutil"
+	echo >>${CONFIG_MAK} "LDFLAGS_cfg += -L${LIBAV_PATH}/lib -lavresample -lswscale -lavformat -lavcodec -lavutil"
     fi
 
     if enabled polarssl; then

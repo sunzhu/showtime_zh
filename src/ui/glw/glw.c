@@ -90,6 +90,19 @@ top_event_handler(glw_t *w, void *opaque, glw_signal_t sig, void *extra)
 
   if(event_is_action(e, ACTION_ENABLE_SCREENSAVER)) {
     gr->gr_screensaver_force_enable = 1;
+
+  } else if(event_is_action(e, ACTION_NAV_BACK) ||
+	    event_is_action(e, ACTION_NAV_FWD) ||
+	    event_is_action(e, ACTION_HOME) ||
+	    event_is_action(e, ACTION_PLAYQUEUE) ||
+	    event_is_action(e, ACTION_RELOAD_DATA) ||
+	    event_is_type(e, EVENT_OPENURL)) {
+
+    prop_t *p = prop_get_by_name(PNVEC("nav", "eventsink"), 0,
+                                 PROP_TAG_ROOT, gr->gr_prop_nav,
+                                 NULL);
+    prop_send_ext_event(p, e);
+    prop_ref_dec(p);
   } else {
     event_addref(e);
     event_dispatch(e);
@@ -195,7 +208,13 @@ glw_change_underscan_v(void *opaque, int v)
 static void
 glw_init_settings(glw_root_t *gr, const char *instance)
 {
-  prop_t *r = gr->gr_prop;
+  prop_t *r = gr->gr_prop_ui;
+
+  if(prop_set_parent(gr->gr_prop_ui, prop_get_global()))
+    abort();
+
+  if(prop_set_parent(gr->gr_prop_nav, prop_get_global()))
+    abort();
 
   if(gr->gr_base_size == 0)
     gr->gr_base_size = 20;
@@ -365,7 +384,7 @@ glw_unload_universe(glw_root_t *gr)
 void
 glw_load_universe(glw_root_t *gr)
 {
-  prop_t *page = prop_create(gr->gr_prop, "root");
+  prop_t *page = prop_create(gr->gr_prop_ui, "root");
   glw_unload_universe(gr);
 
   rstr_t *universe = rstr_alloc("skin://universe.view");
@@ -549,6 +568,7 @@ glw_prepare_frame(glw_root_t *gr, int flags)
   }
 
   gr->gr_frame_start = showtime_get_ts();
+  gr->gr_frame_start_avtime = showtime_get_avtime();
   gr->gr_time = (gr->gr_frame_start - gr->gr_ui_start) / 1000000.0;
 
   if(!(flags & GLW_NO_FRAMERATE_UPDATE)) {
@@ -560,7 +580,7 @@ glw_prepare_frame(glw_root_t *gr, int flags)
 
 	double hz = 128000000.0 / d;
 
-	prop_set_float(prop_create(gr->gr_prop, "framerate"), hz);
+	prop_set_float(prop_create(gr->gr_prop_ui, "framerate"), hz);
 	gr->gr_framerate = hz;
       }
       gr->gr_hz_sample = gr->gr_frame_start;
@@ -1826,7 +1846,7 @@ glw_dispatch_event(glw_root_t *gr, event_t *e)
     e2 = keymapper_resolve(e->e_payload);
 
     if(e2 != NULL)
-      event_to_ui(e2);
+      glw_inject_event(gr, e2);
     return;
   }
 
@@ -1906,6 +1926,33 @@ glw_eventsink(void *opaque, prop_event_t event, ...)
   va_end(ap);
 }
 
+
+/**
+ *
+ */
+void
+glw_inject_event(glw_root_t *gr, event_t *e)
+{
+  prop_t *p;
+
+  if(event_is_action(e, ACTION_NAV_BACK) ||
+     event_is_action(e, ACTION_NAV_FWD) ||
+     event_is_action(e, ACTION_HOME) ||
+     event_is_action(e, ACTION_PLAYQUEUE) ||
+     event_is_action(e, ACTION_RELOAD_DATA) ||
+     event_is_type(e, EVENT_OPENURL)) {
+    p = prop_get_by_name(PNVEC("nav", "eventsink"), 0,
+			 PROP_TAG_ROOT, gr->gr_prop_nav,
+			 NULL);
+  } else {
+    p = prop_get_by_name(PNVEC("ui", "eventSink"), 0,
+			 PROP_TAG_ROOT, gr->gr_prop_ui,
+			 NULL);
+  }
+  prop_send_ext_event(p, e);
+  event_release(e);
+  prop_ref_dec(p);
+}
 
 
 const glw_vertex_t align_vertices[] = 

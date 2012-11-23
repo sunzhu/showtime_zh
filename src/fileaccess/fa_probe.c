@@ -90,15 +90,15 @@ static const uint8_t otfsig[4] = {'O', 'T', 'T', 'O'};
  *
  */
 static rstr_t *
-ffmpeg_metadata_rstr(AVMetadata *m, const char *key)
+ffmpeg_metadata_rstr(AVDictionary *m, const char *key)
 {
-  AVMetadataTag *tag;
+  AVDictionaryEntry *tag;
   int len;
   rstr_t *ret;
   const char *str;
   char *d;
 
-  if((tag = av_metadata_get(m, key, NULL, AV_METADATA_IGNORE_SUFFIX)) == NULL)
+  if((tag = av_dict_get(m, key, NULL, AV_DICT_IGNORE_SUFFIX)) == NULL)
     return NULL;
 
   str = tag->value;
@@ -125,11 +125,11 @@ ffmpeg_metadata_rstr(AVMetadata *m, const char *key)
  *
  */
 static int
-ffmpeg_metadata_int(AVMetadata *m, const char *key, int def)
+ffmpeg_metadata_int(AVDictionary *m, const char *key, int def)
 {
-  AVMetadataTag *tag;
+  AVDictionaryEntry *tag;
 
-  if((tag = av_metadata_get(m, key, NULL, AV_METADATA_IGNORE_SUFFIX)) == NULL)
+  if((tag = av_dict_get(m, key, NULL, AV_DICT_IGNORE_SUFFIX)) == NULL)
     return def;
 
   return tag->value && tag->value[0] >= '0' && tag->value[0] <= '9' ?
@@ -527,15 +527,32 @@ fa_lavf_load_meta(metadata_t *md, AVFormatContext *fctx, const char *url,
   if(fctx->duration != AV_NOPTS_VALUE)
     md->md_duration = (float)fctx->duration / 1000000;
 
+  for(i = 0; i < fctx->nb_streams; i++) {
+    AVStream *stream = fctx->streams[i];
+    AVCodecContext *avctx = stream->codec;
 
-  if(fctx->nb_streams == 1 && 
-     fctx->streams[0]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+    if(avctx->codec_type == AVMEDIA_TYPE_AUDIO)
+      has_audio = 1;
+
+    if(avctx->codec_type == AVMEDIA_TYPE_VIDEO &&
+       !(stream->disposition & AV_DISPOSITION_ATTACHED_PIC))
+      has_video = 1;
+  }
+
+  if(has_audio && !has_video) {
     md->md_contenttype = CONTENT_AUDIO;
 
     md->md_title = ffmpeg_metadata_rstr(fctx->metadata, "title");
     md->md_track = ffmpeg_metadata_int(fctx->metadata, "track",
 				       filename ? atoi(filename) : 0);
-  } else {
+
+    return;
+  }
+
+  has_audio = 0;
+  has_video = 0;
+
+  if(1) {
 
     int atrack = 0;
     int strack = 0;
@@ -547,8 +564,12 @@ fa_lavf_load_meta(metadata_t *md, AVFormatContext *fctx, const char *url,
       AVStream *stream = fctx->streams[i];
       AVCodecContext *avctx = stream->codec;
       AVCodec *codec = avcodec_find_decoder(avctx->codec_id);
-      AVMetadataTag *lang, *title;
+      AVDictionaryEntry *lang, *title;
       int tn;
+      char str[256];
+
+      avcodec_string(str, sizeof(str), avctx, 0);
+      TRACE(TRACE_DEBUG, "Probe", " Stream #%d: %s", i, str);
 
       switch(avctx->codec_type) {
       case AVMEDIA_TYPE_VIDEO:
@@ -573,11 +594,11 @@ fa_lavf_load_meta(metadata_t *md, AVFormatContext *fctx, const char *url,
 	metadata_from_ffmpeg(tmp1, sizeof(tmp1), codec, avctx);
       }
 
-      lang = av_metadata_get(stream->metadata, "language", NULL,
-			     AV_METADATA_IGNORE_SUFFIX);
+      lang = av_dict_get(stream->metadata, "language", NULL,
+                         AV_DICT_IGNORE_SUFFIX);
 
-      title = av_metadata_get(stream->metadata, "title", NULL,
-			      AV_METADATA_IGNORE_SUFFIX);
+      title = av_dict_get(stream->metadata, "title", NULL,
+                          AV_DICT_IGNORE_SUFFIX);
 
       metadata_add_stream(md, codecname(avctx->codec_id),
 			  avctx->codec_type, i,

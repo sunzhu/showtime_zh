@@ -168,6 +168,12 @@ render_unlocked(glw_root_t *gr)
     glw_program_set_uniform_color(gbr, rj->rgb_mul.r, rj->rgb_mul.g,
 				  rj->rgb_mul.b, rj->alpha);
 
+    if(gp->gp_uniform_time != -1)
+      glUniform1f(gp->gp_uniform_time, gr->gr_time);
+
+    if(gp->gp_uniform_resolution != -1)
+      glUniform2f(gp->gp_uniform_resolution, rj->width, rj->height);
+
     if(gp->gp_uniform_blur != -1 && t0 != NULL)
       glUniform3f(gp->gp_uniform_blur, rj->blur,
 		  1.5 / t0->width, 1.5 / t0->height);
@@ -692,7 +698,7 @@ glw_opengl_shaders_init(glw_root_t *gr)
   glEnableVertexAttribArray(1);
   glEnableVertexAttribArray(2);
 
-  prop_set_string(prop_create(gr->gr_prop, "rendermode"),
+  prop_set_string(prop_create(gr->gr_prop_ui, "rendermode"),
 		  "OpenGL VP/FP shaders");
   return 0;
 }

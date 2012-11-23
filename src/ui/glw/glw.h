@@ -30,6 +30,7 @@
 #include "misc/queue.h"
 #include "misc/layout.h"
 #include "misc/pool.h"
+#include "misc/pixmap.h" // for PIXMAP_ROW_ALIGN
 #include "prop/prop.h"
 #include "showtime.h"
 #include "settings.h"
@@ -636,7 +637,8 @@ typedef struct glw_program glw_program_t;
  * GLW root context
  */
 typedef struct glw_root {
-  prop_t *gr_prop;
+  prop_t *gr_prop_ui;
+  prop_t *gr_prop_nav;
 
   int gr_stop;
   prop_sub_t *gr_evsub;
@@ -680,6 +682,7 @@ typedef struct glw_root {
   struct glw_video_list gr_video_decoders;
   int64_t gr_ui_start;        // Timestamp UI was initialized
   int64_t gr_frame_start;     // Timestamp when we started rendering frame
+  int64_t gr_frame_start_avtime; // AVtime when start rendering frame
   int64_t gr_hz_sample;
   prop_t *gr_is_fullscreen;   // Set if our window is in fullscreen
 
@@ -1258,6 +1261,8 @@ glw_t *glw_get_next_n(glw_t *c, int count);
 int glw_event(glw_root_t *gr, struct event *e);
 
 int glw_event_to_widget(glw_t *w, struct event *e, int local);
+
+void glw_inject_event(glw_root_t *gr, event_t *e);
 
 void glw_pointer_event(glw_root_t *gr, glw_pointer_event_t *gpe);
 

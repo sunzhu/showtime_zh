@@ -141,6 +141,9 @@ static void nav_eventsink(void *opaque, prop_event_t event, ...);
 
 static void nav_dtor_tracker(void *opaque, prop_event_t event, ...);
 
+static void nav_open0(navigator_t *nav, const char *url, const char *view,
+		      prop_t *origin, prop_t *model, const char *how);
+
 
 /**
  *
@@ -213,6 +216,13 @@ nav_create(prop_t *prop)
 		   PROP_TAG_ROOT, nav->nav_prop_root,
 		   NULL);
 
+  nav_open0(nav, NAV_HOME, NULL, NULL, NULL, NULL);
+
+  static int initial_opened = 0;
+
+  if(atomic_add(&initial_opened, 1) == 0 && gconf.initial_url != NULL)
+    nav_open0(nav, gconf.initial_url, gconf.initial_view, NULL, NULL, NULL);
+
   return nav;
 }
 
@@ -235,7 +245,6 @@ nav_init(void)
 {
   nav_courier = prop_courier_create_thread(NULL, "navigator");
   bookmarks_init();
-  nav_create(prop_create(prop_get_global(), "nav"));
 }
 
 
@@ -537,7 +546,7 @@ nav_open0(navigator_t *nav, const char *url, const char *view, prop_t *origin,
   nav_page_setup_prop(nav, np, view, how);
 
   nav_insert_page(nav, np, origin);
-  if(backend_open(np->np_prop_root, url))
+  if(backend_open(np->np_prop_root, url, 0))
     nav_open_errorf(np->np_prop_root, _("No handler for URL"));
 }
 
@@ -617,7 +626,7 @@ nav_reload_current(navigator_t *nav)
 
   nav_select(nav, np, NULL);
     
-  if(backend_open(np->np_prop_root, np->np_url))
+  if(backend_open(np->np_prop_root, np->np_url, 0))
     nav_open_errorf(np->np_prop_root, _("No handler for URL"));
 }
 

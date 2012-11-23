@@ -76,7 +76,7 @@ video_subtitles_lavc(video_decoder_t *vd, media_buf_t *mb,
 	vo->vo_x = r->x;
 	vo->vo_y = r->y;
 
-	vo->vo_pixmap = pixmap_create(r->w, r->h, PIXMAP_BGR32, 1);
+	vo->vo_pixmap = pixmap_create(r->w, r->h, PIXMAP_BGR32);
 
 	if(vo->vo_pixmap == NULL) {
 	  free(vo);
@@ -85,12 +85,13 @@ video_subtitles_lavc(video_decoder_t *vd, media_buf_t *mb,
 
 	const uint8_t *src = r->pict.data[0];
 	const uint32_t *clut = (uint32_t *)r->pict.data[1];
-	uint32_t *dst = (uint32_t *)vo->vo_pixmap->pm_pixels;
       
 	for(y = 0; y < r->h; y++) {
-	  for(x = 0; x < r->w; x++) {
+	  uint32_t *dst = (uint32_t *)(vo->vo_pixmap->pm_pixels + 
+				       y * vo->vo_pixmap->pm_linesize);
+	  for(x = 0; x < r->w; x++)
 	    *dst++ = clut[src[x]];
-	  }
+
 	  src += r->pict.linesize[0];
 	}
 	video_overlay_enqueue(vd, vo);
@@ -282,9 +283,11 @@ video_overlay_flush(video_decoder_t *vd, int send)
 /**
  *
  */
-int
-video_overlay_codec_create(media_codec_t *mc, enum CodecID id,
-			   AVCodecContext *ctx, media_pipe_t *mp)
+static int
+video_overlay_codec_create(media_codec_t *mc, int id,
+			   AVCodecContext *ctx, 
+			   media_codec_params_t *mcp,
+			   media_pipe_t *mp)
 {
   switch(id) {
   case CODEC_ID_DVD_SUBTITLE:
@@ -294,3 +297,4 @@ video_overlay_codec_create(media_codec_t *mc, enum CodecID id,
   }
 }
 
+REGISTER_CODEC(NULL, video_overlay_codec_create);

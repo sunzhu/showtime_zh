@@ -184,9 +184,38 @@ play_video(const char *url, struct media_pipe *mp,
 
   mp_reinit_streams(mp);
 
-  if(strncmp(url, "videoparams:", strlen("videoparams:"))) 
-    return backend_play_video(url, mp, flags | BACKEND_VIDEO_SET_TITLE,
-			      priority, errbuf, errlen, NULL, url, vq);
+  if(strncmp(url, "videoparams:", strlen("videoparams:"))) {
+    backend_t *be = backend_canhandle(url);
+
+    if(be == NULL || be->be_play_video == NULL) {
+      prop_t *p = prop_create_root(NULL);
+      if(backend_open(p, url, 1)) {
+	prop_destroy(p);
+	snprintf(errbuf, errlen, "No backend for URL");
+	return NULL;
+      }
+      rstr_t *r = prop_get_string(p, "source", NULL);
+      prop_destroy(p);
+      if(r != NULL) {
+	TRACE(TRACE_DEBUG, "vp", "Page %s redirects to video source %s\n",
+	      url, rstr_get(r));
+	event_t *e = play_video(rstr_get(r), mp, flags, priority,
+				errbuf, errlen, vq);
+	rstr_release(r);
+	return e;
+      }
+      snprintf(errbuf, errlen,
+	       "Page model for '%s' does not provide a video source",
+	       url);
+      return NULL;
+
+    }
+    mp_set_url(mp, url);
+
+    return be->be_play_video(url, mp, flags | BACKEND_VIDEO_SET_TITLE,
+			     priority, errbuf, errlen, NULL,
+			     url, vq);
+  }
 
   url += strlen("videoparams:");
   htsmsg_t *m = htsmsg_json_deserialize(url);
@@ -456,6 +485,9 @@ vq_entries_callback(void *opaque, prop_event_t event, ...)
   case PROP_DESTROYED:
     break;
 
+  case PROP_HAVE_MORE_CHILDS:
+    break;
+
   default:
     printf("Cant handle event %d\n", event);
     abort();
@@ -508,11 +540,24 @@ video_queue_find_next(video_queue_t *vq, const char *url, int reverse,
 {
   rstr_t *r = NULL;
   video_queue_entry_t *vqe;
+  const char *cu = NULL;
+
   if(url == NULL)
     return NULL;
+
+  if(!strncmp(url, "videoparams:", strlen("videoparams:"))) {
+    htsmsg_t *m = htsmsg_json_deserialize(url + strlen("videoparams:"));
+    cu = m ? htsmsg_get_str(m, "canonicalUrl") : NULL;
+    cu = cu ? mystrdupa(cu) : NULL;
+    htsmsg_destroy(m);
+  }
+
   hts_mutex_lock(&video_queue_mutex);
+
   TAILQ_FOREACH(vqe, &vq->vq_entries, vqe_link) {
-    if(vqe->vqe_url != NULL && !strcmp(url, rstr_get(vqe->vqe_url)) &&
+    if(vqe->vqe_url != NULL &&
+       (!strcmp(url, rstr_get(vqe->vqe_url)) ||
+	(cu && !strcmp(cu, rstr_get(vqe->vqe_url)))) &&
        vqe->vqe_type != NULL && 
        (!strcmp("video", rstr_get(vqe->vqe_type)) || 
 	!strcmp("tvchannel", rstr_get(vqe->vqe_type))))
@@ -523,12 +568,8 @@ video_queue_find_next(video_queue_t *vq, const char *url, int reverse,
 
     if(reverse) {
       vqe = TAILQ_PREV(vqe, video_queue_entry_queue, vqe_link);
-      if(vqe == NULL)
-	vqe = TAILQ_LAST(&vq->vq_entries, video_queue_entry_queue);
     } else {
       vqe = TAILQ_NEXT(vqe, vqe_link);
-      if(vqe == NULL)
-	vqe = TAILQ_FIRST(&vq->vq_entries);
     }
   }
 
