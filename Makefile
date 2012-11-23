@@ -182,8 +182,7 @@ BUNDLES += resources/fileaccess
 ##############################################################
 # APIs
 ##############################################################
-SRCS += 		src/api/api.c \
-			src/api/xmlrpc.c \
+SRCS += 		src/api/xmlrpc.c \
 			src/api/soap.c \
 			src/api/opensubtitles.c \
 			src/api/lastfm.c \
@@ -237,17 +236,7 @@ SRCS += src/text/fontstash.c
 ##############################################################
 # Audio subsys
 ##############################################################
-SRCS += src/audio/audio.c \
-	src/audio/audio_decoder.c \
-	src/audio/audio_fifo.c \
-	src/audio/audio_iec958.c \
-
-SRCS-$(CONFIG_LIBASOUND)  += src/audio/alsa/alsa_audio.c
-SRCS-$(CONFIG_LIBPULSE)   += src/audio/pulseaudio/pulseaudio.c
-SRCS-$(CONFIG_LIBOGC)     += src/audio/wii/wii_audio.c
-SRCS-$(CONFIG_COREAUDIO)  += src/audio/coreaudio/coreaudio.c
-SRCS-$(CONFIG_PSL1GHT)    += src/audio/ps3/ps3_audio.c
-SRCS                      += src/audio/dummy/dummy_audio.c
+SRCS += src/audio2/audio.c
 
 ##############################################################
 # DVD
@@ -324,7 +313,6 @@ SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
 			src/ui/glw/glw_mirror.c \
 			src/ui/glw/glw_video_common.c \
 			src/ui/glw/glw_video_overlay.c \
-			src/ui/glw/glw_gradient.c \
 			src/ui/glw/glw_bar.c \
 			src/ui/glw/glw_flicker.c \
 			src/ui/glw/glw_keyintercept.c \
@@ -334,7 +322,6 @@ SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
 			src/ui/glw/glw_underscan.c \
 
 SRCS-$(CONFIG_GLW_FRONTEND_X11)	  += src/ui/glw/glw_x11.c \
-				     src/ui/glw/glw_rec.c \
 				     src/ui/linux/x11_common.c
 
 SRCS-$(CONFIG_GLW_BACKEND_OPENGL) += src/ui/glw/glw_opengl_common.c \
@@ -398,7 +385,6 @@ ${BUILDDIR}/src/ui/gu/%.o : CFLAGS = $(CFLAGS_GTK) ${OPTFLAGS} \
 ##############################################################
 # IPC
 ##############################################################
-SRCS                +=  src/ipc/ipc.c
 SRCS-$(CONFIG_LIRC) +=  src/ipc/lirc.c
 SRCS-$(CONFIG_STDIN)+=  src/ipc/stdin.c
 
@@ -529,45 +515,51 @@ CFLAGS_com += -DXP_UNIX -DJS_HAS_XML_SUPPORT -DJS_THREADSAFE
 # polarssl
 ##############################################################
 SRCS-$(CONFIG_POLARSSL) += \
-	ext/polarssl-0.14.0/library/aes.c \
-	ext/polarssl-0.14.0/library/arc4.c \
-	ext/polarssl-0.14.0/library/base64.c \
-	ext/polarssl-0.14.0/library/bignum.c \
-	ext/polarssl-0.14.0/library/camellia.c \
-	ext/polarssl-0.14.0/library/certs.c \
-	ext/polarssl-0.14.0/library/debug.c \
-	ext/polarssl-0.14.0/library/des.c \
-	ext/polarssl-0.14.0/library/dhm.c \
-	ext/polarssl-0.14.0/library/havege.c \
-	ext/polarssl-0.14.0/library/md2.c \
-	ext/polarssl-0.14.0/library/md4.c \
-	ext/polarssl-0.14.0/library/md5.c \
-	ext/polarssl-0.14.0/library/net.c \
-	ext/polarssl-0.14.0/library/padlock.c \
-	ext/polarssl-0.14.0/library/rsa.c \
-	ext/polarssl-0.14.0/library/sha1.c \
-	ext/polarssl-0.14.0/library/sha2.c \
-	ext/polarssl-0.14.0/library/sha4.c \
-	ext/polarssl-0.14.0/library/ssl_cli.c \
-	ext/polarssl-0.14.0/library/ssl_srv.c \
-	ext/polarssl-0.14.0/library/ssl_tls.c \
-	ext/polarssl-0.14.0/library/timing.c \
-	ext/polarssl-0.14.0/library/version.c \
-	ext/polarssl-0.14.0/library/x509parse.c \
-	ext/polarssl-0.14.0/library/xtea.c \
+	ext/polarssl-1.2.0/library/aes.c \
+	ext/polarssl-1.2.0/library/arc4.c \
+	ext/polarssl-1.2.0/library/asn1parse.c \
+	ext/polarssl-1.2.0/library/asn1write.c \
+	ext/polarssl-1.2.0/library/base64.c \
+	ext/polarssl-1.2.0/library/bignum.c \
+	ext/polarssl-1.2.0/library/camellia.c \
+	ext/polarssl-1.2.0/library/certs.c \
+	ext/polarssl-1.2.0/library/debug.c \
+	ext/polarssl-1.2.0/library/des.c \
+	ext/polarssl-1.2.0/library/dhm.c \
+	ext/polarssl-1.2.0/library/gcm.c \
+	ext/polarssl-1.2.0/library/havege.c \
+	ext/polarssl-1.2.0/library/md.c \
+	ext/polarssl-1.2.0/library/md_wrap.c \
+	ext/polarssl-1.2.0/library/md2.c \
+	ext/polarssl-1.2.0/library/md4.c \
+	ext/polarssl-1.2.0/library/md5.c \
+	ext/polarssl-1.2.0/library/net.c \
+	ext/polarssl-1.2.0/library/padlock.c \
+	ext/polarssl-1.2.0/library/pem.c \
+	ext/polarssl-1.2.0/library/rsa.c \
+	ext/polarssl-1.2.0/library/sha1.c \
+	ext/polarssl-1.2.0/library/sha2.c \
+	ext/polarssl-1.2.0/library/sha4.c \
+	ext/polarssl-1.2.0/library/ssl_cli.c \
+	ext/polarssl-1.2.0/library/ssl_srv.c \
+	ext/polarssl-1.2.0/library/ssl_tls.c \
+	ext/polarssl-1.2.0/library/timing.c \
+	ext/polarssl-1.2.0/library/version.c \
+	ext/polarssl-1.2.0/library/x509parse.c \
+	ext/polarssl-1.2.0/library/xtea.c \
 
-${BUILDDIR}/ext/polarssl-0.14.0/library/%.o : CFLAGS = -Wall ${OPTFLAGS}
+${BUILDDIR}/ext/polarssl-1.2.0/library/%.o : CFLAGS = -Wall ${OPTFLAGS}
 
 
 ifeq ($(CONFIG_POLARSSL), yes)
-CFLAGS_com += -Iext/polarssl-0.14.0/include
+CFLAGS_com += -Iext/polarssl-1.2.0/include
 endif
 
 ##############################################################
 # TLSF (Two Level Segregated Fit) memory allocator
 ##############################################################
 
-SRCS-${CONFIG_TLSF} += ext/tlsf/tlsf.c ext/tlsf/tlsf_ps3.c
+SRCS-${CONFIG_TLSF} += ext/tlsf/tlsf.c
 
 
 include support/${OS}.mk

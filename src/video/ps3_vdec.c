@@ -16,6 +16,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdio.h>
 #include <codec/vdec.h>
 #include <assert.h>
 
@@ -122,7 +123,7 @@ typedef struct vdec_decoder {
 /**
  *
  */
-void
+static void
 video_ps3_vdec_init(void)
 {
   vdec_mpeg2_loaded = !SysLoadModule(SYSMODULE_VDEC_MPEG2);
@@ -739,9 +740,10 @@ no_lib(media_pipe_t *mp, const char *codec)
 /**
  *
  */
-int
-video_ps3_vdec_codec_create(media_codec_t *mc, enum CodecID id,
-			    AVCodecContext *ctx, media_codec_params_t *mcp,
+static int
+video_ps3_vdec_codec_create(media_codec_t *mc, int id,
+			    struct AVCodecContext *ctx,
+			    media_codec_params_t *mcp,
 			    media_pipe_t *mp)
 {
   vdec_decoder_t *vdd;
@@ -750,7 +752,7 @@ video_ps3_vdec_codec_create(media_codec_t *mc, enum CodecID id,
   int spu_threads;
   int r;
 
-  if(mcp->width == 0 || mcp->height == 0)
+  if(mcp == NULL || mcp->width == 0 || mcp->height == 0)
     return 1;
 
   switch(id) {
@@ -858,7 +860,7 @@ video_ps3_vdec_codec_create(media_codec_t *mc, enum CodecID id,
 	"Cell accelerated codec created using %d bytes of RAM",
 	dec_attr.mem_size);
 
-  mc->codec_ctx = ctx ?: avcodec_alloc_context();
+  mc->codec_ctx = ctx ?: avcodec_alloc_context3(NULL);
   mc->codec_ctx->codec_id   = id;
   mc->codec_ctx->codec_type = AVMEDIA_TYPE_VIDEO;
 
@@ -870,3 +872,5 @@ video_ps3_vdec_codec_create(media_codec_t *mc, enum CodecID id,
 
   return 0;
 }
+
+REGISTER_CODEC(video_ps3_vdec_init, video_ps3_vdec_codec_create);

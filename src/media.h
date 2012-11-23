@@ -95,31 +95,33 @@ typedef struct media_buf {
     MB_VIDEO,
     MB_AUDIO,
 
-    MB_FLUSH,
-    MB_FLUSH_SUBTITLES,
-    MB_END,
-
-    MB_CTRL_PAUSE,
-    MB_CTRL_PLAY,
-    MB_CTRL_EXIT,
 
     MB_DVD_CLUT,
     MB_DVD_RESET_SPU,
     MB_DVD_SPU,
-    MB_DVD_SPU2,
     MB_DVD_PCI,
-    MB_DVD_HILITE,
 
     MB_SUBTITLE,
 
-    MB_REQ_OUTPUT_SIZE,
+    MB_CTRL,
 
-    MB_BLACKOUT,
+    MB_CTRL_FLUSH,
+    MB_CTRL_PAUSE,
+    MB_CTRL_PLAY,
+    MB_CTRL_EXIT,
+    MB_CTRL_FLUSH_SUBTITLES,
+    MB_CTRL_BLACKOUT,
 
-    MB_REINITIALIZE,
+    MB_CTRL_DVD_HILITE,
+    MB_CTRL_EXT_SUBTITLE,
 
-    MB_EXT_SUBTITLE,
+    MB_CTRL_REINITIALIZE,
 
+    MB_CTRL_REQ_OUTPUT_SIZE,
+    MB_CTRL_DVD_SPU2,
+    
+    MB_CTRL_UNBLOCK,
+    
   } mb_data_type;
 
   void *mb_data;
@@ -155,7 +157,8 @@ typedef struct media_buf {
  * Media queue
  */
 typedef struct media_queue {
-  struct media_buf_queue mq_q;
+  struct media_buf_queue mq_q_data;
+  struct media_buf_queue mq_q_ctrl;
 
   unsigned int mq_packets_current;    /* Packets currently in queue */
 
@@ -246,7 +249,7 @@ typedef struct media_pipe {
   
   hts_mutex_t mp_clock_mutex;
   int64_t mp_audio_clock;
-  int64_t mp_audio_clock_realtime;
+  int64_t mp_audio_clock_avtime;
   int mp_audio_clock_epoch;
   int mp_avdelta;           // Audio vs video delta (µs)
   int mp_svdelta;           // Subtitle vs video delta (µs)
@@ -341,6 +344,43 @@ typedef struct media_pipe {
 struct AVFormatContext;
 struct AVCodecContext;
 
+
+/**
+ *
+ */
+typedef struct media_codec_params {
+  unsigned int width;
+  unsigned int height;
+  unsigned int profile;
+  unsigned int level;
+  int cheat_for_speed;
+  const void *extradata;
+  size_t extradata_size;
+} media_codec_params_t;
+
+
+/**
+ *
+ */
+typedef struct codec_def {
+  LIST_ENTRY(codec_def) link;
+  void (*init)(void);
+  int (*open)(media_codec_t *mc, int id,
+	      struct AVCodecContext *ctx, media_codec_params_t *mcp,
+	      media_pipe_t *mp);
+} codec_def_t;
+
+void media_register_codec(codec_def_t *cd);
+
+#define REGISTER_CODEC(init_, open_)				   \
+  static codec_def_t HTS_JOIN(codecdef, __LINE__) = {		   \
+    .init = init_,						   \
+    .open = open_						   \
+  };								   \
+  static void  __attribute__((constructor))			   \
+  HTS_JOIN(registercodecdef, __LINE__)(void)			   \
+  { media_register_codec(&HTS_JOIN(codecdef, __LINE__)); }
+
 /**
  *
  */
@@ -354,18 +394,6 @@ void media_format_deref(media_format_t *fw);
 void media_codec_deref(media_codec_t *cw);
 
 media_codec_t *media_codec_ref(media_codec_t *cw);
-
-
-typedef struct media_codec_params {
-  unsigned int width;
-  unsigned int height;
-  unsigned int profile;
-  unsigned int level;
-  int cheat_for_speed;
-  const void *extradata;
-  size_t extradata_size;
-} media_codec_params_t;
-
 
 media_codec_t *media_codec_create(int codec_id, int parser,
 				  media_format_t *fw, 
@@ -395,9 +423,6 @@ struct event *mb_enqueue_with_events(media_pipe_t *mp, media_queue_t *mq,
 				media_buf_t *mb);
 void mb_enqueue_always(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb);
 
-void mb_enqueue_always_head(media_pipe_t *mp, media_queue_t *mq,
-			    media_buf_t *mb);
-
 void mp_enqueue_event(media_pipe_t *mp, struct event *e);
 struct event *mp_dequeue_event(media_pipe_t *mp);
 struct event *mp_dequeue_event_deadline(media_pipe_t *mp, int timeout);
@@ -406,16 +431,16 @@ struct event *mp_wait_for_empty_queues(media_pipe_t *mp);
 
 
 void mp_send_cmd(media_pipe_t *mp, media_queue_t *mq, int cmd);
-void mp_send_cmd_head(media_pipe_t *mp, media_queue_t *mq, int cmd);
+//void mp_send_cmd_head(media_pipe_t *mp, media_queue_t *mq, int cmd);
 void mp_send_cmd_data(media_pipe_t *mp, media_queue_t *mq, int cmd, void *d);
-void mp_send_cmd_u32_head(media_pipe_t *mp, media_queue_t *mq, int cmd, 
-			  uint32_t u);
+void mp_send_cmd_u32(media_pipe_t *mp, media_queue_t *mq, int cmd, 
+		     uint32_t u);
+
+media_buf_t *mp_deq(media_pipe_t *mp, media_queue_t *mq);
 
 void mp_flush(media_pipe_t *mp, int blackout);
 
 void mp_bump_epoch(media_pipe_t *mp);
-
-void mp_end(media_pipe_t *mp);
 
 void mp_send_cmd_u32(media_pipe_t *mp, media_queue_t *mq, int cmd, uint32_t u);
 

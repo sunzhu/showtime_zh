@@ -892,7 +892,7 @@ playqueue_open(prop_t *page)
  *
  */
 static int
-be_playqueue_open(prop_t *page, const char *url)
+be_playqueue_open(prop_t *page, const char *url, int sync)
 {
   return playqueue_open(page);
 }
@@ -1140,7 +1140,6 @@ player_thread(void *aux)
 
     } else if(event_is_action(e, ACTION_SKIP_FORWARD) ||
 	      event_is_type  (e, EVENT_EOF)) {
-      mp_end(mp);
 
       pqe = playqueue_advance(pqe, 0);
 

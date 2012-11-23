@@ -80,7 +80,7 @@ vdpau_newframe(glw_video_t *gv, video_decoder_t *vd0, int flags)
     
     gv->gv_cfg_cur.gvc_valid = 0;
     
-    mp_send_cmd_head(mp, &mp->mp_video, MB_REINITIALIZE);
+    mp_send_cmd(mp, &mp->mp_video, MB_CTRL_REINITIALIZE);
 
     drain(gv, &gv->gv_displaying_queue);
     drain(gv, &gv->gv_decoded_queue);
@@ -118,7 +118,7 @@ vdpau_newframe(glw_video_t *gv, video_decoder_t *vd0, int flags)
 
     hts_mutex_lock(&mp->mp_clock_mutex);
     aclock = mp->mp_audio_clock + gr->gr_frame_start - 
-      mp->mp_audio_clock_realtime + mp->mp_avdelta;
+      mp->mp_audio_clock_avtime + mp->mp_avdelta;
     hts_mutex_unlock(&mp->mp_clock_mutex);
 
     d = s->gvs_pts - aclock;

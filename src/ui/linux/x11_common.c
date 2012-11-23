@@ -380,8 +380,8 @@ x11_vo_dimension(struct video_output *vo, int x, int y, int w, int h)
   vo->vo_h = h;
   vo->vo_repaint = 1;
 
-  mp_send_cmd_u32_head(vo->vo_mp, &vo->vo_mp->mp_video, MB_REQ_OUTPUT_SIZE,
-		       (w << 16) | h);
+  mp_send_cmd_u32(vo->vo_mp, &vo->vo_mp->mp_video, MB_CTRL_REQ_OUTPUT_SIZE,
+		  (w << 16) | h);
 }
 
 /**
@@ -409,8 +409,8 @@ wait_for_aclock(media_pipe_t *mp, int64_t pts, int epoch)
   }
 
   hts_mutex_lock(&mp->mp_clock_mutex);
-  rt = showtime_get_ts();
-  aclock = mp->mp_audio_clock + rt - mp->mp_audio_clock_realtime;
+  rt = showtime_get_avtime();
+  aclock = mp->mp_audio_clock + rt - mp->mp_audio_clock_avtime;
   hts_mutex_unlock(&mp->mp_clock_mutex);
 
   aclock += mp->mp_avdelta;

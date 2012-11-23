@@ -23,7 +23,6 @@
 #include "metadata/metadata.h"
 #include "htsmsg/htsmsg_xml.h"
 #include "fileaccess/fileaccess.h"
-#include "tvdb.h"
 #include "misc/dbl.h"
 
 static metadata_source_t *tvdb;
@@ -377,6 +376,12 @@ tvdb_query_by_episode(void *db, const char *item_url,
 			 "cdata", NULL);
 
 
+  if(series_id == NULL) {
+    TRACE(TRACE_INFO, "TVDB", "No series id in response");
+    htsmsg_destroy(gs);
+    return METADATA_TEMPORARY_ERROR;
+  }
+
   series_id = mystrdupa(series_id); // Make a copy of the ID
   htsmsg_destroy(gs);               // .. cause we destroyed the XML doc
 
@@ -446,6 +451,19 @@ tvdb_query_by_episode(void *db, const char *item_url,
     itemid = metadb_insert_videoitem(db, item_url, tvdb->ms_id, extid, md,
 				     METAITEM_STATUS_COMPLETE, 0,
 				     qtype, tvdb->ms_cfgid);
+
+    if(itemid != -1) {
+      metadb_delete_videoart(db, itemid);
+
+      const char *thumb = htsmsg_get_cdata(tags, "filename");
+      if(thumb) {
+	char url[256];
+	snprintf(url, sizeof(url), "http://www.thetvdb.com/banners/%s", thumb);
+
+	metadb_insert_videoart(db, itemid, url, METADATA_IMAGE_POSTER, 0, 0,
+			       1, NULL, 0);
+      }
+    }
     metadata_destroy(md);
   }
 
@@ -467,7 +485,7 @@ static const metadata_source_funcs_t fns = {
 /**
  *
  */
-void
+static void
 tvdb_init(void)
 {
   if(1)
@@ -492,4 +510,7 @@ tvdb_init(void)
 			     1 << METADATA_PROP_BACKDROP
 			     );
 }
+
+INITME(INIT_GROUP_API, tvdb_init);
+
 

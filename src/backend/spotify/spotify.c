@@ -559,7 +559,7 @@ search_release(spotify_search_t *ss)
   if(ss->ss_ref > 0)
     return;
 
-  for(i = 0; i < 3; i++) {
+  for(i = 0; i < 4; i++) {
     prop_unsubscribe(ss->ss_reqs[i].ssr_sub);
     prop_ref_dec(ss->ss_reqs[i].ssr_nodes);
     prop_ref_dec(ss->ss_reqs[i].ssr_entries);
@@ -3731,6 +3731,7 @@ spotify_search_done(sp_search *result, void *userdata)
   ss_fill_albums(result,  &ss->ss_reqs[SS_ALBUMS]);
   ss_fill_artists(result, &ss->ss_reqs[SS_ARTISTS]);
   ss_fill_playlists(result, &ss->ss_reqs[SS_PLAYLISTS]);
+  search_release(ss);
 }
 
 #define SEARCH_LIMIT 250
@@ -3799,7 +3800,7 @@ static void
 spotify_search(spotify_search_t *ss)
 {
   int i;
-  ss->ss_ref = 4;
+  ss->ss_ref = 5; // One for each subscription and one for the search itself
 
   for(i = 0; i < 4; i++) {
     spotify_search_request_t *ssr = &ss->ss_reqs[i];
@@ -4123,7 +4124,7 @@ add_metadata_props(spotify_page_t *sp)
  *
  */
 static int
-be_spotify_open(prop_t *page, const char *url)
+be_spotify_open(prop_t *page, const char *url, int sync)
 {
   char errbuf[200];
 

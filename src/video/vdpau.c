@@ -286,7 +286,6 @@ vdpau_get_buffer(struct AVCodecContext *ctx, AVFrame *pic)
   pic->linesize[0] = pic->linesize[1] =  pic->linesize[2] = 0;
   pic->opaque = vvs;
   pic->type = FF_BUFFER_TYPE_USER;
-  pic->age = 256 * 256 * 256 * 64;
 
   memcpy(&vvs->vvs_mb, mb, sizeof(media_buf_t));
   return 0;
@@ -506,8 +505,8 @@ vdpau_codec_reinit(media_codec_t *mc)
 /**
  *
  */
-int
-vdpau_codec_create(media_codec_t *mc, enum CodecID id,
+static int
+vdpau_codec_create(media_codec_t *mc, int id,
 		   AVCodecContext *ctx, media_codec_params_t *mcp,
 		   media_pipe_t *mp)
 {
@@ -519,7 +518,7 @@ vdpau_codec_create(media_codec_t *mc, enum CodecID id,
   if(vd == NULL)
     return 1;
 
-  if(mcp->width == 0 || mcp->height == 0)
+  if(mcp == NULL || mcp->width == 0 || mcp->height == 0)
     return 1;
 
   switch(id) {
@@ -598,11 +597,11 @@ vdpau_codec_create(media_codec_t *mc, enum CodecID id,
 
   TRACE(TRACE_DEBUG, "VDPAU", "Decoder initialized");
 	  
-  mc->codec_ctx = ctx ?: avcodec_alloc_context();
+  mc->codec_ctx = ctx ?: avcodec_alloc_context3(NULL);
   mc->codec_ctx->codec_id   = mc->codec->id;
   mc->codec_ctx->codec_type = mc->codec->type;
 
-  if(avcodec_open(mc->codec_ctx, mc->codec) < 0) {
+  if(avcodec_open2(mc->codec_ctx, mc->codec, NULL) < 0) {
     if(ctx == NULL)
       free(mc->codec_ctx);
     mc->codec = NULL;
@@ -823,3 +822,5 @@ vdpau_mixer_set_color_matrix(vdpau_mixer_t *vm, const struct frame_info *fi)
   vm->vm_vd->vdp_video_mixer_set_attribute_values(vm->vm_mixer, 1, 
 						  attributes, values);
 }
+
+REGISTER_CODEC(NULL, vdpau_codec_create);

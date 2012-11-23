@@ -121,11 +121,15 @@ typedef struct js_model {
 
   struct js_subscription_list jm_subscriptions;
 
+  int jm_pending_want_more;
+
 } js_model_t;
 
 
 static JSObject *make_model_object(JSContext *cx, js_model_t *jm,
 				   jsval *root);
+
+static void install_nodesub(js_model_t *jm);
 
 /**
  *
@@ -157,6 +161,8 @@ js_model_create(JSContext *cx, jsval openfunc)
 static void
 js_model_destroy(js_model_t *jm)
 {
+  assert(TAILQ_FIRST(&jm->jm_items) == NULL);
+
   if(jm->jm_args)
     strvec_free(jm->jm_args);
 
@@ -281,6 +287,7 @@ item_finalize(JSContext *cx, JSObject *obj)
   js_item_t *ji = JS_GetPrivate(cx, obj);
   assert(LIST_FIRST(&ji->ji_event_handlers) == NULL);
   TAILQ_REMOVE(&ji->ji_model->jm_items, ji, ji_link);
+  js_model_release(ji->ji_model);
   prop_ref_dec(ji->ji_root);
   free(ji);
 }
@@ -578,6 +585,8 @@ js_appendItem0(JSContext *cx, js_model_t *model, prop_t *parent,
 	       jsval *data, jsval *rval, int enabled,
 	       const char *metabind)
 {
+  install_nodesub(model);
+
   prop_t *item = prop_create_root(NULL);
 
   if(url != NULL)
@@ -619,6 +628,7 @@ js_appendItem0(JSContext *cx, js_model_t *model, prop_t *parent,
 
     *rval =  OBJECT_TO_JSVAL(robj);
     js_item_t *ji = calloc(1, sizeof(js_item_t));
+    atomic_add(&model->jm_refcount, 1);
     ji->ji_model = model;
     ji->ji_root =  p;
     TAILQ_INSERT_TAIL(&model->jm_items, ji, ji_link);
@@ -1017,9 +1027,6 @@ js_model_fill(JSContext *cx, js_model_t *jm)
 {
   jsval result;
 
-  if(!jm->jm_paginator)
-    return 0;
-
   JS_CallFunctionValue(cx, NULL, jm->jm_paginator, 0, NULL, &result);
 
   return JSVAL_IS_BOOLEAN(result) && JSVAL_TO_BOOLEAN(result);
@@ -1079,8 +1086,12 @@ js_model_nodesub(void *opaque, prop_event_t event, ...)
     break;
 
   case PROP_WANT_MORE_CHILDS:
-    if(js_model_fill(jm->jm_cx, jm))
-      prop_have_more_childs(jm->jm_nodes);
+    if(jm->jm_paginator) {
+      if(js_model_fill(jm->jm_cx, jm))
+	prop_have_more_childs(jm->jm_nodes);
+    } else {
+      jm->jm_pending_want_more = 1;
+    }
     break;
   }
   va_end(ap);
@@ -1162,7 +1173,8 @@ make_model_object(JSContext *cx, js_model_t *jm, jsval *root)
   JS_SetPrivate(cx, obj, jm);
   atomic_add(&jm->jm_refcount, 1);
 
-  JS_DefineFunctions(cx, obj, model_functions);
+  if(jm->jm_pc != NULL)
+    JS_DefineFunctions(cx, obj, model_functions);
 
   if(jm->jm_entries != NULL)
     JS_DefineProperty(cx, obj, "entries", JSVAL_VOID,
@@ -1190,11 +1202,13 @@ make_model_object(JSContext *cx, js_model_t *jm, jsval *root)
 		      NULL, NULL, JSPROP_PERMANENT);
   }
 
-  JS_DefineProperty(cx, obj, "paginator", JSVAL_VOID,
-		    NULL, js_setPaginator, JSPROP_PERMANENT);
+  if(jm->jm_pc != NULL) {
+    JS_DefineProperty(cx, obj, "paginator", JSVAL_VOID,
+		      NULL, js_setPaginator, JSPROP_PERMANENT);
 
-  JS_DefineProperty(cx, obj, "reorderer", JSVAL_VOID,
-		    NULL, js_setReorderer, JSPROP_PERMANENT);
+    JS_DefineProperty(cx, obj, "reorderer", JSVAL_VOID,
+		      NULL, js_setReorderer, JSPROP_PERMANENT);
+  }
   return obj;
 }
 
@@ -1215,7 +1229,9 @@ js_open_invoke(JSContext *cx, js_model_t *jm)
 
   JSObject *obj = make_model_object(cx, jm, &pageobj);
 
-  JS_DefineFunctions(cx, obj, page_functions);
+  if(jm->jm_pc != NULL)
+    JS_DefineFunctions(cx, obj, page_functions);
+
   if(jm->jm_url != NULL)
     js_createPageOptions(cx, obj, jm->jm_url, jm->jm_options);
 
@@ -1275,11 +1291,9 @@ js_open_error(JSContext *cx, const char *msg, JSErrorReport *r)
 /**
  *
  */
-static void *
-js_open_trampoline(void *arg)
+static void
+js_open(js_model_t *jm)
 {
-  js_model_t *jm = arg;
-  
   JSContext *cx = js_newctx(js_open_error);
   JS_SetContextPrivate(cx, jm);
 
@@ -1304,6 +1318,11 @@ js_open_trampoline(void *arg)
     prop_notify_dispatch(&exp);
     prop_notify_dispatch(&nor);
 
+    if(jm->jm_pending_want_more && jm->jm_paginator) {
+      jm->jm_pending_want_more = 0;
+      if(js_model_fill(jm->jm_cx, jm))
+	prop_have_more_childs(jm->jm_nodes);
+    }
   }
 
   JS_RemoveRoot(cx, &jm->jm_item_proto);
@@ -1311,6 +1330,17 @@ js_open_trampoline(void *arg)
   js_model_release(jm);
 
   JS_DestroyContext(cx);
+}
+
+
+/**
+ *
+ */
+static void *
+js_open_trampoline(void *arg)
+{
+  js_model_t *jm = arg;
+  js_open(jm);
   return NULL;
 }
 
@@ -1331,7 +1361,7 @@ model_launch(js_model_t *jm)
  *
  */
 int
-js_backend_open(prop_t *page, const char *url)
+js_backend_open(prop_t *page, const char *url, int sync)
 {
   js_route_t *jsr;
   hts_regmatch_t matches[8];
@@ -1372,8 +1402,12 @@ js_backend_open(prop_t *page, const char *url)
   jm->jm_root      = prop_ref_inc(page);
   jm->jm_url       = strdup(url);
 
-  model_launch(jm);
   hts_mutex_unlock(&js_page_mutex);
+  if(sync) {
+    js_open(jm);
+  } else {
+    model_launch(jm);
+  }
   return 0;
 }
 

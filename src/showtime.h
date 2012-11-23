@@ -83,6 +83,8 @@ uint32_t showtime_parse_version_int(const char *str);
 
 extern int64_t showtime_get_ts(void);
 
+extern int64_t showtime_get_avtime(void);
+
 extern const char *showtime_get_system_type(void);
 
 extern uint64_t arch_get_seed(void);
@@ -157,7 +159,7 @@ void my_localtime(const time_t *timep, struct tm *tm);
  * OOM conditions
  */
 
-#if ENABLE_TLSF
+#if defined(ENABLE_TLSF) && defined(PS3)
 
 void *mymalloc(size_t size);
 
@@ -222,6 +224,7 @@ typedef struct gconf {
 
   int enable_bin_replace;
   int enable_omnigrade;
+  int enable_http_debug;
 
   const char *devplugin;
   const char *plugin_repo;
@@ -237,15 +240,31 @@ typedef struct gconf {
 
 extern gconf_t gconf;
 
-
-
-
-
-
-
-
-
 /* From version.c */
 extern const char *htsversion;
 extern const char *htsversion_full;
 
+
+typedef struct inithelper {
+  struct inithelper *next;
+  enum {
+    INIT_GROUP_API,
+    INIT_GROUP_IPC,
+  } group;
+  void (*fn)(void);
+} inithelper_t;
+
+extern inithelper_t *inithelpers;
+
+#define INITME(group_, func_)					   \
+  static inithelper_t HTS_JOIN(inithelper, __LINE__) = {	   \
+    .group = group_,						   \
+    .fn = func_							   \
+  };								   \
+  static void  __attribute__((constructor))			   \
+  HTS_JOIN(inithelperctor, __LINE__)(void)			   \
+  {								   \
+    inithelper_t *ih = &HTS_JOIN(inithelper, __LINE__);		   \
+    ih->next = inithelpers;					   \
+    inithelpers = ih;						   \
+  }

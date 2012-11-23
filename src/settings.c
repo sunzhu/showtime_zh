@@ -713,7 +713,7 @@ be_settings_canhandle(const char *url)
  *
  */
 static int
-be_settings_open(prop_t *page, const char *url0)
+be_settings_open(prop_t *page, const char *url0, int sync)
 {
   prop_link(settings_root, prop_create(page, "model"));
   return 0;
@@ -791,6 +791,17 @@ init_dev_settings(void)
   settings_create_bool(settings_dev, "omnigrade", t, 0,
 		       store, settings_generic_set_bool,
 		       &gconf.enable_omnigrade, 
+		       SETTINGS_INITIAL_UPDATE, NULL,
+		       settings_generic_save_settings, 
+		       (void *)"dev");
+
+
+  t = prop_create_root(NULL);
+  prop_set_string(t, "Debug all HTTP requests");
+
+  settings_create_bool(settings_dev, "httpdebug", t, 0,
+		       store, settings_generic_set_bool,
+		       &gconf.enable_http_debug, 
 		       SETTINGS_INITIAL_UPDATE, NULL,
 		       settings_generic_save_settings, 
 		       (void *)"dev");
