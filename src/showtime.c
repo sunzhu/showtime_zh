@@ -23,19 +23,14 @@
 #include <unistd.h>
 #include <string.h>
 
-#include <libavformat/avformat.h>
-
-#include <libavformat/version.h>
-#include <libavcodec/version.h>
-#include <libavutil/avutil.h>
-
 #include "showtime.h"
 #include "event.h"
 #include "prop/prop.h"
 #include "arch/arch.h"
+#include "arch/threads.h"
 
 #include "media.h"
-#include "audio2/audio.h"
+#include "audio2/audio_ext.h"
 #include "backend/backend.h"
 #include "navigator.h"
 #include "settings.h"
@@ -49,7 +44,7 @@
 #include "plugins.h"
 #include "blobcache.h"
 #include "i18n.h"
-#include "misc/string.h"
+#include "misc/str.h"
 #include "misc/pixmap.h"
 #include "text/text.h"
 #include "video/video_settings.h"
@@ -57,12 +52,23 @@
 #include "db/db_support.h"
 #include "js/js.h"
 #include "db/kvstore.h"
-
+#include "upgrade.h"
+#if ENABLE_GLW
+#include "src/ui/glw/glw_settings.h"
+#endif
 #if ENABLE_HTTPSERVER
 #include "networking/http_server.h"
 #include "networking/ssdp.h"
 #include "upnp/upnp.h"
 #endif
+
+#if ENABLE_LIBAV
+#include <libavformat/avformat.h>
+#include <libavformat/version.h>
+#include <libavcodec/version.h>
+#include <libavutil/avutil.h>
+#endif
+
 
 #include "misc/fs.h"
 
@@ -74,7 +80,7 @@ inithelper_t *inithelpers;
 
 gconf_t gconf;
 
-
+#if ENABLE_LIBAV
 static int
 fflockmgr(void **_mtx, enum AVLockOp op)
 {
@@ -127,6 +133,7 @@ fflog(void *ptr, int level, const char *fmt, va_list vl)
   TRACE(level, avc ? avc->item_name(ptr) : "FFmpeg", "%s", line);
   line[0] = 0;
 }
+#endif
 
 
 /**
@@ -162,10 +169,32 @@ init_group(int group)
 /**
  *
  */
+static void *
+swthread(void *aux)
+{
+  plugins_init2();
+  
+  hts_mutex_lock(&gconf.state_mutex);
+  gconf.state_plugins_loaded = 1;
+  hts_cond_signal(&gconf.state_cond);
+  hts_mutex_unlock(&gconf.state_mutex);
+
+  plugins_upgrade_check();
+
+  upgrade_init();
+  return NULL;
+}
+
+/**
+ *
+ */
 void
 showtime_init(void)
 {
   int r;
+
+  hts_mutex_init(&gconf.state_mutex);
+  hts_cond_init(&gconf.state_cond, &gconf.state_mutex);
 
   gconf.exit_code = 1;
 
@@ -226,18 +255,25 @@ showtime_init(void)
   /* Initialize keyring */
   keyring_init();
 
+#if ENABLE_LIBAV
   /* Initialize libavcodec & libavformat */
   av_lockmgr_register(fflockmgr);
   av_log_set_callback(fflog);
   av_register_all();
 
   TRACE(TRACE_INFO, "libav", LIBAVFORMAT_IDENT", "LIBAVCODEC_IDENT", "LIBAVUTIL_IDENT);
+#endif
 
   /* Freetype */
 #if ENABLE_LIBFREETYPE
   freetype_init();
   svg_init();
 #endif
+
+#if ENABLE_GLW
+  glw_settings_init();
+#endif
+
   fontstash_init();
 
   /* Global keymapper */
@@ -258,9 +294,11 @@ showtime_init(void)
   /* Initialize audio subsystem */
   audio_init();
 
-  /* Initialize plugin manager and load plugins */
-  /* Once plugins are initialized it will also start the auto-upgrade system */
-  plugins_init(gconf.devplugin, gconf.plugin_repo, gconf.initial_url != NULL);
+  /* Initialize plugin manager */
+  plugins_init(gconf.devplugin);
+
+  /* Start software installer thread (plugins, upgrade, etc) */
+  hts_thread_create_detached("swinst", swthread, NULL, THREAD_PRIO_LOW);
 
   /* Internationalization */
   i18n_init();
@@ -288,7 +326,6 @@ showtime_init(void)
     upnp_init();
 #endif
 
-
   runcontrol_init();
 }
 
@@ -315,6 +352,7 @@ parse_opts(int argc, char **argv)
 	     "   -h, --help        - This help text.\n"
 	     "   -d                - Enable debug output.\n"
 	     "   --no-ui           - Start without UI.\n"
+	     "   --fullscreen      - Start in fullscreen mode.\n"
 	     "   --ffmpeglog       - Print ffmpeg log messages.\n"
 	     "   --with-standby    - Enable system standby.\n"
 	     "   --with-poweroff   - Enable system power-off.\n"
@@ -362,6 +400,10 @@ parse_opts(int argc, char **argv)
       continue;
     } else if(!strcmp(argv[0], "--no-ui")) {
       gconf.noui = 1;
+      argc -= 1; argv += 1;
+      continue;
+    } else if(!strcmp(argv[0], "--fullscreen")) {
+      gconf.fullscreen = 1;
       argc -= 1; argv += 1;
       continue;
     } else if(!strcmp(argv[0], "--syslog")) {

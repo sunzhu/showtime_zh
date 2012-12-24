@@ -20,7 +20,9 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#if ENABLE_LIBAV
 #include <libavutil/base64.h>
+#endif
 #include <assert.h>
 #include <zlib.h>
 
@@ -30,7 +32,7 @@
 #include "fa_proto.h"
 #include "showtime.h"
 #include "htsmsg/htsmsg_xml.h"
-#include "misc/string.h"
+#include "misc/str.h"
 #include "misc/sha.h"
 
 #if ENABLE_SPIDERMONKEY
@@ -743,7 +745,11 @@ http_client_oauth(struct http_auth_req *har,
 		 oauth_nonce,
 		 oauth_token);
 
+#if ENABLE_LIBAV
   av_base64_encode(sig, sizeof(sig), md, 20);
+#else
+  abort();
+#endif
   url_escape(str + strlen(str), sizeof(str) - strlen(str), sig,
 	     URL_ESCAPE_PARAM);
   snprintf(str + strlen(str), sizeof(str) - strlen(str), "\"");
@@ -1196,7 +1202,7 @@ http_detach(http_file_t *hf, int reusable, const char *reason)
   if(hf->hf_connection == NULL)
     return;
 
-  if(reusable) {
+  if(reusable && !gconf.disable_http_reuse) {
     http_connection_park(hf->hf_connection, hf->hf_debug);
   } else {
     http_connection_destroy(hf->hf_connection, hf->hf_debug, reason);
@@ -1303,7 +1309,11 @@ authenticate(http_file_t *hf, char *errbuf, size_t errlen, int *non_interactive,
 
     /* Got auth credentials */  
     snprintf(buf1, sizeof(buf1), "%s:%s", username, password);
+#if ENABLE_LIBAV
     av_base64_encode(buf2, sizeof(buf2), (uint8_t *)buf1, strlen(buf1));
+#else
+    abort();
+#endif
 
     snprintf(buf1, sizeof(buf1), "Basic %s", buf2);
     hf->hf_auth = strdup(buf1);

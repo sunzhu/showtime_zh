@@ -105,7 +105,9 @@ typedef struct token {
   int line;
 
   token_type_t type;
-  int t_num_args;
+  int16_t t_num_args;
+  uint16_t t_flags;
+#define TOKEN_F_SELECTED 0x1 // The 'selected' in a vector
 
   union {
     int elements;
@@ -273,7 +275,8 @@ token_t *glw_view_lexer(const char *src, errorinfo_t *ei,
 
 
 token_t *glw_view_load1(glw_root_t *gr, rstr_t *url,
-			errorinfo_t *ei, token_t *prev);
+			errorinfo_t *ei, token_t *prev,
+			int *nofile);
 
 int glw_view_parse(token_t *sof, errorinfo_t *ei, glw_root_t *gr);
 
