@@ -575,6 +575,10 @@ set_int16_4(glw_view_eval_context_t *ec, const token_attrib_t *a,
     v[0] = v[1] = v[2] = v[3] = t->t_int;
     break;
 
+  case TOKEN_VOID:
+    v[0] = v[1] = v[2] = v[3] = 0;
+    break;
+
   default:
     return glw_view_seterr(ec->ei, t, "Attribute '%s' expects a vec4, got %s",
 			   a->name, token2name(t));
@@ -862,6 +866,41 @@ build_rstr_vector(struct token *t0)
 }
 
 
+
+/**
+ *
+ */
+static int
+set_alt(glw_view_eval_context_t *ec, const token_attrib_t *a,
+	struct token *t)
+{
+  glw_t *w = ec->w;
+
+  rstr_t *r;
+
+  switch(t->type) {
+  default:
+    if(w->glw_class->gc_set_alt != NULL)
+      w->glw_class->gc_set_alt(w, NULL);
+    return 0;
+
+  case TOKEN_RSTRING:
+    r = t->t_rstring;
+    break;
+  case TOKEN_LINK:
+    r = t->t_link_rurl;
+    break;
+  }
+
+  r = fa_absolute_path(r, t->file);
+
+  if(w->glw_class->gc_set_alt != NULL)
+    w->glw_class->gc_set_alt(w, r);
+  rstr_release(r);
+  return 0;
+}
+
+
 /**
  *
  */
@@ -885,8 +924,10 @@ set_source(glw_view_eval_context_t *ec, const token_attrib_t *a,
     return 0;
 
   case TOKEN_RSTRING:
-  case TOKEN_LINK:
     r = t->t_rstring;
+    break;
+  case TOKEN_LINK:
+    r = t->t_link_rurl;
     break;
   }
 
@@ -984,6 +1025,7 @@ static const token_attrib_t attribtab[] = {
   {"font",            set_font, 0},
   {"fragmentShader",  set_fs, 0},
   {"source",          set_source},
+  {"alt",             set_alt},
 
   {"debug",                   mod_flag, GLW_DEBUG, mod_flags1},
   {"filterConstraintX",       mod_flag, GLW_CONSTRAINT_IGNORE_X, mod_flags1},
@@ -1023,6 +1065,7 @@ static const token_attrib_t attribtab[] = {
   {"bold",            mod_flag,  GTB_BOLD, mod_text_flags},
   {"italic",          mod_flag,  GTB_ITALIC, mod_text_flags},
   {"outline",         mod_flag,  GTB_OUTLINE, mod_text_flags},
+  {"permanentCursor", mod_flag,  GTB_PERMANENT_CURSOR, mod_text_flags},
   
   {"primary",         mod_flag, GLW_VIDEO_PRIMARY, mod_video_flags},
   {"noAudio",         mod_flag, GLW_VIDEO_NO_AUDIO, mod_video_flags},
@@ -1068,6 +1111,7 @@ static const token_attrib_t attribtab[] = {
   {"Yspacing",        set_int,    GLW_ATTRIB_Y_SPACING},
   {"scrollThreshold", set_int,    GLW_ATTRIB_SCROLL_THRESHOLD},
   {"divider",         set_int,    0, set_divider},
+  {"cornerRadius",    set_int,    GLW_ATTRIB_RADIUS},
 
   {"color",           set_float3, 0, set_rgb},
   {"translation",     set_float3, 0, set_translation},

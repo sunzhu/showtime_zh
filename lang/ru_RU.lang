@@ -2,7 +2,7 @@ language: Russian
 native: Русский 
 maintainer: pvc1 <pvc1@yandex.ru>
 #
-# ./glwthemes/default/cmdmenu.view
+# ./glwskins/default/cmdmenu.view
 #
 id: Add current page to bookmarks
 msg: Добавить текущую страницу в закладки
@@ -14,7 +14,7 @@ id: Remove current page from bookmarks
 msg: Удалить текущую страницу из закладок
 
 #
-# ./glwthemes/default/cmdmenu/cmdmenu_common.view
+# ./glwskins/default/cmdmenu/cmdmenu_common.view
 #
 id: Exit Showtime
 msg: Выйти из Showtime
@@ -35,7 +35,7 @@ id: Power off
 msg: Отключить систему
 
 id: Reload current page
-msg: Перезагрузка текущей страницы
+msg: Перезагрузить текущую страницу
 
 id: Suspend
 msg: Отключить систему
@@ -44,7 +44,7 @@ id: System
 msg: Система
 
 #
-# ./glwthemes/default/cmdmenu/cmdmenu_dir.view
+# ./glwskins/default/cmdmenu/cmdmenu_dir.view
 #
 id: Add '%s' to home screen
 msg: Добавить '%s' на главный экран
@@ -53,7 +53,7 @@ id: Remove '%s' from home screen
 msg: Удалить '%s' с главного экрана
 
 #
-# ./glwthemes/default/cmdmenu/cmdmenu_item.view
+# ./glwskins/default/cmdmenu/cmdmenu_item.view
 #
 id: Continue from %s
 msg: Продолжить с %s
@@ -71,10 +71,10 @@ id: Mark as unseen
 msg: Пометить как непросмотренное
 
 id: Play from beginning
-msg: Играть с начала
+msg: Воспроизведение с начала
 
 id: Play until end of list
-msg: Играть до конца списка
+msg: Воспроизведение до конца списка
 
 id: Queue
 msg: Очередь
@@ -86,7 +86,7 @@ id: Unstar
 msg: Снять метку
 
 #
-# ./glwthemes/default/cmdmenu/cmdmenu_video.view
+# ./glwskins/default/cmdmenu/cmdmenu_video.view
 #
 id: Audio
 msg: Аудио
@@ -122,13 +122,13 @@ id: Video settings
 msg: Настройки видео
 
 #
-# ./glwthemes/default/log.view
+# ./glwskins/default/log.view
 #
 id: System log
 msg: Системный лог
 
 #
-# ./glwthemes/default/pages/about.view
+# ./glwskins/default/pages/about.view
 #
 id: Allocated by application: %d kB
 msg: Выделено приложению: %d Кб
@@ -182,7 +182,7 @@ id: Windowmanager: %s
 msg: Оконный менеджер: %s
 
 #
-# ./glwthemes/default/pages/directory.view
+# ./glwskins/default/pages/directory.view
 #
 id: Album
 msg: Альбом
@@ -206,10 +206,10 @@ id: Tvchannels
 msg: ТВ-каналы
 
 id: View
-msg: Просмотр
+msg: Вид
 
 #
-# ./glwthemes/default/pages/discovered.view
+# ./glwskins/default/pages/discovered.view
 #
 id: Discovered resources on local network
 msg: Обнаруженные ресурсы в локальной сети
@@ -221,7 +221,7 @@ id: Tiled
 msg: Плитка
 
 #
-# ./glwthemes/default/pages/home_clist.view
+# ./glwskins/default/pages/home_clist.view
 #
 id: About Showtime
 msg: О программе
@@ -229,12 +229,11 @@ msg: О программе
 id: Dismiss
 msg: Отклонить
 
-
 id: Plugins
 msg: Плагины
 
 #
-# ./glwthemes/default/pages/iteminfo/image.view
+# ./glwskins/default/pages/iteminfo/image.view
 #
 id: Camera: 
 msg: Камера:
@@ -243,7 +242,7 @@ id: Date:
 msg: Дата:
 
 #
-# ./glwthemes/default/pages/iteminfo/plugin.view
+# ./glwskins/default/pages/iteminfo/plugin.view
 #
 id: Author: 
 msg: Автор:
@@ -258,7 +257,7 @@ id: Showtime %s or newer is required
 msg: Требуется Showtime %s или новее
 
 #
-# ./glwthemes/default/pages/iteminfo/video.view
+# ./glwskins/default/pages/iteminfo/video.view
 #
 id: Director:
 msg: Режиссер:
@@ -285,13 +284,13 @@ id: Year:
 msg: Год:
 
 #
-# ./glwthemes/default/pages/listitems/add.view
+# ./glwskins/default/pages/listitems/add.view
 #
 id: Add new entry
 msg: Добавить новую запись
 
 #
-# ./glwthemes/default/pages/listitems/bool.view
+# ./glwskins/default/pages/listitems/bool.view
 #
 id: No
 msg: Нет
@@ -312,7 +311,7 @@ id: Subs
 msg: Субтитры
 
 #
-# ./glwthemes/default/pages/listitems/plugin.view
+# ./glwskins/default/pages/listitems/plugin.view
 #
 id: Install
 msg: Установка
@@ -324,19 +323,25 @@ id: Upgrade
 msg: Обновление
 
 #
-# ./glwthemes/default/pages/openerror.view
+# ./glwskins/default/pages/openerror.view
 #
 id: Unable to open resource
 msg: Невозможно открыть ресурс
 
 #
-# ./glwthemes/default/pages/playqueue.view
+# ./glwskins/default/pages/playqueue.view
 #
 id: Track %d / %d
 msg: Трек %d / %d
 
 #
-# ./glwthemes/default/pages/upgrade.view
+# ./glwskins/default/pages/slideshow.view
+#
+id: Paused
+msg: Пауза 
+
+#
+# ./glwskins/default/pages/upgrade.view
 #
 id: An error occured during download
 msg: Произошла ошибка во время загрузки
@@ -390,7 +395,7 @@ id: Unable to query for new version
 msg: Невозможно проверить новую версию
 
 #
-# ./glwthemes/default/pages/video.view
+# ./glwskins/default/pages/video.view
 #
 id: CPU is too slow to decode this video
 msg: CPU является слишком медленным для декодирования видео
@@ -399,7 +404,13 @@ id: Playback status
 msg: Статус воспроизведения
 
 #
-# ./glwthemes/default/playdecks/dvd.view
+# ./glwskins/default/pages/wideinfo/video.view
+#
+id: Seen:
+msg: Воспроизведено 
+
+#
+# ./glwskins/default/playdecks/dvd.view
 #
 id: Chapter: %d
 msg: Раздел: %d
@@ -408,7 +419,7 @@ id: Title: %d
 msg: Глава: %d
 
 #
-# ./glwthemes/default/popups/auth.view
+# ./glwskins/default/popups/auth.view
 #
 id: Domain
 msg: Домен
@@ -423,7 +434,7 @@ id: Username
 msg: Имя пользователя
 
 #
-# ./glwthemes/default/popups/common.view
+# ./glwskins/default/popups/common.view
 #
 id: Cancel
 msg: Отмена
@@ -432,19 +443,19 @@ id: OK
 msg: OK
 
 #
-# ./glwthemes/default/screensaver.view
+# ./glwskins/default/screensaver.view
 #
 id: No media loaded
 msg: Медиа-файл не загружен
 
 #
-# ./glwthemes/default/sysinfo.view
+# ./glwskins/default/sysinfo.view
 #
 id: Memory usage:
 msg: Использование памяти:
 
 #
-# ./glwthemes/default/universe.view
+# ./glwskins/default/universe.view
 #
 id: Audio muted
 msg: Звук выключен
@@ -471,7 +482,7 @@ id: Use original title
 msg: Использовать оригинальное название
 
 #
-# ./src/arch/arch_ps3.c
+# ./src/arch/ps3/ps3_main.c
 #
 id: System is low on memory (%d kB RAM available)
 msg: Мало памяти (доступно %d Кб RAM)
@@ -852,11 +863,14 @@ id: Clear all metadata
 msg: Удалить все метаданные
 
 id: Clearing all metadata means losing <b>all</b> information about:\n\nIf a track/movie has been seen\nNumber of times a track/movie has been played\nPlayback resume position\n\nIt will also erase the metadata cached from external sources such as themoviedb.org, etc\n\nAre you sure you proceed?
-msg: При удалении метаданных будет удалена <b>вся</b> информация:\n\nТрек/видео/фильм был просмотрен\nКол-во раз, которые Трек/видео/фильм был просмотрен\nПозиция для продолжения просмотра\n\nТак же все метаданные, сохраненные из внешних источников, таких как themoviedb.org и т.п.\n\nВы действительно хотите продолжить?
+msg: При удалении метаданных будет удалена <b>вся</b> информация:\n\nТрек/видео/фильм был воспроизведен\nКол-во раз, которые Трек/видео/фильм был воспроизведен\nПозиция для продолжения воспроизведения\n\nТак же все метаданные, сохраненные из внешних источников, таких как themoviedb.org и т.п.\n\nВы действительно хотите продолжить?
 
 #
 # ./src/navigator.c
 #
+id: Add and remove items on homepage
+msg: Добавление и удаление элементов на главном экране
+
 id: Added new bookmark: %s
 msg: Добавлены новые закладки: %s
 
@@ -902,8 +916,17 @@ msg: Автоматическое обновление плагинов
 id: Available plugins
 msg: Доступные плагины
 
+id: Background
+msg: Фон
+
+id: Beta testing passwords
+msg: Пароли бета-теста
+
 id: Browse available plugins
 msg: Просмотр доступных плагинов
+
+id: Browsing
+msg: Вид элементов при навигации
 
 id: Cloud services
 msg: Облачные сервисы
@@ -911,8 +934,11 @@ msg: Облачные сервисы
 id: Corrupt plugin bundle
 msg: Поврежденный пакет плагина
 
+id: Default
+msg: По умолчанию 
+
 id: Disk write error
-msg: Ошибка записи диска
+msg: Ошибка записи на диск
 
 id: Downloading
 msg: Загрузка
@@ -920,14 +946,29 @@ msg: Загрузка
 id: File open error
 msg: Ошибка при открытии файла
 
+id: Home page
+msg: Главный экран
+
 id: Installed plugins
 msg: Установленные плагины
+
+id: Installed version higher than available
+msg: Установленная версия новее, чем доступная
 
 id: Installing
 msg: Установка
 
-id: Invalud URI
-msg: Недопустимый URL 
+id: List of albums
+msg: Список альбомов
+
+id: Loading screen
+msg: Загрузочный экран
+
+id: Movies
+msg: Фильмы
+
+id: Music streaming
+msg: Потоковая музыка
 
 id: Not installable
 msg: Не может быть установлен
@@ -941,6 +982,15 @@ msg: Не обновляемый
 id: Online TV
 msg: Онлайн-ТВ
 
+id: Preferred views from plugins
+msg: Предпочтительный вид при установленных плагинах
+
+id: Screen saver
+msg: Хранитель экрана
+
+id: TV channels
+msg: ТВ каналы
+
 id: Unable to load plugin.json: %s
 msg: Не удается загрузить plugin.json: %s
 
@@ -951,7 +1001,7 @@ id: Uncategorized
 msg: Без категории
 
 id: Up to date
-msg: До даты
+msg: Последняя версия
 
 id: Upgradable
 msg: Обновляемый
@@ -1007,17 +1057,23 @@ msg: Настройки для разработчиков
 id: Discovered media sources
 msg: Обнаруженные медиа источники
 
+id: Fonts and user interface styling
+msg: Шрифты и интерфейс пользователя
+
 id: General
 msg: Общее
 
 id: Global settings
 msg: Главные настройки
 
+id: Look and feel
+msg: Внешний вид интерфейса
+
 id: Settings useful for developers
 msg: Настройки полезные для разработчиков
 
 id: System related settings
-msg: Настройки связанные с системой
+msg: Системные настройки
 
 #
 # ./src/text/fontstash.c
@@ -1029,7 +1085,7 @@ id: Unable to load %s -- %s
 msg: Невозможно загрузить: %s -- %s
 
 id: Unable to open %s for writing
-msg:Невозможно открыть для записи: %s
+msg: Невозможно открыть для записи: %s
 
 id: Unable to write to %s
 msg: Невозможно записать в: %s
@@ -1041,7 +1097,7 @@ id: User interface
 msg: Пользовательский интерфейс
 
 #
-# ./src/ui/glw/glw.c
+# ./src/ui/glw/glw_settings.c
 #
 id: Display and user interface
 msg: Отображение и интерфейс пользователя

@@ -25,7 +25,7 @@
 #include "pixmap.h"
 #include "dbl.h"
 #include "htsmsg/htsmsg_xml.h"
-#include "misc/string.h"
+#include "misc/str.h"
 #include "showtime.h"
 
 
@@ -882,7 +882,7 @@ svg_decode1(htsmsg_t *doc, const image_meta_t *im,
   svg_parse_root(&state, tags);
   state.need_color = NULL;
 
-  state.pm = pixmap_create(w, h, need_color ? PIXMAP_BGR32 : PIXMAP_IA);
+  state.pm = pixmap_create(w, h, need_color ? PIXMAP_BGR32 : PIXMAP_IA, 0);
   if(state.pm == NULL) {
     snprintf(errbuf, errlen, "Out of memory");
     return NULL;

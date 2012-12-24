@@ -28,6 +28,7 @@
 #include "text/text.h"
 
 #include "glw.h"
+#include "glw_settings.h"
 #include "glw_text_bitmap.h"
 #include "glw_texture.h"
 #include "glw_view.h"
@@ -43,6 +44,12 @@ const float glw_identitymtx[16] = {
   0,1,0,0,
   0,0,1,0,
   0,0,0,1};
+
+
+static void glw_osk_open(glw_root_t *gr, const char *title, const char *input,
+			 glw_t *w, int password);
+
+
 
 /*
  *
@@ -111,197 +118,41 @@ top_event_handler(glw_t *w, void *opaque, glw_signal_t sig, void *extra)
   return 1;
 }
 
-
-
-/**
- * Save settings
- */
-void 
-glw_settings_save(void *opaque, htsmsg_t *msg)
-{
-  glw_root_t *gr = opaque;
-
-  assert(msg == gr->gr_settings_store);
-  htsmsg_store_save(msg, "displays/%s", gr->gr_settings_instance);
-}
-
-
 /**
  *
  */
 static void
-glw_set_screensaver_delay(void *opaque, int v)
+glw_update_sizes(glw_root_t *gr)
 {
-  glw_root_t *gr = opaque;
+  int val;
+  int base_size = gr->gr_height / 35; // 35 is just something
 
-  gr->gr_screensaver_delay = v;
-}
-
-
-/**
- *
- */
-void
-glw_update_size(glw_root_t *gr)
-{
-  int v = gr->gr_base_size + gr->gr_user_size;
-  v = GLW_CLAMP(v, 14, 40);
-
-  if(gr->gr_current_size == v)
-    return;
-  gr->gr_current_size = v;
-
-  prop_set_int(gr->gr_prop_size, v);
-  glw_text_flush(gr);
-  glw_icon_flush(gr);
-  TRACE(TRACE_DEBUG, "GLW", "UI size scale changed to %d", v);
-}
-
-
-/**
- *
- */
-static void
-glw_change_user_size(void *opaque, int v)
-{
-  glw_root_t *gr = opaque;
-  gr->gr_user_size = v;
-  glw_update_size(gr);
-}
-
-
-/**
- *
- */
-static void
-glw_change_underscan_h(void *opaque, int v)
-{
-  glw_root_t *gr = opaque;
-
-  v += gr->gr_base_underscan_h;
-  v = GLW_CLAMP(v, 0, 100);
-  prop_set_int(gr->gr_prop_underscan_h, v);
-  gr->gr_underscan_h = v;
-}
-
-
-/**
- *
- */
-static void
-glw_change_underscan_v(void *opaque, int v)
-{
-  glw_root_t *gr = opaque;
-
-  v += gr->gr_base_underscan_v;
-  v = GLW_CLAMP(v, 0, 100);
-  prop_set_int(gr->gr_prop_underscan_v, v);
-  gr->gr_underscan_v = v;
-}
-
-
-
-
-/**
- *
- */
-static void
-glw_init_settings(glw_root_t *gr, const char *instance)
-{
-  prop_t *r = gr->gr_prop_ui;
-
-  if(prop_set_parent(gr->gr_prop_ui, prop_get_global()))
-    abort();
-
-  if(prop_set_parent(gr->gr_prop_nav, prop_get_global()))
-    abort();
-
-  if(gr->gr_base_size == 0)
-    gr->gr_base_size = 20;
-
-  gr->gr_settings_instance = strdup(instance);
-
-  gr->gr_settings_store = htsmsg_store_load("displays/%s", instance);
+  val = GLW_CLAMP(base_size + glw_settings.gs_size, 14, 40);
   
-  if(gr->gr_settings_store == NULL)
-    gr->gr_settings_store = htsmsg_create_map();
+  if(gr->gr_current_size != val) {
+    gr->gr_current_size = val;
+    prop_set(gr->gr_prop_ui, "size", PROP_SET_INT, val);
+    glw_text_flush(gr);
+    glw_icon_flush(gr);
+    TRACE(TRACE_DEBUG, "GLW", "UI size scale changed to %d", val);
+  }
 
-  gr->gr_settings = settings_add_dir(NULL, 
-				     _p("Display and user interface"),
-				     "display", NULL, NULL, NULL);
+  val = GLW_CLAMP(gr->gr_base_underscan_h + glw_settings.gs_underscan_h,
+		  0, 100);
 
-
-  gr->gr_prop_size = prop_create(r, "size");
-  gr->gr_prop_underscan_h = prop_create(r, "underscan_h");
-  gr->gr_prop_underscan_v = prop_create(r, "underscan_v");
-
-
-  gr->gr_setting_size =
-    settings_create_int(gr->gr_settings, "size",
-			_p("Userinterface size"), 0,
-			gr->gr_settings_store, -10, 30, 1,
-			glw_change_user_size, gr,
-			SETTINGS_INITIAL_UPDATE, "px", gr->gr_courier,
-			glw_settings_save, gr);
-
-  gr->gr_setting_underscan_h =
-    settings_create_int(gr->gr_settings, "underscan_h",
-			_p("Horizontal underscan"), 0,
-			gr->gr_settings_store, -100, +100, 1,
-			glw_change_underscan_h, gr,
-			SETTINGS_INITIAL_UPDATE, "px", gr->gr_courier,
-			glw_settings_save, gr);
-
-  gr->gr_setting_underscan_v =
-    settings_create_int(gr->gr_settings, "underscan_v",
-			_p("Vertical underscan"), 0,
-			gr->gr_settings_store, -100, +100, 1,
-			glw_change_underscan_v, gr,
-			SETTINGS_INITIAL_UPDATE, "px", gr->gr_courier,
-			glw_settings_save, gr);
+  if(gr->gr_underscan_h != val) {
+    prop_set(gr->gr_prop_ui, "underscan_h", PROP_SET_INT, val);
+    gr->gr_underscan_h = val;
+  }
 
 
-  gr->gr_setting_screensaver =
-    settings_create_int(gr->gr_settings, "screensaver",
-			_p("Screensaver delay"),
-			10, gr->gr_settings_store, 1, 60, 1,
-			glw_set_screensaver_delay, gr,
-			SETTINGS_INITIAL_UPDATE, " min", gr->gr_courier,
-			glw_settings_save, gr);
+  val = GLW_CLAMP(gr->gr_base_underscan_v + glw_settings.gs_underscan_v,
+		  0, 100);
 
-
-  gr->gr_pointer_visible    = prop_create(r, "pointerVisible");
-  gr->gr_is_fullscreen      = prop_create(r, "fullscreen");
-  gr->gr_screensaver_active = prop_create(r, "screensaverActive");
-  gr->gr_prop_width         = prop_create(r, "width");
-  gr->gr_prop_height        = prop_create(r, "height");
-
-  prop_set_int(gr->gr_screensaver_active, 0);
-
-  gr->gr_evsub =
-    prop_subscribe(0,
-		   PROP_TAG_CALLBACK, glw_eventsink, gr,
-		   PROP_TAG_NAME("ui", "eventSink"),
-		   PROP_TAG_ROOT, r,
-		   PROP_TAG_COURIER, gr->gr_courier,
-		   NULL);
-}
-
-
-/**
- *
- */
-static void
-glw_fini_settings(glw_root_t *gr)
-{
-  prop_unsubscribe(gr->gr_evsub);
-  setting_destroy(gr->gr_setting_screensaver);
-  setting_destroy(gr->gr_setting_underscan_v);
-  setting_destroy(gr->gr_setting_underscan_h);
-  setting_destroy(gr->gr_setting_size);
-  prop_destroy(gr->gr_settings);
-  htsmsg_destroy(gr->gr_settings_store);
-  free(gr->gr_settings_instance);
+  if(gr->gr_underscan_v != val) {
+    prop_set(gr->gr_prop_ui, "underscan_v", PROP_SET_INT, val);
+    gr->gr_underscan_v = val;
+  }
 }
 
 
@@ -309,10 +160,19 @@ glw_fini_settings(glw_root_t *gr)
  *
  */
 int
-glw_init(glw_root_t *gr, const char *instance)
+glw_init(glw_root_t *gr)
 {
   char skinbuf[PATH_MAX];
   const char *skin = gconf.skin;
+
+  assert(glw_settings.gs_settings != NULL);
+
+  if(prop_set_parent(gr->gr_prop_ui, prop_get_global()))
+    abort();
+
+  if(prop_set_parent(gr->gr_prop_nav, prop_get_global()))
+    abort();
+
   if(skin == NULL) {
     snprintf(skinbuf, sizeof(skinbuf),
 	     "%s/glwskins/"SHOWTIME_GLW_DEFAULT_SKIN, showtime_dataroot());
@@ -333,7 +193,22 @@ glw_init(glw_root_t *gr, const char *instance)
   gr->gr_font_domain = freetype_get_context();
 
   glw_text_bitmap_init(gr);
-  glw_init_settings(gr, instance);
+
+  gr->gr_pointer_visible    = prop_create(gr->gr_prop_ui, "pointerVisible");
+  gr->gr_is_fullscreen      = prop_create(gr->gr_prop_ui, "fullscreen");
+  gr->gr_screensaver_active = prop_create(gr->gr_prop_ui, "screensaverActive");
+  gr->gr_prop_width         = prop_create(gr->gr_prop_ui, "width");
+  gr->gr_prop_height        = prop_create(gr->gr_prop_ui, "height");
+
+  prop_set_int(gr->gr_screensaver_active, 0);
+
+  gr->gr_evsub =
+    prop_subscribe(0,
+		   PROP_TAG_CALLBACK, glw_eventsink, gr,
+		   PROP_TAG_NAME("ui", "eventSink"),
+		   PROP_TAG_ROOT, gr->gr_prop_ui,
+		   PROP_TAG_COURIER, gr->gr_courier,
+		   NULL);
 
   TAILQ_INIT(&gr->gr_destroyer_queue);
   glw_tex_init(gr);
@@ -341,6 +216,8 @@ glw_init(glw_root_t *gr, const char *instance)
   gr->gr_framerate = 60;
   gr->gr_frameduration = 1000000 / gr->gr_framerate;
   gr->gr_ui_start = showtime_get_ts();
+
+  gr->gr_open_osk = glw_osk_open;
 
   return 0;
 }
@@ -352,11 +229,17 @@ glw_init(glw_root_t *gr, const char *instance)
 void
 glw_fini(glw_root_t *gr)
 {
+  if(gr->gr_osk_widget != NULL) {
+    glw_unref(gr->gr_osk_widget);
+    prop_unsubscribe(gr->gr_osk_text_sub);
+    prop_unsubscribe(gr->gr_osk_ev_sub);
+  }
+
   glw_text_bitmap_fini(gr);
   rstr_release(gr->gr_default_font);
   glw_tex_fini(gr);
   free(gr->gr_skin);
-  glw_fini_settings(gr);
+  prop_unsubscribe(gr->gr_evsub);
   pool_destroy(gr->gr_token_pool);
   pool_destroy(gr->gr_clone_pool);
   prop_courier_destroy(gr->gr_courier);
@@ -391,7 +274,7 @@ glw_load_universe(glw_root_t *gr)
 
   gr->gr_universe = glw_view_create(gr,
 				    universe, NULL, page,
-				    NULL, NULL, NULL, 0);
+				    NULL, NULL, NULL, 0, 1);
 
   rstr_release(universe);
 
@@ -521,9 +404,10 @@ static int
 glw_screensaver_is_active(glw_root_t *gr)
 {
   return gr->gr_screensaver_force_enable ||
-    (gr->gr_is_fullscreen && gr->gr_framerate && gr->gr_screensaver_delay &&
+    (gr->gr_is_fullscreen && gr->gr_framerate &&
+     glw_settings.gs_screensaver_delay &&
      (gr->gr_screensaver_counter > 
-      gr->gr_screensaver_delay * gr->gr_framerate * 60));
+      glw_settings.gs_screensaver_delay * gr->gr_framerate * 60));
 }
 
 
@@ -561,11 +445,7 @@ glw_prepare_frame(glw_root_t *gr, int flags)
 {
   glw_t *w;
 
-  int v = gr->gr_height / 35;
-  if(gr->gr_base_size != v) {
-    gr->gr_base_size = v;
-    glw_update_size(gr);
-  }
+  glw_update_sizes(gr);
 
   gr->gr_frame_start = showtime_get_ts();
   gr->gr_frame_start_avtime = showtime_get_avtime();
@@ -1885,12 +1765,12 @@ glw_dispatch_event(glw_root_t *gr, event_t *e)
 
   } else if(event_is_action(e, ACTION_ZOOM_UI_INCR)) {
 
-    settings_add_int(gr->gr_setting_size, 1);
+    glw_settings_adj_size(1);
     return;
 
   } else if(event_is_action(e, ACTION_ZOOM_UI_DECR)) {
 
-    settings_add_int(gr->gr_setting_size, -1);
+    glw_settings_adj_size(-1);
     return;
 
   }
@@ -1935,12 +1815,13 @@ glw_inject_event(glw_root_t *gr, event_t *e)
 {
   prop_t *p;
 
-  if(event_is_action(e, ACTION_NAV_BACK) ||
-     event_is_action(e, ACTION_NAV_FWD) ||
-     event_is_action(e, ACTION_HOME) ||
-     event_is_action(e, ACTION_PLAYQUEUE) ||
-     event_is_action(e, ACTION_RELOAD_DATA) ||
-     event_is_type(e, EVENT_OPENURL)) {
+  if(gr->gr_current_focus == NULL && 
+     (event_is_action(e, ACTION_NAV_BACK) ||
+      event_is_action(e, ACTION_NAV_FWD) ||
+      event_is_action(e, ACTION_HOME) ||
+      event_is_action(e, ACTION_PLAYQUEUE) ||
+      event_is_action(e, ACTION_RELOAD_DATA) ||
+      event_is_type(e, EVENT_OPENURL))) {
     p = prop_get_by_name(PNVEC("nav", "eventsink"), 0,
 			 PROP_TAG_ROOT, gr->gr_prop_nav,
 			 NULL);
@@ -2460,4 +2341,109 @@ glw_widget_unproject(Mtx m, float *xp, float *yp, const Vec3 p, const Vec3 dir)
   *xp = glw_vec3_extract(out, 0);
   *yp = glw_vec3_extract(out, 1);
   return 1;
+}
+
+
+/**
+ *
+ */
+static void
+glw_osk_text(void *opaque, const char *str)
+{
+  glw_root_t *gr = opaque;
+  glw_t *w = gr->gr_osk_widget;
+  if(w != NULL) {
+    w->glw_class->gc_update_text(w, str);
+  }
+}
+
+/**
+ *
+ */
+static void
+glw_osk_ok(glw_root_t *gr)
+{
+  glw_t *w = gr->gr_osk_widget;
+  if(w != NULL) {
+    event_t *e = event_create_action(ACTION_SUBMIT);
+    glw_event_to_widget(w, e, 0);
+    event_release(e);
+
+    glw_unref(gr->gr_osk_widget);
+    prop_unsubscribe(gr->gr_osk_text_sub);
+    prop_unsubscribe(gr->gr_osk_ev_sub);
+
+    gr->gr_osk_widget = NULL;
+    gr->gr_osk_text_sub = NULL;
+    gr->gr_osk_ev_sub = NULL;
+  }
+
+  prop_t *osk = prop_create(gr->gr_prop_ui, "osk");
+  prop_set(osk, "show", PROP_SET_INT, 0);
+
+  
+}
+
+
+
+
+/**
+ *
+ */
+static void 
+glw_osk_event(void *opaque, prop_event_t event, ...)
+{
+  va_list ap;
+  
+  if(event != PROP_EXT_EVENT)
+    return;
+  
+  va_start(ap, event);
+  event_t *e = va_arg(ap, event_t *);
+  va_end(ap);
+
+  if(event_is_action(e, ACTION_OK)) {
+    glw_osk_ok(opaque);
+  }
+}
+
+
+/**
+ *
+ */
+static void
+glw_osk_open(glw_root_t *gr, const char *title, const char *input,
+	     glw_t *w, int password)
+{
+  prop_t *osk = prop_create(gr->gr_prop_ui, "osk");
+
+  if(gr->gr_osk_widget != NULL) {
+    glw_unref(gr->gr_osk_widget);
+    prop_unsubscribe(gr->gr_osk_text_sub);
+    prop_unsubscribe(gr->gr_osk_ev_sub);
+  }
+  
+  prop_set(osk, "title", PROP_SET_STRING, title);
+  prop_set(osk, "text",  PROP_SET_STRING, input);
+  prop_set(osk, "password", PROP_SET_INT, password);
+  prop_set(osk, "show", PROP_SET_INT, 1);
+
+  gr->gr_osk_widget = w;
+  glw_ref(w);
+
+  gr->gr_osk_text_sub =
+    prop_subscribe(0,
+		   PROP_TAG_CALLBACK_STRING, glw_osk_text, gr,
+		   PROP_TAG_NAME("ui", "osk", "text"),
+		   PROP_TAG_ROOT, gr->gr_prop_ui,
+		   PROP_TAG_COURIER, gr->gr_courier,
+		   NULL);
+
+  gr->gr_osk_ev_sub =
+    prop_subscribe(0,
+		   PROP_TAG_CALLBACK, glw_osk_event, gr,
+		   PROP_TAG_NAME("ui", "osk", "eventSink"),
+		   PROP_TAG_ROOT, gr->gr_prop_ui,
+		   PROP_TAG_COURIER, gr->gr_courier,
+		   NULL);
 }
