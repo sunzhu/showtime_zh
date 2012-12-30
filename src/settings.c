@@ -36,7 +36,6 @@
 static prop_t *settings_root;
 static prop_t *settings_nodes;
 
-prop_t *settings_apps, *settings_sd, *settings_general, *settings_dev;
 
 /**
  *
@@ -153,6 +152,29 @@ settings_add_dir(prop_t *parent, prop_t *title, const char *subtype,
     prop_link(shortdesc, prop_create(metadata, "shortdesc"));
 
   settings_add_dir_sup(p, url, icon, subtype);
+  return p;
+}
+
+
+/**
+ *
+ */
+prop_t *
+settings_add_url(prop_t *parent, prop_t *title,
+		 const char *subtype, const char *icon,
+		 prop_t *shortdesc, const char *url)
+{
+  prop_t *p = setting_add(parent, title, "settings", 0);
+  prop_t *metadata = prop_create(p, "metadata");
+
+  if(shortdesc != NULL)
+    prop_link(shortdesc, prop_create(metadata, "shortdesc"));
+
+  prop_set_string(prop_create(p, "url"), url);
+  prop_set_string(prop_create(p, "subtype"), subtype);
+
+  if(icon != NULL)
+    prop_set_string(prop_create(metadata, "icon"), icon);
   return p;
 }
 
@@ -391,40 +413,45 @@ settings_create_multiopt(prop_t *parent, const char *id, prop_t *title,
 /**
  *
  */
-void
-settings_multiopt_add_opt(setting_t *s, const char *id, prop_t *title,
-			  int selected)
+static prop_t *
+settings_multiopt_add(setting_t *s, const char *id, prop_t *o, int selected)
 {
-  prop_t *o = prop_create(s->s_val, id);
-  prop_link(title, prop_create(o, "title"));
-
   if(selected) {
-    mystrset(&s->s_initial_value, id);
-    prop_select_ex(o, NULL, s->s_sub);
+    if(s->s_sub != NULL)
+      prop_select(o);
+    else
+      mystrset(&s->s_initial_value, id);
   }
 
   if(s->s_first == NULL)
     s->s_first = strdup(id);
+  return o;
 }
 
 
 /**
  *
  */
-void
+prop_t *
+settings_multiopt_add_opt(setting_t *s, const char *id, prop_t *title,
+			  int selected)
+{
+  prop_t *o = prop_create(s->s_val, id);
+  prop_link(title, prop_create(o, "title"));
+  return settings_multiopt_add(s, id, o, selected);
+}
+
+
+/**
+ *
+ */
+prop_t *
 settings_multiopt_add_opt_cstr(setting_t *s, const char *id, const char *title,
 			  int selected)
 {
   prop_t *o = prop_create(s->s_val, id);
   prop_set_string(prop_create(o, "title"), title);
-
-  if(selected) {
-    mystrset(&s->s_initial_value, id);
-    prop_select_ex(o, NULL, s->s_sub);
-  }
-
-  if(s->s_first == NULL)
-    s->s_first = strdup(id);
+  return settings_multiopt_add(s, id, o, selected);
 }
 
 
@@ -658,8 +685,8 @@ settings_init(void)
   pnf = prop_nf_create(s1, settings_nodes, NULL, PROP_NF_AUTODESTROY);
   prop_nf_sort(pnf, "node.metadata.title", 0, 0, NULL, 1);
 
-  settings_apps = prop_create_root(NULL);
-  settings_sd = prop_create_root(NULL);
+  gconf.settings_apps = prop_create_root(NULL);
+  gconf.settings_sd = prop_create_root(NULL);
 
   prop_concat_t *pc;
 
@@ -669,7 +696,7 @@ settings_init(void)
 
   // Applications and plugins
 
-  n = prop_create(settings_apps, "nodes");
+  n = prop_create(gconf.settings_apps, "nodes");
 
   d = prop_create_root(NULL);
   set_title2(d, _p("Applications and installed plugins"));
@@ -680,14 +707,26 @@ settings_init(void)
   set_title2(d, _p("Discovered media sources"));
   prop_set_string(prop_create(d, "type"), "separator");
 
-  n = prop_create(settings_sd, "nodes");
+  n = prop_create(gconf.settings_sd, "nodes");
   prop_concat_add_source(pc, n, d);
 
   // General settings
 
-  settings_general = settings_add_dir(NULL, _p("General"), NULL, NULL,
-				      _p("System related settings"),
-				      "settings:general");
+  gconf.settings_general =
+    settings_add_dir(NULL, _p("General"), NULL, NULL,
+		     _p("System related settings"),
+		     "settings:general");
+
+  // Look and feel settings
+
+  prop_t *lnf =
+    settings_add_dir(NULL, _p("Look and feel"),
+		     "display", NULL,
+		     _p("Fonts and user interface styling"),
+		     "settings:lookandfeel");
+
+  gconf.settings_look_and_feel =
+    prop_concat_create(prop_create(lnf, "nodes"), 0);
 
   // Developer settings, only available via its URI
 
@@ -730,6 +769,20 @@ static backend_t be_settings = {
 
 BE_REGISTER(settings);
 
+
+/**
+ *
+ */
+prop_t *
+makesep(prop_t *title)
+{
+  prop_t *d = prop_create_root(NULL);
+  prop_link(title, prop_create(prop_create(d, "metadata"), "title"));
+  prop_set_string(prop_create(d, "type"), "separator");
+  return d;
+
+}
+
 /**
  *
  */
@@ -744,7 +797,7 @@ settings_generic_save_settings(void *opaque, htsmsg_t *msg)
  *
  */
 void
-settings_generic_set_bool(void *opaque, int value)
+settings_generic_set_int(void *opaque, int value)
 {
   int *p = opaque;
   *p = value;
@@ -763,12 +816,12 @@ init_dev_settings(void)
   if((store = htsmsg_store_load("dev")) == NULL)
     store = htsmsg_create_map();
 
-  settings_dev = settings_add_dir(prop_create_root(NULL),
+  gconf.settings_dev = settings_add_dir(prop_create_root(NULL),
 				  _p("Developer settings"), NULL, NULL,
 				  _p("Settings useful for developers"),
 				  "settings:dev");
 
-  prop_t *r = setting_add(settings_dev, NULL, "info", 0);
+  prop_t *r = setting_add(gconf.settings_dev, NULL, "info", 0);
   prop_set_string(prop_create(r, "description"),
 		  "Settings for developers. If you don't know what this is, don't touch it");
 
@@ -778,7 +831,7 @@ init_dev_settings(void)
   t = prop_create_root(NULL);
   prop_set_string(t, "Enable binrelpace");
 
-  settings_create_bool(settings_dev, "binreplace", t, 0,
+  settings_create_bool(gconf.settings_dev, "binreplace", t, 0,
 		       store, settings_generic_set_bool,
 		       &gconf.enable_bin_replace, 
 		       SETTINGS_INITIAL_UPDATE, NULL,
@@ -788,7 +841,7 @@ init_dev_settings(void)
   t = prop_create_root(NULL);
   prop_set_string(t, "Enable omnigrade");
 
-  settings_create_bool(settings_dev, "omnigrade", t, 0,
+  settings_create_bool(gconf.settings_dev, "omnigrade", t, 0,
 		       store, settings_generic_set_bool,
 		       &gconf.enable_omnigrade, 
 		       SETTINGS_INITIAL_UPDATE, NULL,
@@ -799,9 +852,19 @@ init_dev_settings(void)
   t = prop_create_root(NULL);
   prop_set_string(t, "Debug all HTTP requests");
 
-  settings_create_bool(settings_dev, "httpdebug", t, 0,
+  settings_create_bool(gconf.settings_dev, "httpdebug", t, 0,
 		       store, settings_generic_set_bool,
 		       &gconf.enable_http_debug, 
+		       SETTINGS_INITIAL_UPDATE, NULL,
+		       settings_generic_save_settings, 
+		       (void *)"dev");
+
+  t = prop_create_root(NULL);
+  prop_set_string(t, "Disable HTTP connection reuse");
+
+  settings_create_bool(gconf.settings_dev, "nohttpreuse", t, 0,
+		       store, settings_generic_set_bool,
+		       &gconf.disable_http_reuse, 
 		       SETTINGS_INITIAL_UPDATE, NULL,
 		       settings_generic_save_settings, 
 		       (void *)"dev");

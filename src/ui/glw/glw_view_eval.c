@@ -22,7 +22,7 @@
 #include <math.h>
 
 #include "misc/strtab.h"
-#include "misc/string.h"
+#include "misc/str.h"
 #include "glw_view.h"
 #include "glw.h"
 #include "glw_event.h"
@@ -141,6 +141,7 @@ typedef struct vectorizer_element {
 typedef struct sub_vectorizer {
   glw_prop_sub_t sv_sub;
   struct vectorizer_element_queue sv_elements;
+  vectorizer_element_t *sv_selected;
 } sub_vectorizer_t;
 
 
@@ -1861,6 +1862,12 @@ ve_cb(void *opaque, prop_event_t event, ...)
 
     glw_view_token_free(gr, ve->ve_token);
     ve->ve_token = t;
+
+    if(ve->ve_sv->sv_selected == ve)
+      t->t_flags |= TOKEN_F_SELECTED;
+    else
+      t->t_flags &= ~TOKEN_F_SELECTED;
+
   }
 
   if(rpn != NULL) 
@@ -1874,12 +1881,18 @@ ve_cb(void *opaque, prop_event_t event, ...)
  */
 static void
 vectorizer_add_element(sub_vectorizer_t *sv, prop_t *p, prop_t *before,
-		       glw_root_t *gr)
+		       glw_root_t *gr, int flags)
 {
   vectorizer_element_t *ve = malloc(sizeof(vectorizer_element_t));
   glw_prop_sub_t *gps = &sv->sv_sub;
   ve->ve_sv = sv;
   ve->ve_prop = prop_ref_inc(p);
+
+  if(flags & PROP_ADD_SELECTED) {
+    if(sv->sv_selected != NULL) 
+      sv->sv_selected->ve_token->t_flags &= ~TOKEN_F_SELECTED;
+    sv->sv_selected = ve;
+  }
 
   ve->ve_token = prop_callback_alloc_token(gr, &sv->sv_sub, TOKEN_VOID);
 
@@ -1974,6 +1987,9 @@ vectorizer_del_element(sub_vectorizer_t *sv, prop_t *p, glw_root_t *gr)
   } else {
     prev->ve_token->next = ve->ve_token->next;
   }
+
+  if(sv->sv_selected == ve) 
+    sv->sv_selected = NULL;
   
   prop_unsubscribe(ve->ve_sub);
   glw_view_token_free(gr, ve->ve_token);
@@ -1981,6 +1997,31 @@ vectorizer_del_element(sub_vectorizer_t *sv, prop_t *p, glw_root_t *gr)
   TAILQ_REMOVE(&sv->sv_elements, ve, ve_link);
   free(ve);
   
+  token_t *rpn = gps->gps_rpn;
+  if(rpn != NULL)
+    eval_dynamic(gps->gps_widget, rpn, NULL, gps->gps_prop, gps->gps_prop_view,
+		 gps->gps_prop_clone);
+}
+
+
+/**
+ *
+ */
+static void
+vectorizer_select_element(sub_vectorizer_t *sv, prop_t *p, glw_root_t *gr)
+{
+  glw_prop_sub_t *gps = &sv->sv_sub;
+  vectorizer_element_t *ve = prop_tag_get(p, sv);
+
+  if(sv->sv_selected == ve)
+    return;
+
+  if(sv->sv_selected != NULL) 
+    sv->sv_selected->ve_token->t_flags &= ~TOKEN_F_SELECTED;
+
+  sv->sv_selected = ve;
+  ve->ve_token->t_flags |= TOKEN_F_SELECTED;
+
   token_t *rpn = gps->gps_rpn;
   if(rpn != NULL)
     eval_dynamic(gps->gps_widget, rpn, NULL, gps->gps_prop, gps->gps_prop_view,
@@ -2067,27 +2108,27 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
 
   case PROP_ADD_CHILD:
     p = va_arg(ap, prop_t *);
-    vectorizer_add_element(sv, p, NULL, gr);
+    vectorizer_add_element(sv, p, NULL, gr, va_arg(ap, int));
     break;
 
   case PROP_ADD_CHILD_VECTOR:
   case PROP_ADD_CHILD_VECTOR_DIRECT:
     pv = va_arg(ap, prop_vec_t *);
     for(i = 0; i < prop_vec_len(pv); i++)
-      vectorizer_add_element(sv, prop_vec_get(pv, i), NULL, gr);
+      vectorizer_add_element(sv, prop_vec_get(pv, i), NULL, gr, 0);
     break;
 
   case PROP_ADD_CHILD_BEFORE:
     p = va_arg(ap, prop_t *);
     p2 = va_arg(ap, prop_t *);
-    vectorizer_add_element(sv, p, p2, gr);
+    vectorizer_add_element(sv, p, p2, gr, va_arg(ap, int));
     break;
 
   case PROP_ADD_CHILD_VECTOR_BEFORE:
     pv = va_arg(ap, prop_vec_t *);
     p2 = va_arg(ap, prop_t *);
     for(i = 0; i < prop_vec_len(pv); i++)
-      vectorizer_add_element(sv, prop_vec_get(pv, i), p2, gr);
+      vectorizer_add_element(sv, prop_vec_get(pv, i), p2, gr, 0);
     break;
 
   case PROP_MOVE_CHILD:
@@ -2102,6 +2143,10 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
     break;
 
   case PROP_SELECT_CHILD:
+    p = va_arg(ap, prop_t *);
+    vectorizer_select_element(sv, p, gr);
+    break;
+
   case PROP_SUGGEST_FOCUS:
   case PROP_HAVE_MORE_CHILDS:
   case PROP_REQ_NEW_CHILD:
@@ -3124,8 +3169,8 @@ glwf_targetedEvent(glw_view_eval_context_t *ec, struct token *self,
   token_t *a = argv[0];       /* Target name */
   token_t *b = argv[1];       /* Event */
   token_t *r;
-  int action;
-
+  int action = 0;
+  int uc = 0;
   if((a = token_resolve(ec, a)) == NULL)
     return -1;
 
@@ -3133,13 +3178,24 @@ glwf_targetedEvent(glw_view_eval_context_t *ec, struct token *self,
     return glw_view_seterr(ec->ei, a, "event(): "
 			    "First argument is not a string");
   
-  if(b->type != TOKEN_IDENTIFIER ||
-     (action = action_str2code(rstr_get(b->t_rstring))) < 0)
-    return glw_view_seterr(ec->ei, b, "event(): "
-			    "Invalid target event");
+  if(b->type == TOKEN_IDENTIFIER) {
+
+    action = action_str2code(rstr_get(b->t_rstring));
+    if(action < 0)
+      return glw_view_seterr(ec->ei, b,
+			     "targetedEvent(): Invalid action");
+  } else if(b->type == TOKEN_RSTRING) {
+
+    const char *str = rstr_get(b->t_rstring);
+    uc = utf8_get(&str);
+  } else {
+    return glw_view_seterr(ec->ei, b,
+			   "targetedEvent(): Invalid second argument");
+  }
   
   r = eval_alloc(self, ec, TOKEN_EVENT);
-  r->t_gem = glw_event_map_internal_create(rstr_get(a->t_rstring), action);
+  r->t_gem = glw_event_map_internal_create(rstr_get(a->t_rstring), action,
+					   uc);
   eval_push(ec, r);
   return 0;
 }
@@ -3162,7 +3218,7 @@ glwf_event(glw_view_eval_context_t *ec, struct token *self,
     return glw_view_seterr(ec->ei, a, "event(): Invalid target event");
   
   r = eval_alloc(self, ec, TOKEN_EVENT);
-  r->t_gem = glw_event_map_internal_create(NULL, action);
+  r->t_gem = glw_event_map_internal_create(NULL, action, 0);
   eval_push(ec, r);
   return 0;
 }
@@ -3390,7 +3446,7 @@ glwf_iir(glw_view_eval_context_t *ec, struct token *self,
   if(springmode && f > self->t_extra_float)
     self->t_extra_float = f;
   else
-    self->t_extra_float =  GLW_LP(b->t_float, self->t_extra_float, f);
+    glw_lp(&self->t_extra_float, ec->w->glw_root, f, 1.0f / b->t_float);
 
   y = self->t_extra_float * 1000.;
   r = eval_alloc(self, ec, TOKEN_FLOAT);
@@ -4182,7 +4238,6 @@ glwf_getCaption(glw_view_eval_context_t *ec, struct token *self,
   token_t *a = argv[0];
   token_t *r;
   glw_t *w;
-  char buf[100];
 
   if((a = token_resolve(ec, a)) == NULL)
     return -1;
@@ -4190,9 +4245,9 @@ glwf_getCaption(glw_view_eval_context_t *ec, struct token *self,
   if(a != NULL && a->type == TOKEN_RSTRING) {
     w = glw_find_neighbour(ec->w, rstr_get(a->t_rstring));
 
-    if(w != NULL && !glw_get_text(w, buf, sizeof(buf))) {
+    if(w != NULL && w->glw_class->gc_get_text != NULL) {
       r = eval_alloc(self, ec, TOKEN_RSTRING);
-      r->t_rstring = rstr_alloc(buf);
+      r->t_rstring = rstr_alloc(w->glw_class->gc_get_text(w));
       eval_push(ec, r);
       return 0;
     }
@@ -4552,142 +4607,6 @@ static void
 glwf_null_ctor(struct token *self)
 {
   self->t_extra = NULL;
-}
-
-/**
- *
- */
-static void
-glwf_setting_dtor(glw_root_t *gr, struct token *self)
-{
-  glwf_setting_t *gs = self->t_extra;
-  if(gs == NULL)
-    return;
-
-  setting_destroy(gs->s);
-  prop_destroy(gs->title);
-  free(gs);
-}
-
-
-/**
- *
- */
-static int
-glw_settingInt(glw_view_eval_context_t *ec, struct token *self,
-	       token_t **argv, unsigned int argc)
-{
-  token_t *title = argv[0];
-  token_t *id    = argv[1];
-  token_t *def   = argv[2];
-  token_t *unit  = argv[3];
-  token_t *min   = argv[4];
-  token_t *max   = argv[5];
-  token_t *step  = argv[6];
-  token_t *prop  = argv[7];
-
-  glw_root_t *gr = ec->w->glw_root;
-  glwf_setting_t *gs = self->t_extra;
-
-
-  if((title = token_resolve(ec, title)) == NULL)
-    return -1;
-  if((def  = token_resolve(ec, def)) == NULL)
-    return -1;
-  if((unit = token_resolve(ec, unit)) == NULL)
-    return -1;
-  if((min  = token_resolve(ec, min)) == NULL)
-    return -1;
-  if((max  = token_resolve(ec, max)) == NULL)
-    return -1;
-  if((step = token_resolve(ec, step)) == NULL)
-    return -1;
-
-  if(title->type != TOKEN_RSTRING)
-    return glw_view_seterr(ec->ei, title, "Title argument is not a string");
-  
-  if(id->type != TOKEN_RSTRING)
-    return glw_view_seterr(ec->ei, id, "ID argument is not a string");
-  
-  if(unit->type != TOKEN_RSTRING)
-    return glw_view_seterr(ec->ei, unit, "Unit argument is not a string");
-
-  
-  if(gs == NULL) {
-    if(resolve_property_name(ec, prop, 0))
-      return -1;
-
-    gs = malloc(sizeof(glwf_setting_t));
-    gs->title = prop_create_root(NULL);
-
-    gs->s = 
-      settings_create_int(gr->gr_settings, rstr_get(id->t_rstring),
-			  gs->title, 
-			  token2int(def), gr->gr_settings_store, 
-			  token2int(min), token2int(max), token2int(step),
-			  NULL, NULL,
-			  SETTINGS_INITIAL_UPDATE, rstr_get(unit->t_rstring),
-			  gr->gr_courier,
-			  glw_settings_save, gr);
-    
-    prop_link(settings_get_value(gs->s), prop->t_prop);
-    self->t_extra = gs;
-  }
-  prop_set_rstring(gs->title, title->t_rstring);
-
-  ec->dynamic_eval |= GLW_VIEW_DYNAMIC_KEEP;
-  return 0;
-}
-
-/**
- *
- */
-static int
-glw_settingBool(glw_view_eval_context_t *ec, struct token *self,
-	       token_t **argv, unsigned int argc)
-{
-  token_t *title = argv[0];
-  token_t *id    = argv[1];
-  token_t *def   = argv[2];
-  token_t *prop  = argv[3];
-
-  glw_root_t *gr = ec->w->glw_root;
-  glwf_setting_t *gs = self->t_extra;
-
-  if((title = token_resolve(ec, title)) == NULL)
-    return -1;
-  if((def  = token_resolve(ec, def)) == NULL)
-    return -1;
-
-  if(title->type != TOKEN_RSTRING)
-    return glw_view_seterr(ec->ei, title, "First argument is not a string");
-  
-  if(id->type != TOKEN_RSTRING)
-    return glw_view_seterr(ec->ei, id, "Second argument is not a string");
-
-  if(gs == NULL) {
-    if(resolve_property_name(ec, prop, 0))
-      return -1;
-
-    gs = malloc(sizeof(glwf_setting_t));
-    gs->title = prop_create_root(NULL);
-
-    gs->s = 
-      settings_create_bool(gr->gr_settings, rstr_get(id->t_rstring),
-			   gs->title,
-			   token2int(def), gr->gr_settings_store, 
-			   NULL, NULL,
-			   SETTINGS_INITIAL_UPDATE,
-			   gr->gr_courier,
-			   glw_settings_save, gr);
-    
-    prop_link(settings_get_value(gs->s), prop->t_prop);
-    self->t_extra = gs;
-  }
-  prop_set_rstring(gs->title, title->t_rstring);
-
-  ec->dynamic_eval |= GLW_VIEW_DYNAMIC_KEEP;
-  return 0;
 }
 
 
@@ -5623,14 +5542,27 @@ multiopt_add_link(glwf_multiopt_extra_t *x, token_t *d,
 /**
  *
  */
-static void
+static int
 multiopt_add_vector(glwf_multiopt_extra_t *x, token_t *t0,
-		    multiopt_item_t **up)
+		    multiopt_item_t **up, int chk)
 {
   token_t *t;
+
+  if(chk) {
+    // If the selected item is not a link, skip entire vector
+    for(t = t0->child; t != NULL; t = t->next)
+      if(t->t_flags & TOKEN_F_SELECTED && t->type != TOKEN_LINK)
+	return 1;
+
+    for(t = t0->child; t != NULL; t = t->next)
+      if(t->t_flags & TOKEN_F_SELECTED && t->type == TOKEN_LINK)
+	multiopt_add_link(x, t, up);
+  }
+
   for(t = t0->child; t != NULL; t = t->next)
-    if(t->type == TOKEN_LINK)
+    if(t->type == TOKEN_LINK && !(t->t_flags & TOKEN_F_SELECTED))
       multiopt_add_link(x, t, up);
+  return 0;
 }
 
 /**
@@ -5730,6 +5662,8 @@ glwf_multiopt(glw_view_eval_context_t *ec, struct token *self,
   argc -= 4;
 
   multiopt_item_t *u = NULL; // user preferred
+  token_t *lp_vectors[16];
+  int lp_num = 0;
 
   for(i = 0; i < argc; i++) {
     token_t *d;
@@ -5742,13 +5676,17 @@ glwf_multiopt(glw_view_eval_context_t *ec, struct token *self,
       multiopt_add_link(x, d, &u);
       break;
     case TOKEN_VECTOR:
-      multiopt_add_vector(x, d, &u);
+      if(multiopt_add_vector(x, d, &u, 1) && lp_num < 16)
+	lp_vectors[lp_num++] = d;
       break;
 
     default:
       break;
     } 
   }
+
+  for(i = 0; i < lp_num; i++)
+    multiopt_add_vector(x, lp_vectors[i], &u, 0);
 
   for(mi = TAILQ_FIRST(&x->q); mi != NULL; mi = n) {
     n = TAILQ_NEXT(mi, mi_link);
@@ -5847,6 +5785,27 @@ glwf_setDefaultFont(glw_view_eval_context_t *ec, struct token *self,
 
 
 /**
+ * Return selected element from TOKEN_VECTOR
+ */
+static int 
+glwf_selectedElement(glw_view_eval_context_t *ec, struct token *self,
+		     token_t **argv, unsigned int argc)
+{
+  token_t *a, *r = NULL;
+  if((a = token_resolve(ec, argv[0])) == NULL)
+    return -1;
+  
+  if(a->type == TOKEN_VECTOR)
+    for(r = a->child; r != NULL; r = r->next)
+      if(r->t_flags & TOKEN_F_SELECTED)
+	break;
+  
+  eval_push(ec, r ?: eval_alloc(self, ec, TOKEN_VOID));
+  return 0;
+}
+
+
+/**
  *
  */
 static const token_func_t funcvec[] = {
@@ -5885,8 +5844,6 @@ static const token_func_t funcvec[] = {
   {"select", 3, glwf_select},
   {"trace", 2, glwf_trace},
   {"browse", 1, glwf_browse, glwf_browse_ctor, glwf_browse_dtor},
-  {"settingInt", 8, glw_settingInt, glwf_null_ctor, glwf_setting_dtor},
-  {"settingBool", 4, glw_settingBool, glwf_null_ctor, glwf_setting_dtor},
   {"isLink", 1, glwf_isLink},
   {"sin", 1, glwf_sin},
   {"sinewave", 1, glwf_sinewave},
@@ -5916,6 +5873,8 @@ static const token_func_t funcvec[] = {
   {"canSelectPrevious", 0, glwf_canSelectPrev},
   {"setDefaultFont", 1, glwf_setDefaultFont},
   {"rand", 0, glwf_rand},
+  {"selectedElement", 1, glwf_selectedElement},
+
 };
 
 

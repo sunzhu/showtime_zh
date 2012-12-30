@@ -44,6 +44,7 @@
 #include "text/text.h"
 #include "video/video_settings.h"
 #include "video/vobsub.h"
+#include "video/video_playback.h"
 
 
 typedef struct seek_item {
@@ -427,12 +428,11 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 	mq = &mp->mp_video;
 
 	if(fctx->streams[si]->avg_frame_rate.num) {
-	  mb->mb_duration = 1000000 * fctx->streams[si]->avg_frame_rate.den /
+	  mb->mb_duration = 1000000LL * fctx->streams[si]->avg_frame_rate.den /
 	    fctx->streams[si]->avg_frame_rate.num;
 	} else {
 	  mb->mb_duration = rescale(fctx, pkt.duration, si);
 	}
-	//	mb->mb_send_pts = 1;
 
       } else if(fctx->streams[si]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
 
@@ -645,7 +645,8 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
 		  char *errbuf, size_t errlen,
 		  const char *mimetype,
 		  const char *canonical_url,
-		  video_queue_t *vq)
+		  video_queue_t *vq,
+                  struct vsource_list *vsl)
 {
   if(mimetype == NULL) {
     struct fa_stat fs;
@@ -700,6 +701,31 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
     }
   }
   
+
+  // See if this is an HLS multi-variant playlist
+
+  if(fa_seek(fh, 0, SEEK_SET) == 0) {
+    char buf[1024];
+    int l = fa_read(fh, buf, sizeof(buf) - 1);
+    if(l > 10) {
+      buf[l] = 0;
+      if(mystrbegins(buf, "#EXTM3U") && strstr(buf, "#EXT-X-STREAM-INF:")) {
+        htsbuf_queue_t hq;
+        htsbuf_queue_init(&hq, 0);
+        htsbuf_append(&hq, buf, l);
+        if(l == sizeof(buf) - 1 && fa_read_to_htsbuf(&hq, fh, 100000)) {
+          htsbuf_queue_flush(&hq);
+          snprintf(errbuf, errlen, "Unable to read HLS playlist file");
+        }
+        fa_close(fh);
+        char *hlslist = htsbuf_to_string(&hq);
+        vsource_add_hls(vsl, hlslist, url);
+        free(hlslist);
+        return event_create_type(EVENT_REOPEN);
+      }
+    }
+  }
+
   return be_file_playvideo_fh(url, mp, flags, priority,
                               errbuf, errlen, mimetype,
                               canonical_url, vq, fh);
@@ -826,6 +852,9 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
 
     if(ctx->codec_type == AVMEDIA_TYPE_VIDEO && mp->mp_video.mq_stream != -1)
       continue;
+
+    mcp.extradata      = ctx->extradata;
+    mcp.extradata_size = ctx->extradata_size;
 
     cwvec[i] = media_codec_create(ctx->codec_id, 0, fw, ctx, &mcp, mp);
 

@@ -45,6 +45,10 @@ prop_t *settings_add_dir_cstr(prop_t *parent, const char *title,
 			      const char *subtype, const char *icon,
 			      const char *shortdesc, const char *url);
 
+prop_t *settings_add_url(prop_t *parent, prop_t *title,
+			 const char *subtype, const char *icon,
+			 prop_t *shortdesc, const char *url);
+
 prop_t *settings_create_separator(prop_t *parent, prop_t *caption);
 
 
@@ -62,11 +66,11 @@ void settings_toggle_bool(setting_t *s);
 setting_t *settings_create_multiopt(prop_t *parent, const char *id,
 				    prop_t *title, int flags);
 
-void settings_multiopt_add_opt(setting_t *parent, const char *id,
-			       prop_t *title, int selected);
+prop_t *settings_multiopt_add_opt(setting_t *parent, const char *id,
+				  prop_t *title, int selected);
 
-void settings_multiopt_add_opt_cstr(setting_t *parent, const char *id,
-				    const char *title, int selected);
+prop_t *settings_multiopt_add_opt_cstr(setting_t *parent, const char *id,
+				       const char *title, int selected);
 
 void settings_multiopt_initiate(setting_t *s,
 				prop_callback_string_t *cb, void *opaque,
@@ -111,7 +115,9 @@ void settings_init(void);
 
 void settings_generic_save_settings(void *opaque, htsmsg_t *msg);
 
-void settings_generic_set_bool(void *opaque, int value);
+#define settings_generic_set_bool settings_generic_set_int
+
+void settings_generic_set_int(void *opaque, int value);
 
 void settings_create_info(prop_t *parent, const char *image,
 			  prop_t *description);
@@ -120,8 +126,6 @@ void settings_create_info(prop_t *parent, const char *image,
 prop_t *settings_create_bound_string(prop_t *parent, prop_t *title,
 				     prop_t *value);
 
-extern prop_t *settings_apps;
-extern prop_t *settings_sd;
-extern prop_t *settings_general;
+prop_t *makesep(prop_t *title);
 
 #endif /* SETTINGS_H__ */

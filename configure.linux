@@ -85,7 +85,6 @@ fatal() {
 
 enable libfreetype
 enable libfontconfig
-enable libasound
 enable libpulse
 enable lirc
 enable stdin
@@ -345,6 +344,7 @@ fi
 # libasound (ALSA)
 #
 if enabled libasound; then
+    disable libpulse
     if pkg-config alsa; then
 	echo >>${CONFIG_MAK} "CFLAGS_cfg  += " `pkg-config --cflags alsa`
 	echo >>${CONFIG_MAK} "LDFLAGS_cfg += " `pkg-config --libs alsa`
@@ -610,6 +610,7 @@ if [ "x$LIBSPOTIFY_ARCH" != "x" ] ; then
     echo >>${CONFIG_MAK} "LIBSPOTIFY_PATH=${P}"
 fi
 
+LIBAV_ARCH_FLAGS="--disable-shared --enable-static"
 libav_setup
 
 #

@@ -33,7 +33,7 @@ PROG=${BUILDDIR}/showtime
 include ${BUILDDIR}/config.mak
 
 CFLAGS  = -Wall -Werror -Wwrite-strings -Wno-deprecated-declarations 
-CFLAGS += -Wmissing-prototypes -Iext/dvd ${OPTFLAGS}
+CFLAGS += -Wmissing-prototypes -Wno-multichar -Iext/dvd ${OPTFLAGS}
 
 
 
@@ -73,6 +73,7 @@ SRCS += src/showtime.c \
 	src/metadata/decoration.c \
 	src/metadata/browsemdb.c \
 
+SRCS-${CONFIG_LIBAV} += src/libav.c
 
 SRCS-${CONFIG_EMU_THREAD_SPECIFICS} += src/arch/emu_thread_specifics.c
 
@@ -89,7 +90,7 @@ SRCS +=	src/misc/ptrvec.c \
 	src/misc/svg.c \
 	src/misc/jpeg.c \
 	src/misc/gz.c \
-	src/misc/string.c \
+	src/misc/str.c \
 	src/misc/codepages.c \
 	src/misc/fs.c \
 	src/misc/extents.c \
@@ -141,13 +142,6 @@ SRCS +=	src/htsmsg/htsbuf.c \
 # Virtual FS system
 ##############################################################
 SRCS += src/fileaccess/fileaccess.c \
-	src/fileaccess/fa_probe.c \
-	src/fileaccess/fa_libav.c \
-	src/fileaccess/fa_imageloader.c \
-	src/fileaccess/fa_backend.c \
-	src/fileaccess/fa_scanner.c \
-	src/fileaccess/fa_video.c \
-	src/fileaccess/fa_audio.c \
 	src/fileaccess/fa_fs.c \
 	src/fileaccess/fa_rar.c \
 	src/fileaccess/fa_http.c \
@@ -157,6 +151,16 @@ SRCS += src/fileaccess/fileaccess.c \
 	src/fileaccess/fa_sidfile.c \
 	src/fileaccess/fa_nativesmb.c \
 	src/fileaccess/fa_buffer.c \
+	src/fileaccess/fa_imageloader.c \
+	src/fileaccess/fa_indexer.c \
+
+SRCS-$(CONFIG_LIBAV) += \
+	src/fileaccess/fa_probe.c \
+	src/fileaccess/fa_libav.c \
+	src/fileaccess/fa_backend.c \
+	src/fileaccess/fa_scanner.c \
+	src/fileaccess/fa_video.c \
+	src/fileaccess/fa_audio.c \
 
 SRCS-$(CONFIG_LIBGME)          += src/fileaccess/fa_gmefile.c
 SRCS-$(CONFIG_LOCATEDB)        += src/fileaccess/fa_locatedb.c
@@ -236,7 +240,7 @@ SRCS += src/text/fontstash.c
 ##############################################################
 # Audio subsys
 ##############################################################
-SRCS += src/audio2/audio.c
+SRCS-$(CONFIG_LIBAV) += src/audio2/audio.c
 
 ##############################################################
 # DVD
@@ -254,7 +258,7 @@ SRCS  += src/backend/htsp/htsp.c \
 ##############################################################
 # Shoutcast
 ##############################################################
-SRCS  += src/backend/shoutcast/shoutcast.c \
+SRCS-$(CONFIG_LIBAV)  += src/backend/shoutcast/shoutcast.c \
 
 ##############################################################
 # Spotify
@@ -274,6 +278,7 @@ SRCS-${CONFIG_LIBSIDPLAY2} += \
 # GLW user interface
 ##############################################################
 SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
+			src/ui/glw/glw_settings.c \
 			src/ui/glw/glw_renderer.c \
 			src/ui/glw/glw_event.c \
 			src/ui/glw/glw_view.c \
@@ -675,21 +680,30 @@ $(BUILDDIR)/bundles/%.c: % $(CURDIR)/support/mkbundle $(ALLDEPS)
 	@mkdir -p $(dir $@)
 	$(MKBUNDLE) -o $@ -s $< -d ${BUILDDIR}/bundles/$<.d -p $<
 
-#
-#
-#
 $(BUILDDIR)/libav.stamp:
 	${MAKE} -C ${LIBAV_BUILD_DIR}
 	${MAKE} -C ${LIBAV_BUILD_DIR} install
 	@mkdir -p $(dir $@)
 	touch $@
 
-#
-#
-#
 $(BUILDDIR)/freetype.stamp:
 	${MAKE} -C ${FREETYPE_BUILD_DIR}
 	${MAKE} -C ${FREETYPE_BUILD_DIR} install
+	@mkdir -p $(dir $@)
+	touch $@
+
+$(BUILDDIR)/zlib.stamp:
+	${MAKE} -C ${ZLIB_BUILD_DIR} install
+	@mkdir -p $(dir $@)
+	touch $@
+
+$(BUILDDIR)/bzip2.stamp:
+	${MAKE} -C ${BZIP2_BUILD_DIR} libbz2.a
+	@mkdir -p ${BZIP2_INSTALL_DIR}/lib ${BZIP2_INSTALL_DIR}/include
+
+	cp ${BZIP2_BUILD_DIR}/libbz2.a ${BZIP2_INSTALL_DIR}/lib
+	cp ${BZIP2_BUILD_DIR}/bzlib.h  ${BZIP2_INSTALL_DIR}/include
+
 	@mkdir -p $(dir $@)
 	touch $@
 

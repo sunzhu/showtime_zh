@@ -5,7 +5,7 @@ widget(container_y, {
   alpha: 1 - iir(clamp(getLayer(), 0, 1), 7) * 0.5;
   blur:      iir(clamp(getLayer(), 0, 1), 7);
 
-  PageTitle($page.model.metadata.title);
+  PageTitle();
   VerticalSeparator();
 
 widget(keyintercept, {
@@ -29,24 +29,8 @@ widget(keyintercept, {
 	  cloner($page.model.nodes, loader, {
 	    time: 0.1;
 	    effect: blend;
-	    source: "listitems/" + 
-	      translate($self.type, "default",
-			"audio", "audio",
-			"video", "video",
-			"separator", "separator",
-			"settings", "settings",
-			"bool", "bool",
-			"integer", "integer",
-			"string", "string",
-			"multiopt", "multiopt",
-			"action", "action",
-			"info", "info",
-			"plugin", "plugin",
-			"font", "font",
-			"tvchannel", "tvchannel",
-			"keymapentry", "keymapentry"
-		       )
-	      + ".view";
+	    alt: "listitems/default.view";
+	    source: "listitems/" + $self.type + ".view";
 	  });
 
 
@@ -59,7 +43,7 @@ widget(keyintercept, {
 	widget(slider_y, {
 	  bind("list");
 	  width: 4;
-	  focusable: canScroll();
+	  focusable: true; // canScroll();
 	  navFocusable: true;
 	  alpha: iir(canScroll(), 16);
 	  

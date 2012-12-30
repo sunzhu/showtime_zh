@@ -167,11 +167,18 @@ void *myrealloc(void *ptr, size_t size);
 
 void *mycalloc(size_t count, size_t size);
 
+void *mymemalign(size_t align, size_t size);
+
 #else
 
 #define mymalloc(size) malloc(size)
 #define myrealloc(ptr, size) realloc(ptr, size)
 #define mycalloc(count, size) calloc(count, size)
+static inline void *mymemalign(size_t align, size_t size)
+{
+  void *p;
+  return posix_memalign(&p, align, size) ? NULL : p;
+}
 
 #endif
 
@@ -206,6 +213,7 @@ typedef struct gconf {
   int listen_on_stdin;
   int ffmpeglog;
   int noui;
+  int fullscreen;
 
 #if ENABLE_SERDEV
   int enable_serdev;
@@ -225,6 +233,7 @@ typedef struct gconf {
   int enable_bin_replace;
   int enable_omnigrade;
   int enable_http_debug;
+  int disable_http_reuse;
 
   const char *devplugin;
   const char *plugin_repo;
@@ -235,6 +244,18 @@ typedef struct gconf {
 
   char *ui;
   char *skin;
+
+
+  struct prop *settings_apps;
+  struct prop *settings_sd;
+  struct prop *settings_general;
+  struct prop *settings_dev;
+  struct prop_concat *settings_look_and_feel;
+
+  hts_mutex_t state_mutex;
+  hts_cond_t state_cond;
+
+  int state_plugins_loaded;
 
 } gconf_t;
 
