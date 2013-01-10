@@ -80,6 +80,8 @@ SRCS-${CONFIG_EMU_THREAD_SPECIFICS} += src/arch/emu_thread_specifics.c
 BUNDLES += resources/metadb
 BUNDLES += resources/kvstore
 
+SRCS-$(CONFIG_WEBPOPUP) += src/ui/webpopup.c
+
 ##############################################################
 # Misc support
 ##############################################################
@@ -105,8 +107,9 @@ SRCS-${CONFIG_TREX} += ext/trex/trex.c
 ##############################################################
 # Sqlite3
 ##############################################################
-SRCS += ext/sqlite/sqlite3.c \
-	src/db/db_support.c \
+SRCS-${CONFIG_SQLITE_INTERNAL} += ext/sqlite/sqlite3.c
+
+SRCS += src/db/db_support.c \
 	src/db/kvstore.c \
 
 
@@ -224,6 +227,7 @@ SRCS += src/video/video_playback.c \
 	src/video/video_settings.c \
 	src/video/video_dvdspu.c \
 	src/video/vobsub.c \
+	src/video/sub_scanner.c \
 
 SRCS-$(CONFIG_VDPAU)    += src/video/vdpau.c
 SRCS-$(CONFIG_PS3_VDEC) += src/video/ps3_vdec.c
