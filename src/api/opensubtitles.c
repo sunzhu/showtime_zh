@@ -28,6 +28,8 @@
 #include "xmlrpc.h"
 #include "fileaccess/fileaccess.h"
 #include "media.h"
+#include "i18n.h"
+#include "misc/redblack.h"
 
 #define OPENSUB_URL "http://api.opensubtitles.org/xml-rpc"
 
@@ -114,19 +116,15 @@ opensub_init(void)
 INITME(INIT_GROUP_API, opensub_init);
 
 
-
-
+#if 0
 /**
  *
  */
-htsmsg_t *
-opensub_build_query(const char *lang, int64_t hash, int64_t movsize,
+static htsmsg_t *
+opensub_build_query(int64_t hash, int64_t movsize,
 		    const char *imdb, const char *title)
 {
   htsmsg_t *m = htsmsg_create_map();
-
-  if(lang != NULL) 
-    htsmsg_add_str(m, "sublanguageid", lang);
 
   if(movsize) {
     char str[20];
@@ -143,6 +141,7 @@ opensub_build_query(const char *lang, int64_t hash, int64_t movsize,
 
   return m;
 }
+#endif
 
 /**
  *
@@ -159,7 +158,9 @@ opensub_login(int force, char *errbuf, size_t errlen)
     htsmsg_add_str(in, NULL, opensub_username ?: "");
     htsmsg_add_str(in, NULL, opensub_password ?: "");
     htsmsg_add_str(in, NULL, "en");
-    htsmsg_add_str(in, NULL, "Showtime v2.9");
+    char v[256];
+    snprintf(v, sizeof(v), "Showtime %s", htsversion_full);
+    htsmsg_add_str(in, NULL, v);
     
     TRACE(TRACE_DEBUG, "opensubtitles", "Logging in as user '%s'", 
 	  opensub_username);
@@ -199,30 +200,97 @@ opensub_login(int force, char *errbuf, size_t errlen)
 
 
 
+
+static htsmsg_t *
+makeq(htsmsg_t *queries, const char *lang, int season, int episode)
+{
+  htsmsg_t *q = htsmsg_create_map();
+  if(*lang)
+    htsmsg_add_str(q, "sublanguageid", lang);
+  if(season > 0)
+    htsmsg_add_u32(q, "season", season);
+  if(episode > 0)
+    htsmsg_add_u32(q, "episode", episode);
+ 
+  return q;
+}
+
+RB_HEAD(dedup_tree, dedup);
+
+typedef struct dedup {
+  RB_ENTRY(dedup) link;
+  char *str;
+} dedup_t;
+
+
+static int
+dedup_cmp(const dedup_t *a, const dedup_t *b)
+{
+  return strcmp(a->str, b->str);
+}
+
+
 /**
  *
  */
-static void
-query_do(prop_t *node, htsmsg_t *query)
+void
+opensub_query(struct prop *p, hts_mutex_t *mtx, uint64_t hash,
+	      uint64_t size, const char *title, const char *imdb,
+	      int season, int episode)
 {
   char errbuf[256];
-  htsmsg_t *queries, *in, *out, *m, *data, *entry;
+  htsmsg_t *queries, *in, *out, *m, *data, *entry, *q;
   htsmsg_field_t *f;
   uint32_t v;
 
   int r; // Retry counter
 
+  char lang[16];
+
+  const char *lang0 = i18n_subtitle_lang(0);
+  const char *lang1 = i18n_subtitle_lang(1);
+  const char *lang2 = i18n_subtitle_lang(2);
+  struct dedup_tree dt;
+  dedup_t *d;
+
+  snprintf(lang, sizeof(lang), "%s%s%s%s%s",
+	   lang0 ?: "",
+	   lang0 && lang1 ? "," : "",
+	   lang1 ?: "",
+	   (lang0 || lang1) && lang2 ? "," : "",
+	   lang2 ?: "");
+
   for(r = 0; r < 2; r++) {
     
     TRACE(TRACE_DEBUG, "opensubtitles", "Doing query #%d", r);
-
+    TRACE(TRACE_DEBUG, "opensubtitles",
+	  "  Hash = 0x%016llx, title=%s, imdbid=%s, languages='%s'", hash,
+	  title ?: "<unset>", imdb ?: "<unset>", lang);
     if(opensub_login(r, errbuf, sizeof(errbuf))) {
       TRACE(TRACE_ERROR, "opensubtitles", "Unable to login: %s", errbuf);
       break;
     }
 
     queries = htsmsg_create_list();
-    htsmsg_add_msg(queries, NULL, htsmsg_copy(query));
+
+    if(size) {
+      q = makeq(queries, lang, season, episode);
+      char str[20];
+      snprintf(str, sizeof(str), "%" PRIx64, hash);
+      htsmsg_add_str(q, "moviehash", str);
+      htsmsg_add_s64(q, "moviebytesize", size);
+      htsmsg_add_msg(queries, NULL, q);
+    }
+
+    if(imdb != NULL && imdb[0] == 't' && imdb[1] == 't') {
+      q = makeq(queries, lang, season, episode);
+      htsmsg_add_str(q, "imdbid", imdb+2);
+      htsmsg_add_msg(queries, NULL, q);
+    } else if(title != NULL) {
+      q = makeq(queries, lang, season, episode);
+      htsmsg_add_str(q, "query", title);
+      htsmsg_add_msg(queries, NULL, q);
+    }
 
     in = htsmsg_create_list();
     htsmsg_add_str(in, NULL, opensub_token);
@@ -272,39 +340,63 @@ query_do(prop_t *node, htsmsg_t *query)
       continue;
     }
     int added = 0;
+
+    RB_INIT(&dt);
+
     HTSMSG_FOREACH(f, data) {
+      char src[64];
       if((entry = htsmsg_get_map_by_field(f)) == NULL)
 	continue;
       
       const char *url = htsmsg_get_str(entry, "SubDownloadLink");
-
       if(url == NULL)
 	continue;
+
+
+      const char *mb = htsmsg_get_str(entry, "MatchedBy");
+      if(mb == NULL)
+	continue;
+
+      d = malloc(sizeof(dedup_t));
+      d->str = strdup(url);
+      if(RB_INSERT_SORTED(&dt, d, link, dedup_cmp)) {
+	free(d->str);
+	free(d);
+	continue;
+      }
+
+      snprintf(src, sizeof(src), "Opensubtitles (%s)",  mb);
+
+      int xscore = 0;
+      if(!strcmp(mb, "moviehash"))
+	xscore++;
+
       added++;
-      mp_add_track(node, NULL, url,
+      hts_mutex_lock(mtx);
+      mp_add_track(p,
+		   htsmsg_get_str(entry, "SubFileName"),
+		   url,
 		   htsmsg_get_str(entry, "SubFormat"),
 		   NULL,
 		   htsmsg_get_str(entry, "SubLanguageID"),
-		   "opensubtitles.org", NULL, 0);
+		   src, NULL, xscore);
+      hts_mutex_unlock(mtx);
     }
     TRACE(TRACE_DEBUG, "opensubtitles", "Got %d subtitles", added);
     
     htsmsg_destroy(out);
+
+    while((d = dt.root) != NULL) {
+      RB_REMOVE(&dt, d, link);
+      free(d->str);
+      free(d);
+    }
+
     return;
   }
 }
 
 
-/**
- *
- */
-void
-opensub_load_subtitles(prop_t *node, htsmsg_t *query)
-{
-  if(opensub_enable)
-    query_do(node, query);
-  htsmsg_destroy(query);
-}
 
 
 /**

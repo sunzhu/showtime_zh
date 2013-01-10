@@ -20,9 +20,10 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <sqlite3.h>
+
 #include "prop/prop.h"
 #include "prop/prop_concat.h"
-#include "ext/sqlite/sqlite3.h"
 
 #include "showtime.h"
 #include "media.h"
@@ -55,6 +56,8 @@ static int metadata_filename_to_episode(const char *filename,
 
 static int metadata_folder_to_season(const char *s,
 				     int *seasonp, rstr_t **titlep);
+
+static int is_reasonable_movie_name(const char *s);
 
 /**
  *
@@ -831,35 +834,38 @@ query_by_filename_or_dirname(void *db, metadata_lazy_video_t *mlv,
   if(msf->query_by_title_and_year == NULL)
     return METADATA_PERMANENT_ERROR;
 
+  if(is_reasonable_movie_name(rstr_get(mlv->mlv_filename))) {
 
-
-  metadata_filename_to_title(rstr_get(mlv->mlv_filename), &year, &title);
+    metadata_filename_to_title(rstr_get(mlv->mlv_filename), &year, &title);
   
-  TRACE(TRACE_DEBUG, "METADATA",
-	"Performing search lookup for %s year:%d, based on filename",
-	rstr_get(title), year);
-
-  rval = msf->query_by_title_and_year(db, rstr_get(mlv->mlv_url),
-				      rstr_get(title), year,
-				      mlv->mlv_duration,
-				      METADATA_QTYPE_FILENAME);
-  *qtype = METADATA_QTYPE_FILENAME;
-
-  if(rval == METADATA_PERMANENT_ERROR && year != 0) {
-    // Try without year
-
     TRACE(TRACE_DEBUG, "METADATA",
-	  "Performing search lookup for %s without year, based on filename",
+	  "Performing search lookup for %s year:%d, based on filename",
 	  rstr_get(title), year);
 
     rval = msf->query_by_title_and_year(db, rstr_get(mlv->mlv_url),
-					rstr_get(title), 0,
+					rstr_get(title), year,
 					mlv->mlv_duration,
 					METADATA_QTYPE_FILENAME);
     *qtype = METADATA_QTYPE_FILENAME;
+
+    if(rval == METADATA_PERMANENT_ERROR && year != 0) {
+      // Try without year
+
+      TRACE(TRACE_DEBUG, "METADATA",
+	    "Performing search lookup for %s without year, based on filename",
+	    rstr_get(title), year);
+
+      rval = msf->query_by_title_and_year(db, rstr_get(mlv->mlv_url),
+					  rstr_get(title), 0,
+					  mlv->mlv_duration,
+					  METADATA_QTYPE_FILENAME);
+      *qtype = METADATA_QTYPE_FILENAME;
+    }
+    rstr_release(title);
+  } else {
+    rval = METADATA_PERMANENT_ERROR;
   }
 
-  rstr_release(title);
 
   if(rval == METADATA_PERMANENT_ERROR && mlv->mlv_lonely) {
 
@@ -1986,6 +1992,23 @@ mlv_direct_query(void *db, rstr_t *url, rstr_t *filename,
 }
 
 
+/**
+ *
+ */
+metadata_t *
+metadata_get_video_data(const char *url)
+{
+  void *db = metadb_get();
+  metadata_t *md;
+
+  int r = metadb_get_videoinfo(db, url, NULL, NULL, &md);
+  metadb_close(db);
+  if(r)
+    return NULL;
+  return md;
+}
+
+
 #define isnum(a) ((a) >= '0' && (a) <= '9')
 
 /**
@@ -2258,6 +2281,19 @@ metadata_folder_to_season(const char *s,
 }
 
 
+/**
+ *
+ */
+static int
+is_reasonable_movie_name(const char *s)
+{
+  int n = 0;
+  for(;*s; s++) {
+    if(*s >= 0x30)
+      n++;
+  }
+  return n >= 3;
+}
 
 
 
