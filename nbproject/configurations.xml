@@ -266,18 +266,51 @@
           </df>
           <df name="dvd">
             <df name="dvdcss">
+              <in>css.d</in>
+              <in>device.d</in>
+              <in>error.d</in>
+              <in>ioctl.d</in>
+              <in>libdvdcss.d</in>
             </df>
             <df name="dvdnav">
               <df name="vm">
               </df>
+              <in>dvdnav.d</in>
+              <in>highlight.d</in>
+              <in>navigation.d</in>
+              <in>read_cache.d</in>
+              <in>remap.d</in>
+              <in>settings.d</in>
             </df>
             <df name="libdvdread">
+              <in>bitreader.d</in>
+              <in>dvd_input.d</in>
+              <in>dvd_reader.d</in>
+              <in>dvd_udf.d</in>
+              <in>md5.d</in>
+              <in>nav_read.d</in>
             </df>
           </df>
           <df name="librtmp">
+            <in>amf.d</in>
+            <in>log.d</in>
           </df>
           <df name="polarssl-1.2.0">
             <df name="library">
+              <in>aes.d</in>
+              <in>arc4.d</in>
+              <in>asn1parse.d</in>
+              <in>asn1write.d</in>
+              <in>base64.d</in>
+              <in>bignum.d</in>
+              <in>camellia.d</in>
+              <in>certs.d</in>
+              <in>debug.d</in>
+              <in>des.d</in>
+              <in>dhm.d</in>
+              <in>gcm.d</in>
+              <in>md.d</in>
+              <in>md2.d</in>
             </df>
           </df>
           <df name="spidermonkey">
@@ -285,8 +318,11 @@
           <df name="sqlite">
           </df>
           <df name="tlsf">
+            <in>tlsf.d</in>
+            <in>tlsf_ps3.d</in>
           </df>
           <df name="trex">
+            <in>trex.d</in>
           </df>
         </df>
         <df name="libav">
@@ -408,50 +444,120 @@
         </df>
         <df name="src">
           <df name="api">
+            <in>httpcontrol.d</in>
+            <in>lastfm.d</in>
+            <in>soap.d</in>
           </df>
           <df name="arch">
             <df name="nspr">
+              <in>nspr.d</in>
             </df>
             <df name="ps3">
+              <in>ps3_main.d</in>
+              <in>ps3_threads.d</in>
+              <in>ps3_trap.d</in>
             </df>
+            <in>emu_thread_specifics.d</in>
           </df>
           <df name="audio2">
+            <in>audio.d</in>
+            <in>ps3_audio.d</in>
           </df>
           <df name="backend">
             <df name="dvd">
+              <in>dvd.d</in>
             </df>
             <df name="htsp">
             </df>
             <df name="rtmp">
+              <in>rtmp.d</in>
             </df>
             <df name="shoutcast">
             </df>
+            <in>backend.d</in>
+            <in>backend_prop.d</in>
           </df>
           <df name="db">
+            <in>db_support.d</in>
+            <in>kvstore.d</in>
+            <in>vfs.d</in>
           </df>
           <df name="fileaccess">
+            <in>fa_audio.d</in>
+            <in>fa_backend.d</in>
+            <in>fa_buffer.d</in>
+            <in>fa_bundle.d</in>
+            <in>fa_fs.d</in>
+            <in>fa_imageloader.d</in>
+            <in>fa_indexer.d</in>
+            <in>fa_libav.d</in>
           </df>
           <df name="htsmsg">
+            <in>htsbuf.d</in>
+            <in>htsmsg.d</in>
+            <in>htsmsg_binary.d</in>
+            <in>htsmsg_json.d</in>
+            <in>htsmsg_store.d</in>
           </df>
           <df name="js">
           </df>
           <df name="metadata">
+            <in>browsemdb.d</in>
           </df>
           <df name="misc">
+            <in>callout.d</in>
+            <in>codepages.d</in>
+            <in>dbl.d</in>
+            <in>extents.d</in>
+            <in>fs.d</in>
+            <in>gz.d</in>
+            <in>isolang.d</in>
+            <in>jpeg.d</in>
+            <in>json.d</in>
           </df>
           <df name="networking">
+            <in>http.d</in>
+            <in>http_server.d</in>
+            <in>net_common.d</in>
+            <in>net_psl1ght.d</in>
+            <in>ssdp.d</in>
           </df>
           <df name="prop">
           </df>
           <df name="sd">
+            <in>sd.d</in>
           </df>
           <df name="text">
+            <in>fontstash.d</in>
+            <in>parser.d</in>
           </df>
           <df name="ui">
             <df name="glw">
+              <in>glw.d</in>
+              <in>glw_array.d</in>
+              <in>glw_bar.d</in>
+              <in>glw_bloom.d</in>
+              <in>glw_clip.d</in>
+              <in>glw_clist.d</in>
+              <in>glw_container.d</in>
+              <in>glw_coverflow.d</in>
+              <in>glw_cube.d</in>
+              <in>glw_deck.d</in>
+              <in>glw_detachable.d</in>
+              <in>glw_displacement.d</in>
+              <in>glw_dummy.d</in>
+              <in>glw_event.d</in>
+              <in>glw_expander.d</in>
+              <in>glw_flicker.d</in>
             </df>
           </df>
           <df name="upnp">
+            <in>upnp.d</in>
+            <in>upnp_avtransport.d</in>
+            <in>upnp_browse.d</in>
+            <in>upnp_connectionmanager.d</in>
+            <in>upnp_control.d</in>
+            <in>upnp_renderingcontrol.d</in>
           </df>
           <df name="video">
           </df>
@@ -4250,6 +4356,7 @@
             <in>GLWView.m</in>
             <in>osx.h</in>
             <in>osx_app.m</in>
+            <in>osx_webpopup.m</in>
           </df>
           <df name="posix">
             <in>posix.c</in>
@@ -4365,6 +4472,8 @@
           <in>fa_http.c</in>
           <in>fa_imageloader.c</in>
           <in>fa_imageloader.h</in>
+          <in>fa_indexer.c</in>
+          <in>fa_indexer.h</in>
           <in>fa_libav.c</in>
           <in>fa_libav.h</in>
           <in>fa_locatedb.c</in>
@@ -4665,6 +4774,8 @@
             <in>x11_common.c</in>
             <in>x11_common.h</in>
           </df>
+          <in>webpopup.c</in>
+          <in>webpopup.h</in>
         </df>
         <df name="upnp">
           <in>upnp.c</in>
@@ -4684,6 +4795,8 @@
           <in>ps3_vdec.c</in>
           <in>sub.h</in>
           <in>sub_ass.c</in>
+          <in>sub_scanner.c</in>
+          <in>sub_scanner.h</in>
           <in>vda.c</in>
           <in>vda.h</in>
           <in>vdpau.c</in>
