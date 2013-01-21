@@ -24,38 +24,11 @@
 #include "media.h"
 #include "vobsub.h"
 #include "backend/backend.h"
-#include "api/opensubtitles.h"
+#include "js/js.h"
 
 #include "sub_scanner.h"
 #include "video_settings.h"
-
-/**
- *
- */
-struct sub_scanner {
-  int ss_refcount;
-
-  int ss_beflags;
-
-  rstr_t *ss_title;          // Video title
-  rstr_t *ss_imdbid;
-
-  hts_mutex_t ss_mutex;  // Lock around ss_proproot
-  prop_t *ss_proproot;   // property where to add subs
-
-  char *ss_url;  // can be NULL 
-
-  int ss_stop;   // set if we should stop working (video playback have stopped)
-
-  int ss_opensub_hash_valid; // Set if hash is valid
-  uint64_t ss_opensub_hash;  // opensubtitles hash
-  uint64_t ss_fsize;         // Size of video file being played
-
-  int ss_season;
-  int ss_episode;
-
-};
-
+#include "backend/backend.h"
 
 
 /**
@@ -88,7 +61,7 @@ fs_sub_match(const char *video, const char *sub)
 }
 
 
-#define LOCAL_EXTRA_SCORE 5
+#define LOCAL_EXTRA_SCORE 3
 
 /**
  *
@@ -195,7 +168,7 @@ fs_sub_scan_dir(sub_scanner_t *ss, const char *url, const char *video)
 /**
  *
  */
-static void
+void
 sub_scanner_release(sub_scanner_t *ss)
 {
   if(atomic_add(&ss->ss_refcount, -1) > 1)
@@ -207,6 +180,17 @@ sub_scanner_release(sub_scanner_t *ss)
   hts_mutex_destroy(&ss->ss_mutex);
   free(ss);
 }
+
+
+/**
+ *
+ */
+void
+sub_scanner_retain(sub_scanner_t *ss)
+{
+  atomic_add(&ss->ss_refcount, 1);
+}
+
 
 
 /**
@@ -231,12 +215,8 @@ sub_scanner_thread(void *aux)
     fs_sub_scan_dir(ss, parent, fname);
   }
 
-  if(!ss->ss_stop) {
-    opensub_query(ss->ss_proproot, &ss->ss_mutex, ss->ss_opensub_hash,
-		  ss->ss_opensub_hash_valid ? ss->ss_fsize : 0,
-		  rstr_get(ss->ss_title), rstr_get(ss->ss_imdbid),
-		  ss->ss_season, ss->ss_episode);
-  }
+  if(!ss->ss_stop)
+    js_sub_query(ss);
 
   sub_scanner_release(ss);
   return NULL;
@@ -248,24 +228,27 @@ sub_scanner_thread(void *aux)
  *
  */
 sub_scanner_t *
-sub_scanner_create(const char *url, int beflags, rstr_t *title,
-		   prop_t *proproot, int opensub_hash_valid,
-		   uint64_t opensub_hash, uint64_t fsize,
-		   rstr_t *imdbid, int season, int episode)
+sub_scanner_create(const char *url, prop_t *proproot,
+		   const video_args_t *va, int duration)
 {
   sub_scanner_t *ss = calloc(1, sizeof(sub_scanner_t));
   hts_mutex_init(&ss->ss_mutex);
   ss->ss_refcount = 2; // one for thread, one for caller
   ss->ss_url = url ? strdup(url) : NULL;
-  ss->ss_beflags = beflags;
-  ss->ss_title = rstr_dup(title);
-  ss->ss_imdbid = rstr_dup(imdbid);
+  ss->ss_beflags = va->flags;
+  ss->ss_title = rstr_alloc(va->title);
+  ss->ss_imdbid = rstr_alloc(va->imdb);
   ss->ss_proproot = prop_ref_inc(proproot);
-  ss->ss_opensub_hash_valid = opensub_hash_valid;
-  ss->ss_opensub_hash = opensub_hash;
-  ss->ss_fsize = fsize;
-  ss->ss_season = season;
-  ss->ss_episode = episode;
+  ss->ss_fsize = va->filesize;
+  ss->ss_year   = va->year;
+  ss->ss_season = va->season;
+  ss->ss_episode = va->episode;
+  ss->ss_duration = duration;
+
+  ss->ss_hash_valid = va->hash_valid;
+  ss->ss_opensub_hash = va->opensubhash;
+  memcpy(ss->ss_subdbhash, va->subdbhash, 16);
+
   hts_thread_create_detached("subscanner", sub_scanner_thread, ss,
 			     THREAD_PRIO_LOW);
   return ss;

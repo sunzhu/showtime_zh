@@ -107,14 +107,40 @@ vsource_insert(struct vsource_list *list,
  *
  */
 static void
+vsource_free(vsource_t *vs)
+{
+  free(vs->vs_url);
+  free(vs->vs_mimetype);
+  free(vs);
+}
+
+
+/**
+ *
+ */
+static vsource_t *
+vsource_dup(const vsource_t *src)
+{
+  vsource_t *dst = malloc(sizeof(vsource_t));
+  *dst = *src;
+  dst->vs_url = strdup(dst->vs_url);
+  dst->vs_mimetype = dst->vs_mimetype ? strdup(src->vs_url) : NULL;
+  return dst;
+}
+
+
+/**
+ *
+ */
+static void
 vsource_remove(struct vsource_list *list, const char *url)
 {
   vsource_t *vs;
   LIST_FOREACH(vs, list, vs_link) {
     if(!strcmp(vs->vs_url, url)) {
       LIST_REMOVE(vs, vs_link);
-      free(vs->vs_url);
-      free(vs);
+      vsource_free(vs);
+      return;
     }
   }
 }
@@ -222,6 +248,16 @@ play_video(const char *url, struct media_pipe *mp,
   event_t *e;
   const char *canonical_url;
   htsmsg_t *m = NULL;
+
+  video_args_t va;
+
+
+  memset(&va, 0, sizeof(va));
+  va.episode = -1;
+  va.season = -1;
+
+  va.priority = priority;
+
   LIST_INIT(&vsources);
 
   mp_reinit_streams(mp);
@@ -247,18 +283,16 @@ play_video(const char *url, struct media_pipe *mp,
 	return e;
       }
       snprintf(errbuf, errlen,
-	       "Page model for '%s' does not provide a video source",
-	       url);
+	       "Page model for '%s' does not provide a video source", url);
       return NULL;
 
     }
 
-    canonical_url = url;
+    va.canonical_url = canonical_url = url;
+    va.flags = flags | BACKEND_VIDEO_SET_TITLE;
 
     mp_set_url(mp, url);
-    e = be->be_play_video(url, mp, flags | BACKEND_VIDEO_SET_TITLE,
-                          priority, errbuf, errlen, NULL,
-                          canonical_url, vq, &vsources);
+    e = be->be_play_video(url, mp, errbuf, errlen, vq, &vsources, &va);
 
   } else {
 
@@ -308,10 +342,31 @@ play_video(const char *url, struct media_pipe *mp,
   
     // Other metadata
 
-    if((str = htsmsg_get_str(m, "title")) != NULL)
-      prop_set_string(prop_create(mp->mp_prop_metadata, "title"), str);
-    else
+    if((str = htsmsg_get_str(m, "title")) != NULL) {
+      prop_set(mp->mp_prop_metadata, "title", PROP_SET_STRING, str);
+      va.title = str;
+    } else {
       flags |= BACKEND_VIDEO_SET_TITLE;
+    }
+
+    uint32_t u32;
+    if(!htsmsg_get_u32(m, "year", &u32)) {
+      prop_set(mp->mp_prop_metadata, "year", PROP_SET_INT, u32);
+      va.year = u32;
+    }
+    if(!htsmsg_get_u32(m, "season", &u32)) {
+      prop_set(mp->mp_prop_metadata, "season", PROP_SET_INT, u32);
+      va.season = u32;
+    }
+    if(!htsmsg_get_u32(m, "episode", &u32)) {
+      prop_set(mp->mp_prop_metadata, "episode", PROP_SET_INT, u32);
+      va.episode = u32;
+    }
+
+
+    if((str = htsmsg_get_str(m, "imdbid")) != NULL)
+      va.imdb = str;
+
 
     // Subtitles
 
@@ -340,9 +395,14 @@ play_video(const char *url, struct media_pipe *mp,
 
     TRACE(TRACE_DEBUG, "Video", "Playing %s", vs->vs_url);
 
-    e = backend_play_video(vs->vs_url, mp, flags | vs->vs_flags, priority, 
-                           errbuf, errlen, vs->vs_mimetype,
-                           canonical_url, vq, &vsources);
+    vs = vsource_dup(vs);
+
+    va.canonical_url = canonical_url;
+    va.flags = flags | vs->vs_flags;
+    va.mimetype = vs->vs_mimetype;
+
+    e = backend_play_video(vs->vs_url, mp, errbuf, errlen, vq, &vsources, &va);
+    vsource_free(vs);
   }
 
   while(e != NULL) {
@@ -358,9 +418,15 @@ play_video(const char *url, struct media_pipe *mp,
 
       TRACE(TRACE_DEBUG, "Video", "Playing %s", vs->vs_url);
 
-      e = backend_play_video(vs->vs_url, mp, flags | vs->vs_flags, priority, 
-                             errbuf, errlen, vs->vs_mimetype,
-                             canonical_url, vq, &vsources);
+      vs = vsource_dup(vs);
+
+      va.canonical_url = canonical_url;
+      va.flags = flags | vs->vs_flags;
+      va.mimetype = vs->vs_mimetype;
+
+      e = backend_play_video(vs->vs_url, mp, errbuf, errlen,
+			     vq, &vsources, &va);
+      vsource_free(vs);
 
     } else {
       break;
