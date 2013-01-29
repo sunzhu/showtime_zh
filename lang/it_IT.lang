@@ -1,6 +1,6 @@
 language: Italian
 native: Italiano
-maintainer: Red Squirrel <iam@redsquirrel.tk>
+maintainer: Red Squirrel <iam@redsquirrel87.com>
 #
 # ./glwskins/default/cmdmenu.view
 #
@@ -98,8 +98,7 @@ id: Audio tracks
 msg: Tracce audio
 
 id: Chapters
-# Missing translation
-msg: 
+msg: Capitoli
 
 id: Seek by time
 msg: Salta per tempo
@@ -405,13 +404,6 @@ id: Playback status
 msg: Stato di riproduzione
 
 #
-# ./glwskins/default/pages/wideinfo/video.view
-#
-id: Seen:
-# Missing translation
-msg: 
-
-#
 # ./glwskins/default/playdecks/dvd.view
 #
 id: Chapter: %d
@@ -666,8 +658,11 @@ msg: Accesso fallito
 id: Artists
 msg: Artisti
 
-id: Date
-msg: Data
+id: Date (newest first)
+msg: Data (dal piu' recente)
+
+id: Date (oldest first)
+msg: Data (dal piu' vecchio)
 
 id: Filename
 msg: Nome file
@@ -829,8 +824,7 @@ id: Movie
 msg: Film
 
 id: Movie title
-# Missing translation
-msg: 
+msg: Titolo del Film
 
 id: No data found
 msg: Nessun dato trovato
@@ -848,8 +842,7 @@ id: Refresh metadata
 msg: Aggiorna metadata
 
 id: Title, Season, Episode
-# Missing translation
-msg: 
+msg: Titolo, Stagione, Episodio
 
 id: Track %d
 msg: Traccia %d
@@ -969,7 +962,7 @@ id: Installed plugins
 msg: Plugin installati
 
 id: Installed version higher than available
-msg: La versione installa è più recente di quella disponibile
+msg: La versione installata è più recente di quella disponibile
 
 id: Installing
 msg: Installazione
@@ -1090,6 +1083,12 @@ msg: Impostazioni utili per sviluppatori
 
 id: System related settings
 msg: Impostazioni relative al sistema
+
+#
+# ./src/subtitles/sub_scanner.c
+#
+id: External file
+msg: File esterno
 
 #
 # ./src/text/fontstash.c
@@ -1222,12 +1221,6 @@ msg: Impossibile aprire il Cell codec. Impossibile allocare %d bytes di RAM
 
 id: Unable to query Cell codec. Error 0x%x
 msg: Impossibile richiedere il Cell codec. Errore 0x%x
-
-#
-# ./src/video/sub_scanner.c
-#
-id: External file
-msg: File esterno
 
 #
 # ./src/video/video_settings.c

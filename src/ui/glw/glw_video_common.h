@@ -109,7 +109,7 @@ typedef struct glw_video_surface {
 } glw_video_surface_t;
 
 
-#define GLW_VIDEO_MAX_SURFACES 6
+#define GLW_VIDEO_MAX_SURFACES 10
 
 /**
  *
@@ -215,6 +215,10 @@ typedef struct glw_video {
 
   prop_sub_t *gv_fstretch_sub;
   int gv_fstretch;
+
+  // DVD SPU stuff
+
+  int gv_spu_in_menu;
 
 } glw_video_t;
 

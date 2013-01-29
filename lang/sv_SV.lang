@@ -664,8 +664,11 @@ msg: Login misslyckades
 id: Artists
 msg: Artister
 
-id: Date
-msg: Datum
+id: Date (newest first)
+msg: Datum (nyast först)
+
+id: Date (oldest first)
+msg: Datum (äldst först)
 
 id: Filename
 msg: Filnamn
@@ -1088,6 +1091,12 @@ id: System related settings
 msg: Systemrelaterade inställningar
 
 #
+# ./src/subtitles/sub_scanner.c
+#
+id: External file
+msg: Extern fil
+
+#
 # ./src/text/fontstash.c
 #
 id: Defaults
@@ -1218,12 +1227,6 @@ msg: Kan ej öppna Cell codec. Kan ej allokera %d bytes RAM.
 
 id: Unable to query Cell codec. Error 0x%x
 msg: Kan ej fråga Cell codec. Fel 0x%x
-
-#
-# ./src/video/sub_scanner.c
-#
-id: External file
-msg: Extern fil
 
 #
 # ./src/video/video_settings.c
