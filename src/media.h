@@ -83,7 +83,8 @@ TAILQ_HEAD(media_buf_queue, media_buf);
 TAILQ_HEAD(media_pipe_queue, media_pipe);
 LIST_HEAD(media_pipe_list, media_pipe);
 TAILQ_HEAD(media_track_queue, media_track);
-
+TAILQ_HEAD(video_overlay_queue, video_overlay);
+TAILQ_HEAD(dvdspu_queue, dvdspu);
 
 /**
  *
@@ -234,6 +235,7 @@ typedef struct media_buf {
 typedef struct media_queue {
   struct media_buf_queue mq_q_data;
   struct media_buf_queue mq_q_ctrl;
+  struct media_buf_queue mq_q_aux;
 
   unsigned int mq_packets_current;    /* Packets currently in queue */
 
@@ -325,6 +327,10 @@ typedef struct media_pipe {
   void *mp_video_frame_opaque;
   video_frame_deliver_t *mp_video_frame_deliver;
   
+  hts_mutex_t mp_overlay_mutex; // Also protects mp_spu_queue
+  struct video_overlay_queue mp_overlay_queue;
+  struct dvdspu_queue mp_spu_queue;
+
   hts_mutex_t mp_clock_mutex;
   int64_t mp_audio_clock;
   int64_t mp_audio_clock_avtime;
@@ -530,8 +536,6 @@ void mp_send_cmd(media_pipe_t *mp, media_queue_t *mq, int cmd);
 void mp_send_cmd_data(media_pipe_t *mp, media_queue_t *mq, int cmd, void *d);
 void mp_send_cmd_u32(media_pipe_t *mp, media_queue_t *mq, int cmd, 
 		     uint32_t u);
-
-media_buf_t *mp_deq(media_pipe_t *mp, media_queue_t *mq);
 
 void mp_flush(media_pipe_t *mp, int blackout);
 

@@ -220,17 +220,21 @@ SRCS-$(CONFIG_HTTPSERVER) += \
 ##############################################################
 SRCS += src/video/video_playback.c \
 	src/video/video_decoder.c \
-	src/video/video_overlay.c \
-	src/video/sub_ass.c \
-	src/video/ext_subtitles.c \
 	src/video/video_settings.c \
-	src/video/video_dvdspu.c \
-	src/video/vobsub.c \
-	src/video/sub_scanner.c \
 
 SRCS-$(CONFIG_VDPAU)    += src/video/vdpau.c
 SRCS-$(CONFIG_PS3_VDEC) += src/video/ps3_vdec.c
 SRCS-$(CONFIG_VDA)      += src/video/vda.c
+
+##############################################################
+# Subtitles
+##############################################################
+SRCS += src/subtitles/sub_ass.c \
+	src/subtitles/ext_subtitles.c \
+	src/subtitles/dvdspu.c \
+	src/subtitles/vobsub.c \
+	src/subtitles/sub_scanner.c \
+	src/subtitles/video_overlay.c \
 
 ##############################################################
 # Text rendering
@@ -416,17 +420,17 @@ SRCS-$(CONFIG_APPLEREMOTE) += \
 ##############################################################
 # RTMP
 ##############################################################
-SRCS-$(CONFIG_LIBRTMP) +=	ext/librtmp/amf.c \
-				ext/librtmp/hashswf.c \
-				ext/librtmp/log.c \
-				ext/librtmp/rtmp.c \
-				ext/librtmp/parseurl.c
+SRCS-$(CONFIG_LIBRTMP) +=	ext/rtmpdump/librtmp/amf.c \
+				ext/rtmpdump/librtmp/hashswf.c \
+				ext/rtmpdump/librtmp/log.c \
+				ext/rtmpdump/librtmp/rtmp.c \
+				ext/rtmpdump/librtmp/parseurl.c
 
-${BUILDDIR}/ext/librtmp/%.o : CFLAGS = ${OPTFLAGS}
+${BUILDDIR}/ext/rtmpdump/librtmp/%.o : CFLAGS = ${OPTFLAGS}
 
 SRCS-$(CONFIG_LIBRTMP)  +=      src/backend/rtmp/rtmp.c
 
-${BUILDDIR}/src/backend/rtmp/rtmp.o : CFLAGS = ${OPTFLAGS} -Wall -Werror -Iext
+${BUILDDIR}/src/backend/rtmp/rtmp.o : CFLAGS = ${OPTFLAGS} -Wall -Werror -Iext/rtmpdump
 
 
 ##############################################################
@@ -694,11 +698,6 @@ $(BUILDDIR)/libav.stamp:
 $(BUILDDIR)/freetype.stamp:
 	${MAKE} -C ${FREETYPE_BUILD_DIR}
 	${MAKE} -C ${FREETYPE_BUILD_DIR} install
-	@mkdir -p $(dir $@)
-	touch $@
-
-$(BUILDDIR)/zlib.stamp:
-	${MAKE} -C ${ZLIB_BUILD_DIR} install
 	@mkdir -p $(dir $@)
 	touch $@
 

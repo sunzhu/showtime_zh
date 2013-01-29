@@ -31,8 +31,9 @@
 #include "backend/backend.h"
 #include "misc/isolang.h"
 #include "i18n.h"
-#include "video/ext_subtitles.h"
 #include "video/video_settings.h"
+#include "subtitles/ext_subtitles.h"
+#include "subtitles/dvdspu.h"
 #include "settings.h"
 #include "db/kvstore.h"
 
@@ -219,6 +220,7 @@ mq_init(media_queue_t *mq, prop_t *p, hts_mutex_t *mutex, media_pipe_t *mp)
   mq->mq_mp = mp;
   TAILQ_INIT(&mq->mq_q_data);
   TAILQ_INIT(&mq->mq_q_ctrl);
+  TAILQ_INIT(&mq->mq_q_aux);
 
   mq->mq_packets_current = 0;
   mq->mq_stream = -1;
@@ -279,6 +281,11 @@ mp_create(const char *name, int flags, const char *type)
 
   hts_mutex_init(&mp->mp_mutex);
   hts_mutex_init(&mp->mp_clock_mutex);
+
+  hts_mutex_init(&mp->mp_overlay_mutex);
+  TAILQ_INIT(&mp->mp_overlay_queue);
+  TAILQ_INIT(&mp->mp_spu_queue);
+
   hts_cond_init(&mp->mp_backpressure, &mp->mp_mutex);
   mp->mp_pc = prop_courier_create_thread(&mp->mp_mutex, "mp");
 
@@ -511,6 +518,7 @@ mq_flush(media_pipe_t *mp, media_queue_t *mq)
 {
   mq_flush_q(mp, mq, &mq->mq_q_data);
   mq_flush_q(mp, mq, &mq->mq_q_ctrl);
+  mq_flush_q(mp, mq, &mq->mq_q_aux);
   mq_update_stats(mp, mq);
 }
 
@@ -522,6 +530,7 @@ static void
 mp_destroy(media_pipe_t *mp)
 {
   event_t *e;
+
 
   /* Make sure a clean shutdown has been made */
   assert(mp->mp_audio_decoder == NULL);
@@ -558,9 +567,13 @@ mp_destroy(media_pipe_t *mp)
 
   prop_destroy(mp->mp_prop_root);
 
+  video_overlay_flush(mp, 0);
+  dvdspu_destroy_all(mp);
+
   hts_cond_destroy(&mp->mp_backpressure);
   hts_mutex_destroy(&mp->mp_mutex);
   hts_mutex_destroy(&mp->mp_clock_mutex);
+  hts_mutex_destroy(&mp->mp_overlay_mutex);
 
   pool_destroy(mp->mp_mb_pool);
 
@@ -628,29 +641,12 @@ mp_direct_seek(media_pipe_t *mp, int64_t ts)
 /**
  *
  */
-media_buf_t *
-mp_deq(media_pipe_t *mp, media_queue_t *mq)
-{
-  media_buf_t *mb;
-  if((mb = TAILQ_FIRST(&mq->mq_q_ctrl)) != NULL) { 
-    TAILQ_REMOVE(&mq->mq_q_ctrl, mb, mb_link);
-    return mb;
-  }
-  if((mb = TAILQ_FIRST(&mq->mq_q_data)) != NULL) {
-    TAILQ_REMOVE(&mq->mq_q_data, mb, mb_link);
-    return mb;
-  }
-  return NULL;
-}
-
-
-/**
- *
- */
 static void
 mb_enq(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb)
 {
-  if(mb->mb_data_type > MB_CTRL) {
+  if(mb->mb_data_type == MB_SUBTITLE) {
+    TAILQ_INSERT_TAIL(&mq->mq_q_aux, mb, mb_link);
+  } else if(mb->mb_data_type > MB_CTRL) {
     TAILQ_INSERT_TAIL(&mq->mq_q_ctrl, mb, mb_link);
   } else {
     TAILQ_INSERT_TAIL(&mq->mq_q_data, mb, mb_link);
@@ -954,15 +950,15 @@ mb_enqueue_no_block(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb,
 
   if(auxtype != -1) {
     media_buf_t *after;
-    TAILQ_FOREACH_REVERSE(after, &mq->mq_q_data, media_buf_queue, mb_link) {
+    TAILQ_FOREACH_REVERSE(after, &mq->mq_q_aux, media_buf_queue, mb_link) {
       if(after->mb_data_type == auxtype)
 	break;
     }
     
     if(after == NULL)
-      TAILQ_INSERT_HEAD(&mq->mq_q_data, mb, mb_link);
+      TAILQ_INSERT_HEAD(&mq->mq_q_aux, mb, mb_link);
     else
-      TAILQ_INSERT_AFTER(&mq->mq_q_data, after, mb, mb_link);
+      TAILQ_INSERT_AFTER(&mq->mq_q_aux, after, mb, mb_link);
 
   } else {
     TAILQ_INSERT_TAIL(&mq->mq_q_data, mb, mb_link);

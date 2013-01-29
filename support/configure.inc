@@ -332,6 +332,17 @@ libav_setup() {
 #
 #
 #
+rtmpdump_setup() {
+    status=`git submodule status ext/rtmpdump | cut -b 1`
+    echo "Updating rtmpdump, submodule status = $status"
+    git submodule update --init ext/rtmpdump
+}
+
+
+
+#
+#
+#
 zlib_setup()
 {
     ZLIB_VER="1.2.3"
@@ -347,9 +358,7 @@ zlib_setup()
         CC=${TOOLCHAIN}gcc AR="${TOOLCHAIN}ar -r" RANLIB=${TOOLCHAIN}ranlib \
         ./configure --static --prefix=${ZLIB_INSTALL_DIR})
     
-    echo >>${CONFIG_MAK} "ZLIB_BUILD_DIR=${ZLIB_SRC_DIR}"
-    echo >>${CONFIG_MAK} "STAMPS += build.${BUILD}/zlib.stamp"
-    rm -f "build.${BUILD}/zlib.stamp"
+    (cd ${ZLIB_SRC_DIR} && make install)
 
     echo >>${CONFIG_MAK} "CFLAGS_cfg += -I${ZLIB_INSTALL_DIR}/include"
     echo >>${CONFIG_MAK} "LDFLAGS_cfg += -L${ZLIB_INSTALL_DIR}/lib"
