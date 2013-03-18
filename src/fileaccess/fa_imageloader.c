@@ -16,6 +16,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <assert.h>
 #include "config.h"
 
 #include <stdio.h>
@@ -47,8 +48,9 @@ static const uint8_t svgsig1[5] = {'<', '?', 'x', 'm', 'l'};
 static const uint8_t svgsig2[4] = {'<', 's', 'v', 'g'};
 
 #if ENABLE_LIBAV
-static hts_mutex_t image_from_video_mutex;
-static AVCodecContext *pngencoder;
+static hts_mutex_t image_from_video_mutex[2];
+static AVCodecContext *thumbctx;
+static AVCodec *thumbcodec;
 
 static pixmap_t *fa_image_from_video(const char *url, const image_meta_t *im,
 				     char *errbuf, size_t errlen,
@@ -63,15 +65,9 @@ void
 fa_imageloader_init(void)
 {
 #if ENABLE_LIBAV
-  hts_mutex_init(&image_from_video_mutex);
-
-  AVCodec *c = avcodec_find_encoder(CODEC_ID_PNG);
-  if(c != NULL) {
-    AVCodecContext *ctx = avcodec_alloc_context3(NULL);
-    if(avcodec_open2(ctx, c, NULL))
-      return;
-    pngencoder = ctx;
-  }
+  hts_mutex_init(&image_from_video_mutex[0]);
+  hts_mutex_init(&image_from_video_mutex[1]);
+  thumbcodec = avcodec_find_encoder(CODEC_ID_MJPEG);
 #endif
 }
 
@@ -85,20 +81,20 @@ fa_imageloader2(const char *url, const char **vpaths,
 		char *errbuf, size_t errlen, int *cache_control,
 		fa_load_cb_t *cb, void *opaque)
 {
-  uint8_t *p;
-  size_t size;
+  buf_t *buf;
   jpeg_meminfo_t mi;
   pixmap_type_t fmt;
   int width = -1, height = -1, orientation = 0;
 
-  p = fa_load(url, &size, vpaths, errbuf, errlen, cache_control, 0, cb, opaque);
-  if(p == NULL || p == NOT_MODIFIED)
-    return (pixmap_t *)p;
+  buf = fa_load(url, vpaths, errbuf, errlen, cache_control, 0, cb, opaque);
+  if(buf == NULL || buf == NOT_MODIFIED)
+    return (pixmap_t *)buf;
 
+  const uint8_t *p = buf_c8(buf);
   mi.data = p;
-  mi.size = size;
+  mi.size = buf->b_size;
 
-  if(size < 16)
+  if(buf->b_size < 16)
     goto bad;
 
   /* Probe format */
@@ -110,8 +106,8 @@ fa_imageloader2(const char *url, const char **vpaths,
     
     if(jpeg_info(&ji, jpeginfo_mem_reader, &mi, 
 		 JPEG_INFO_DIMENSIONS | JPEG_INFO_ORIENTATION,
-		 p, size, errbuf, errlen)) {
-      free(p);
+		 p, buf->b_size, errbuf, errlen)) {
+      buf_release(buf);
       return NULL;
     }
 
@@ -134,11 +130,11 @@ fa_imageloader2(const char *url, const char **vpaths,
   } else {
   bad:
     snprintf(errbuf, errlen, "Unknown format");
-    free(p);
+    buf_release(buf);
     return NULL;
   }
 
-  pixmap_t *pm = pixmap_alloc_coded(p, size, fmt);
+  pixmap_t *pm = pixmap_alloc_coded(p, buf->b_size, fmt);
   if(pm != NULL) {
     pm->pm_width = width;
     pm->pm_height = height;
@@ -146,7 +142,7 @@ fa_imageloader2(const char *url, const char **vpaths,
   } else {
     snprintf(errbuf, errlen, "Out of memory");
   }
-  free(p);
+  buf_release(buf);
   return pm;
 }
 
@@ -306,6 +302,79 @@ ifv_close(void)
 /**
  *
  */
+static void
+write_thumb(const AVCodecContext *src, const AVFrame *sframe, 
+            int width, int height, const char *cacheid, time_t mtime)
+{
+  if(thumbcodec == NULL)
+    return;
+
+  AVCodecContext *ctx = thumbctx;
+  static AVFrame *oframe;
+
+  if(ctx == NULL || ctx->width  != width || ctx->height != height) {
+    
+    if(ctx != NULL) {
+      avcodec_close(ctx);
+      free(ctx);
+    }
+
+    ctx = avcodec_alloc_context3(thumbcodec);
+    ctx->pix_fmt = AV_PIX_FMT_YUVJ420P;
+    ctx->time_base.den = 1;
+    ctx->time_base.num = 1;
+    ctx->sample_aspect_ratio.num = 1;
+    ctx->sample_aspect_ratio.den = 1;
+    ctx->width  = width;
+    ctx->height = height;
+
+    if(avcodec_open2(ctx, thumbcodec, NULL) < 0) {
+      TRACE(TRACE_ERROR, "THUMB", "Unable to open thumb encoder");
+      thumbctx = NULL;
+      return;
+    }
+    thumbctx = ctx;
+
+    if(oframe == NULL) {
+      oframe = avcodec_alloc_frame();
+      memset(oframe, 0, sizeof(AVFrame));
+    }
+  }
+
+  avpicture_alloc((AVPicture *)oframe, ctx->pix_fmt, width, height);
+      
+  struct SwsContext *sws;
+  sws = sws_getContext(src->width, src->height, src->pix_fmt,
+                       width, height, ctx->pix_fmt, SWS_BILINEAR,
+                       NULL, NULL, NULL);
+
+  sws_scale(sws, (const uint8_t **)sframe->data, sframe->linesize,
+            0, src->height, &oframe->data[0], &oframe->linesize[0]);
+  sws_freeContext(sws);
+
+  oframe->pts = AV_NOPTS_VALUE;
+  AVPacket out;
+  memset(&out, 0, sizeof(AVPacket));
+  int got_packet;
+  int r = avcodec_encode_video2(ctx, &out, oframe, &got_packet);
+  if(r >= 0 && got_packet) {
+    buf_t *b = buf_create_and_adopt(out.size, out.data, &av_free);
+    blobcache_put(cacheid, "videothumb", b, INT32_MAX, NULL, mtime);
+    buf_release(b);
+  } else {
+    assert(out.data == NULL);
+  }
+  avpicture_free((AVPicture *)oframe);
+}
+
+
+
+
+
+
+/**
+ *
+ */
 static pixmap_t *
 fa_image_from_video2(const char *url, const image_meta_t *im, 
 		     const char *cacheid, char *errbuf, size_t errlen,
@@ -439,7 +508,7 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
       h = im->im_req_height;
     }
 
-    pm = pixmap_create(w, h, PIXMAP_RGB24, 0);
+    pm = pixmap_create(w, h, PIXMAP_BGR32, 0);
 
     if(pm == NULL) {
       ifv_close();
@@ -449,7 +518,8 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
 
     struct SwsContext *sws;
     sws = sws_getContext(ifv_ctx->width, ifv_ctx->height, ifv_ctx->pix_fmt,
-			 w, h, PIX_FMT_RGB24, SWS_BILINEAR, NULL, NULL, NULL);
+			 w, h, AV_PIX_FMT_BGR32, SWS_BILINEAR,
+                         NULL, NULL, NULL);
     if(sws == NULL) {
       ifv_close();
       snprintf(errbuf, errlen, "Scaling failed");
@@ -468,27 +538,8 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
 
     sws_freeContext(sws);
 
-    if(pngencoder != NULL) {
-      AVFrame *oframe = avcodec_alloc_frame();
+    write_thumb(ifv_ctx, frame, w, h, cacheid, mtime);
 
-      memset(&frame, 0, sizeof(frame));
-      oframe->data[0] = pm->pm_pixels;
-      oframe->linesize[0] = pm->pm_linesize;
-      
-      size_t outputsize = MAX(pm->pm_linesize * h, FF_MIN_BUFFER_SIZE);
-      void *output = malloc(outputsize);
-      pngencoder->width = w;
-      pngencoder->height = h;
-      pngencoder->pix_fmt = PIX_FMT_RGB24;
-
-      r = avcodec_encode_video(pngencoder, output, outputsize, oframe);
-      
-      if(r > 0) 
-	blobcache_put(cacheid, "videothumb", output, r, INT32_MAX,
-		      NULL, mtime);
-      free(output);
-      av_free(oframe);
-    }
     break;
   }
 
@@ -514,48 +565,52 @@ fa_image_from_video(const char *url0, const image_meta_t *im,
   time_t mtime = 0;
   pixmap_t *pm = NULL;
   char cacheid[512];
-  void *data;
-  size_t datasize;
   char *url = mystrdupa(url0);
   char *tim = strchr(url, '#');
-
+  const char *siz;
   *tim++ = 0;
   int secs = atoi(tim);
 
-  hts_mutex_lock(&image_from_video_mutex);
+  hts_mutex_lock(&image_from_video_mutex[0]);
   
   if(strcmp(url, stated_url ?: "")) {
     free(stated_url);
     stated_url = NULL;
     if(fa_stat(url, &fs, errbuf, errlen)) {
-      hts_mutex_unlock(&image_from_video_mutex);
+      hts_mutex_unlock(&image_from_video_mutex[0]);
       return NULL;
     }
     stated_url = strdup(url);
   }
   stattime = fs.fs_mtime;
-  hts_mutex_unlock(&image_from_video_mutex);
+  hts_mutex_unlock(&image_from_video_mutex[0]);
 
-  snprintf(cacheid, sizeof(cacheid), "%s-%d-%d-3",
-	   url0, im->im_req_width, im->im_req_height);
+  if(im->im_req_width < 100 && im->im_req_height < 100) {
+    siz = "min";
+  } else if(im->im_req_width < 200 && im->im_req_height < 200) {
+    siz = "mid";
+  } else {
+    siz = "max";
+  }
 
-  data = blobcache_get(cacheid, "videothumb", &datasize, 0, 0,
-		       NULL, &mtime);
-  if(data != NULL && mtime == stattime) {
-    pm = pixmap_alloc_coded(data, datasize, PIXMAP_PNG);
-    free(data);
+  snprintf(cacheid, sizeof(cacheid), "%s-%s", url0, siz);
+  buf_t *b = blobcache_get(cacheid, "videothumb", 0, 0, NULL, &mtime);
+  if(b != NULL && mtime == stattime) {
+    pm = pixmap_alloc_coded(b->b_ptr, b->b_size, PIXMAP_JPEG);
+    buf_release(b);
     return pm;
   }
+  buf_release(b);
 
   if(ONLY_CACHED(cache_control)) {
     snprintf(errbuf, errlen, "Not cached");
     return NULL;
   }
 
-  hts_mutex_lock(&image_from_video_mutex);
+  hts_mutex_lock(&image_from_video_mutex[1]);
   pm = fa_image_from_video2(url, im, cacheid, errbuf, errlen,
 			    secs, stattime, cb, opaque);
-  hts_mutex_unlock(&image_from_video_mutex);
+  hts_mutex_unlock(&image_from_video_mutex[1]);
   return pm;
 }
 #endif

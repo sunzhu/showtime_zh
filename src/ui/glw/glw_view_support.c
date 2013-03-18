@@ -146,6 +146,7 @@ glw_view_token_copy(glw_root_t *gr, token_t *src)
   dst->line = src->line;
 
   dst->type = src->type;
+  dst->t_propsubr = src->t_propsubr;
 
   switch(src->type) {
   case TOKEN_FLOAT:
@@ -166,11 +167,11 @@ glw_view_token_copy(glw_root_t *gr, token_t *src)
 
   case TOKEN_PROPERTY_SUBSCRIPTION:
   case TOKEN_DIRECTORY:
-    dst->propsubr = src->propsubr;
     break;
 
   case TOKEN_FUNCTION:
     dst->t_func = src->t_func;
+    dst->t_func_arg = src->t_func_arg;
     if(dst->t_func->ctor != NULL)
       dst->t_func->ctor(dst);
   case TOKEN_LEFT_BRACKET:
@@ -280,7 +281,7 @@ glw_view_free_chain(glw_root_t *gr, token_t *t)
  *
  */
 token_t *
-glw_view_clone_chain(glw_root_t *gr, token_t *src)
+glw_view_clone_chain(glw_root_t *gr, token_t *src, token_t **lp)
 {
   token_t *r = NULL, *d;
   token_t **pp = &r;
@@ -289,8 +290,9 @@ glw_view_clone_chain(glw_root_t *gr, token_t *src)
     d = glw_view_token_copy(gr, src);
     *pp = d;
     pp = &d->next;
-
-    d->child = glw_view_clone_chain(gr, src->child);
+    if(lp)
+      *lp = d;
+    d->child = glw_view_clone_chain(gr, src->child, NULL);
   }
   return r;
 }

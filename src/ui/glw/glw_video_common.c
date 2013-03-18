@@ -317,6 +317,9 @@ glw_video_dtor(glw_t *w)
   hts_cond_destroy(&gv->gv_avail_queue_cond);
   hts_cond_destroy(&gv->gv_reconf_cond);
   hts_mutex_destroy(&gv->gv_surface_mutex);
+
+  mp_ref_dec(gv->gv_mp);
+  gv->gv_mp = NULL;
 }
 
 
@@ -374,8 +377,6 @@ glw_video_widget_callback(glw_t *w, void *opaque, glw_signal_t signal,
     hts_mutex_unlock(&gv->gv_surface_mutex);
     video_playback_destroy(gv->gv_mp);
     video_decoder_stop(vd);
-    mp_ref_dec(gv->gv_mp);
-    gv->gv_mp = NULL;
     return 0;
 
   case GLW_SIGNAL_POINTER_EVENT:
@@ -741,23 +742,21 @@ glw_video_input(const frame_info_t *fi, void *opaque)
   glw_video_t *gv = opaque;
   glw_video_engine_t *gve;
 
-  if(fi) {
-    gv->gv_dar_num = fi->fi_dar_num;
-    gv->gv_dar_den = fi->fi_dar_den;
-    gv->gv_vheight = fi->fi_height;
-  }
   hts_mutex_lock(&gv->gv_surface_mutex);
 
   if(fi == NULL) {
     // Blackout
     glw_video_configure(gv, &glw_video_blank, NULL, NULL, 0, 0, 0);
-    hts_mutex_unlock(&gv->gv_surface_mutex);
-    return;
-  }
+  } else {
+
+    gv->gv_dar_num = fi->fi_dar_num;
+    gv->gv_dar_den = fi->fi_dar_den;
+    gv->gv_vheight = fi->fi_height;
   
-  LIST_FOREACH(gve, &engines, gve_link)
-    if(gve->gve_type == fi->fi_type)
-      gve->gve_deliver(fi, gv);
+    LIST_FOREACH(gve, &engines, gve_link)
+      if(gve->gve_type == fi->fi_type)
+	gve->gve_deliver(fi, gv);
+  }
 
   hts_mutex_unlock(&gv->gv_surface_mutex);
 }

@@ -50,6 +50,7 @@
 #include "video/video_settings.h"
 #include "metadata/metadata.h"
 #include "db/db_support.h"
+#include "htsmsg/htsmsg_store.h"
 #include "js/js.h"
 #include "db/kvstore.h"
 #include "upgrade.h"
@@ -155,7 +156,7 @@ init_global_info(void)
 /**
  *
  */
-static void
+void
 init_group(int group)
 {
   const inithelper_t *ih;
@@ -267,7 +268,7 @@ showtime_init(void)
   /* Freetype */
 #if ENABLE_LIBFREETYPE
   freetype_init();
-  svg_init();
+  rasterizer_ft_init();
 #endif
 
 #if ENABLE_GLW

@@ -90,6 +90,7 @@ SRCS +=	src/misc/ptrvec.c \
 	src/misc/rstr.c \
 	src/misc/pixmap.c \
 	src/misc/svg.c \
+	src/misc/rasterizer_ft.c \
 	src/misc/jpeg.c \
 	src/misc/gz.c \
 	src/misc/str.c \
@@ -101,6 +102,7 @@ SRCS +=	src/misc/ptrvec.c \
 	src/misc/json.c \
 	src/misc/unicode_composition.c \
 	src/misc/pool.c \
+	src/misc/buf.c \
 
 SRCS-${CONFIG_TREX} += ext/trex/trex.c
 
@@ -196,6 +198,7 @@ SRCS += 		src/api/xmlrpc.c \
 			src/api/tvdb.c \
 
 SRCS-$(CONFIG_HTTPSERVER) += src/api/httpcontrol.c
+SRCS-$(CONFIG_HTTPSERVER) += src/api/stpp.c
 SRCS-$(CONFIG_AIRPLAY) += src/api/airplay.c
 
 ##############################################################
@@ -223,7 +226,7 @@ SRCS += src/video/video_playback.c \
 	src/video/video_settings.c \
 
 SRCS-$(CONFIG_VDPAU)    += src/video/vdpau.c
-SRCS-$(CONFIG_PS3_VDEC) += src/video/ps3_vdec.c
+SRCS-$(CONFIG_PS3_VDEC) += src/video/ps3_vdec.c src/video/h264_annexb.c
 SRCS-$(CONFIG_VDA)      += src/video/vda.c
 
 ##############################################################
@@ -261,6 +264,11 @@ SRCS-$(CONFIG_CDDA)      += src/backend/dvd/cdda.c
 # TV
 ##############################################################
 SRCS  += src/backend/htsp/htsp.c \
+
+##############################################################
+# TV
+##############################################################
+SRCS  += src/backend/hls/hls.c \
 
 ##############################################################
 # Shoutcast

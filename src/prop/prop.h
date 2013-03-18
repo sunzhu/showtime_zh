@@ -133,6 +133,7 @@ void prop_init(void);
 #define PROP_SUB_TRACK_DESTROY_EXP    0x400
 #define PROP_SUB_SINGLETON            0x800
 #define PROP_SUB_USER_INT             0x1000
+#define PROP_SUB_ALT_PATH             0x2000
 // Remember that flags field is uint16_t in prop_i.h so don't go above 0x8000
 
 
@@ -199,6 +200,8 @@ void prop_setv_ex(prop_sub_t *skipme, prop_t *p, ...);
 #define prop_setv(p...) prop_setv_ex(NULL, p)
 
 void prop_set_ex(prop_t *p, const char *name, int noalloc, ...);
+
+void prop_setdn(prop_sub_t *skipme, prop_t *p, const char *str, ...);
 
 #define prop_set(p, name, type...) \
   prop_set_ex(p, name, __builtin_constant_p(name), type)

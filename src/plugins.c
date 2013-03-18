@@ -30,6 +30,7 @@
 #include "plugins.h"
 #include "settings.h"
 #include "htsmsg/htsmsg_json.h"
+#include "htsmsg/htsmsg_store.h"
 #include "backend/backend.h"
 #include "misc/str.h"
 #include "prop/prop_nodefilter.h"
@@ -81,6 +82,7 @@ LIST_HEAD(plugin_view_entry_list, plugin_view_entry);
 
 static struct plugin_list plugins;
 
+static htsmsg_t *static_apps_state;
 
 typedef struct plugin {
   LIST_ENTRY(plugin) pl_link;
@@ -116,6 +118,7 @@ typedef struct plugin {
   struct plugin_view_entry_list pl_views;
   
   int pl_mark;
+  void (*pl_enable_cb)(int enabled);
 
 } plugin_t;
 
@@ -422,16 +425,16 @@ plugin_props_from_file(prop_t *prop, const char *zipfile)
 {
   char path[200];
   char errbuf[200];
-  char *buf;
+  buf_t *b;
 
   snprintf(path, sizeof(path), "zip://%s/plugin.json", zipfile);
-  buf = fa_load(path, NULL, NULL, errbuf, sizeof(errbuf), NULL, 0, NULL, NULL);
-  if(buf == NULL) {
+  b = fa_load(path, NULL, errbuf, sizeof(errbuf), NULL, 0, NULL, NULL);
+  if(b == NULL) {
     TRACE(TRACE_ERROR, "plugins", "Unable to open %s -- %s", path, errbuf);
     return;
   }
-  htsmsg_t *pm = htsmsg_json_deserialize(buf);
-  free(buf);
+  htsmsg_t *pm = htsmsg_json_deserialize(buf_cstr(b));
+  buf_release(b);
 
   if(pm == NULL)
     return;
@@ -518,17 +521,17 @@ plugin_load(const char *url, char *errbuf, size_t errlen, int force,
 	    int as_installed)
 {
   char ctrlfile[URL_MAX];
-  char *json;
+  buf_t *b;
   htsmsg_t *ctrl;
 
   snprintf(ctrlfile, sizeof(ctrlfile), "%s/plugin.json", url);
 
-  if((json = fa_load(ctrlfile, NULL, NULL, errbuf, errlen, NULL, 0,
-		     NULL, NULL)) == NULL)
+  if((b = fa_load(ctrlfile, NULL, errbuf, errlen, NULL, 0,
+                  NULL, NULL)) == NULL)
     return -1;
 
-  ctrl = htsmsg_json_deserialize(json);
-  free(json);
+  ctrl = htsmsg_json_deserialize(buf_cstr(b));
+  buf_release(b);
   if(ctrl != NULL) {
 
     const char *type = htsmsg_get_str(ctrl, "type");
@@ -682,7 +685,7 @@ plugin_load_installed(void)
 static htsmsg_t *
 repo_get(const char *repo, char *errbuf, size_t errlen)
 {
-  char *result;
+  buf_t *b;
   htsmsg_t *json;
   const char *qargs[32];
   int qp = 0;
@@ -703,13 +706,12 @@ repo_get(const char *repo, char *errbuf, size_t errlen)
     }
   }
   qargs[qp] = 0;
-  result = fa_load_query(repo, NULL, errbuf, errlen, NULL,
-			 qargs, FA_COMPRESSION);
-  if(result == NULL)
+  b = fa_load_query(repo, errbuf, errlen, NULL, qargs, FA_COMPRESSION);
+  if(b == NULL)
     return NULL;
-  
-  json = htsmsg_json_deserialize(result);
-  free(result);
+
+  json = htsmsg_json_deserialize(buf_cstr(b));
+  buf_release(b);
 
   if(json == NULL) {
     snprintf(errbuf, errlen, "Malformed JSON in repository");
@@ -785,7 +787,7 @@ plugin_load_repo(void)
 
     for(pl = LIST_FIRST(&plugins); pl != NULL; pl = next) {
       next = LIST_NEXT(pl, pl_link);
-      if(pl->pl_mark) {
+      if(pl->pl_mark && !pl->pl_enable_cb) {
 	pl->pl_mark = 0;
 	prop_destroy_by_name(plugin_root_repo, pl->pl_id);
       }
@@ -845,7 +847,7 @@ plugins_setup_root_props(void)
   prop_set_string(prop_create(plugin_root_model, "contents"), "plugins");
   prop_set_string(prop_create(plugin_root_model, "type"), "directory");
 
-  prop_link(_p("Plugins"),
+  prop_link(_p("Apps"),
 	    prop_create(prop_create(plugin_root_model, "metadata"), "title"));
 
   pc = prop_concat_create(prop_create(plugin_root_model, "nodes"), 0);
@@ -856,7 +858,7 @@ plugins_setup_root_props(void)
   
   p = prop_create(sta, NULL);
   prop_set_string(prop_create(p, "type"), "directory");
-  prop_link(_p("Browse available plugins"),
+  prop_link(_p("Browse available apps"),
 	    prop_create(prop_create(p, "metadata"), "title"));
   prop_set_string(prop_create(p, "url"), "plugin:repo");
 
@@ -870,7 +872,7 @@ plugins_setup_root_props(void)
 
 
   d = prop_create_root(NULL);
-  prop_link(_p("Installed plugins"),
+  prop_link(_p("Installed apps"),
 	    prop_create(prop_create(d, "metadata"), "title"));
   prop_set_string(prop_create(d, "type"), "separator");
   prop_concat_add_source(pc, inst, d);
@@ -901,10 +903,123 @@ plugins_setup_root_props(void)
 		       SETTINGS_INITIAL_UPDATE, NULL,
 		       settings_generic_save_settings, 
 		       (void *)"pluginconf");
-
-
 }
 
+
+static void install_static(plugin_t *pl);
+
+/**
+ *
+ */
+static void
+plugin_static_event(void *opaque, prop_event_t event, ...)
+{
+  plugin_t *pl = opaque;
+  va_list ap;
+  event_t *e;
+
+  va_start(ap, event);
+
+  switch(event) {
+  default:
+    break;
+
+  case PROP_DESTROYED:
+    prop_unsubscribe(va_arg(ap, prop_sub_t *));
+    break;
+
+  case PROP_EXT_EVENT:
+    e = va_arg(ap, event_t *);
+
+    if(event_is_type(e, EVENT_DYNAMIC_ACTION)) {
+      if(!strcmp(e->e_payload, "install")) {
+	pl->pl_installed = 1;
+	install_static(pl);
+      } else if(!strcmp(e->e_payload, "uninstall")) {
+	pl->pl_installed = 0;
+	prop_destroy(pl->pl_inst_prop);
+	pl->pl_inst_prop = NULL;
+      } else {
+	break;
+      }
+    }
+    pl->pl_enable_cb(pl->pl_installed);
+    htsmsg_delete_field(static_apps_state, pl->pl_id);
+    htsmsg_add_u32(static_apps_state, pl->pl_id, pl->pl_installed);
+    htsmsg_store_save(static_apps_state, "staticapps");
+    update_state(pl);
+    break;
+  }
+}
+
+
+
+/**
+ *
+ */
+static void
+install_static(plugin_t *pl)
+{
+  prop_t *p;
+  p = pl->pl_inst_prop = prop_create(plugin_root_installed, pl->pl_id);
+  prop_set(p, "type", PROP_SET_STRING, "plugin");
+
+  prop_link(pl->pl_status, prop_create(p, "status"));
+
+  prop_t *s = prop_create(plugin_root_repo, pl->pl_id);
+
+  prop_link(prop_create(s, "metadata"), prop_create(p, "metadata"));
+
+  prop_subscribe(PROP_SUB_TRACK_DESTROY | PROP_SUB_SINGLETON,
+		 PROP_TAG_CALLBACK, plugin_static_event, pl,
+		 PROP_TAG_ROOT, p,
+		 PROP_TAG_MUTEX, &plugin_mutex,
+		 NULL);
+}
+
+
+/**
+ *
+ */
+void
+plugin_add_static(const char *id, const char *category,
+		  const char *title, const char *icon,
+		  const char *synopsis,
+		  const char *description,
+		  void (*cb)(int enabled))
+{
+  plugin_t *pl = plugin_find(id);
+  pl->pl_enable_cb = cb;
+  prop_t *p = prop_create(plugin_root_repo, pl->pl_id);
+  prop_set(p, "type", PROP_SET_STRING, "plugin");
+
+  prop_t *metadata = prop_create(p, "metadata");
+  prop_set(metadata, "title", PROP_SET_STRING, title);
+  prop_set(metadata, "category", PROP_SET_STRING, category);
+  prop_set(metadata, "icon", PROP_SET_STRING, icon);
+  prop_set(metadata, "synopsis", PROP_SET_STRING, synopsis);
+  prop_set_string_ex(prop_create(metadata, "description"),
+		     NULL,
+		     description,
+		     PROP_STR_RICH);
+
+  prop_link(pl->pl_status, prop_create(p, "status"));
+
+  pl->pl_installed = htsmsg_get_u32_or_default(static_apps_state, id, 0);
+  update_state(pl);
+
+  prop_subscribe(0,
+		 PROP_TAG_CALLBACK, plugin_static_event, pl,
+		 PROP_TAG_ROOT, p,
+		 PROP_TAG_MUTEX, &plugin_mutex,
+		 NULL);
+
+  if(pl->pl_installed)
+    install_static(pl);
+
+  cb(pl->pl_installed);
+  
+}
 
 
 /**
@@ -915,10 +1030,12 @@ plugins_init2(void)
 {
   hts_mutex_lock(&plugin_mutex);
   plugin_load_installed();
+  static_apps_state = htsmsg_store_load("staticapps") ?: htsmsg_create_map();
+  init_group(INIT_GROUP_STATIC_APPS);
   plugins_view_settings_setup();
   hts_mutex_unlock(&plugin_mutex);
-
 }
+
 
 /**
  *
@@ -1048,17 +1165,17 @@ plugin_install(plugin_t *pl, const char *package)
   prop_set_rstring(pl->pl_statustxt, s);
   rstr_release(s);
 
-  size_t size;
+  buf_t *b = fa_load(package, NULL, errbuf, sizeof(errbuf),
+                     NULL, 0, NULL, NULL);
 
-  char *buf = fa_load(package, &size, NULL,
-		      errbuf, sizeof(errbuf), NULL, 0, NULL, NULL);
-
-  if(buf == NULL) {
+  if(b == NULL) {
     prop_set_string(pl->pl_statustxt, errbuf);
     return -1;
   }
 
-  if(size < 4 ||
+  const uint8_t *buf = buf_c8(b);
+
+  if(b->b_size < 4 ||
      buf[0] != 0x50 || buf[1] != 0x4b || buf[2] != 0x03 || buf[3] != 0x04) {
     s = _("Corrupt plugin bundle");
     prop_set_rstring(pl->pl_statustxt, s);
@@ -1067,7 +1184,7 @@ plugin_install(plugin_t *pl, const char *package)
   }
   
   TRACE(TRACE_INFO, "plugins", "Plugin %s valid ZIP archive %d bytes",
-	pl->pl_id, (int)size);
+	pl->pl_id, (int)b->b_size);
   s = _("Installing");
   prop_set_rstring(pl->pl_statustxt, s);
   rstr_release(s);
@@ -1089,13 +1206,13 @@ plugin_install(plugin_t *pl, const char *package)
 
     TRACE(TRACE_ERROR, "plugins", "Unable to write to %s -- %s",
 	  path, strerror(errno));
-    free(buf);
+    buf_release(b);
     return -1;
   }
 
-  size_t r = write(fd, buf, size);
-  free(buf);
-  if(close(fd) || r != size) {
+  size_t r = write(fd, buf, b->b_size);
+  buf_release(b);
+  if(close(fd) || r != b->b_size) {
     s = _("Disk write error");
     prop_set_rstring(pl->pl_statustxt, s);
     rstr_release(s);
@@ -1141,7 +1258,7 @@ plugin_open_repo(prop_t *page)
   prop_set_int(prop_create(model, "safeui"), 1);
   prop_set_string(prop_create(model, "contents"), "plugins");
 
-  prop_link(_p("Available plugins"),
+  prop_link(_p("Available apps"),
 	    prop_create(prop_create(model, "metadata"), "title"));
 
   pc = prop_concat_create(prop_create(model, "nodes"), 0); // XXX leak
@@ -1243,17 +1360,17 @@ plugin_open_file(prop_t *page, const char *url)
 {
   char path[200];
   char errbuf[200];
-  char *buf;
+  buf_t *b;
 
   snprintf(path, sizeof(path), "zip://%s/plugin.json", url);
-  buf = fa_load(path, NULL, NULL, errbuf, sizeof(errbuf), NULL, 0, NULL, NULL);
-  if(buf == NULL) {
+  b = fa_load(path, NULL, errbuf, sizeof(errbuf), NULL, 0, NULL, NULL);
+  if(b == NULL) {
     nav_open_errorf(page, _("Unable to load plugin.json: %s"), errbuf);
     return;
   }
 
-  htsmsg_t *pm = htsmsg_json_deserialize(buf);
-  free(buf);
+  htsmsg_t *pm = htsmsg_json_deserialize(buf_cstr(b));
+  buf_release(b);
 
   if(pm == NULL) {
     nav_open_errorf(page, _("Unable to load plugin.json: Malformed JSON"));

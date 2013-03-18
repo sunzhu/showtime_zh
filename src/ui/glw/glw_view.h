@@ -122,7 +122,10 @@ typedef struct token {
 #define t_extra_float arg.f
 #define t_extra_int   arg.i
 
-  struct glw_prop_sub *propsubr;
+  union {
+    const struct token_attrib *t_attrib;
+    struct glw_prop_sub *t_propsubr;
+  };
 
   union {
     int  ival;
@@ -134,14 +137,14 @@ typedef struct token {
 
     float float_vec_int[4];
 
-    const struct token_func   *func;
-    const struct token_attrib *attrib;
+    struct {
+      const struct token_func   *func;
+      const void *farg;
+    };
 
     struct glw_event_map *gem;
 
     struct prop *prop;
-
-    struct pixmap *pixmap;
 
     struct {
       rstr_t *rtitle;
@@ -167,7 +170,7 @@ typedef struct token {
 #define t_float_vector_int u.float_vec_int
 #define t_int             u.ival
 #define t_func            u.func
-#define t_attrib          u.attrib
+#define t_func_arg        u.farg
 #define t_gem             u.gem
 #define t_prop            u.prop
 #define t_pixmap          u.pixmap
@@ -249,6 +252,7 @@ typedef struct token_func {
 	    struct token **argv, unsigned int argc);
   void (*ctor)(struct token *self);
   void (*dtor)(glw_root_t *gr, struct token *self);
+  token_t *(*preproc)(glw_root_t *gr, errorinfo_t *ei, token_t *t);
 } token_func_t;
 
 
@@ -286,7 +290,8 @@ const char *token2name(token_t *t);
 
 void glw_view_print_tree(token_t *f, int indent);
 
-int glw_view_function_resolve(token_t *t);
+token_t *glw_view_function_resolve(glw_root_t *gr, errorinfo_t *ei, token_t *t);
+
 
 int glw_view_attrib_resolve(token_t *t);
 
@@ -296,7 +301,7 @@ int glw_view_eval_block(token_t *t, glw_view_eval_context_t *ec);
 
 int glw_view_preproc(glw_root_t *gr, token_t *p, errorinfo_t *ei);
 
-token_t *glw_view_clone_chain(glw_root_t *gr, token_t *src);
+token_t *glw_view_clone_chain(glw_root_t *gr, token_t *src, token_t **lp);
 
 void glw_view_cache_flush(glw_root_t *gr);
 

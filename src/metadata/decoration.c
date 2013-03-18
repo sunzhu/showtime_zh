@@ -242,8 +242,10 @@ update_contents(deco_browse_t *db)
       return;
     db->db_current_contents = DB_CONTENTS_IMAGES;
     prop_set_string(db->db_prop_contents, "images");
-    prop_nf_sort(db->db_pnf, "node.metadata.timestamp", 0, 1, NULL, 0);
-    prop_nf_sort(db->db_pnf, NULL, 0, 2, NULL, 0);
+    if(!(db->db_flags & DECO_FLAGS_NO_AUTO_SORTING)) {
+      prop_nf_sort(db->db_pnf, "node.metadata.timestamp", 0, 1, NULL, 0);
+      prop_nf_sort(db->db_pnf, NULL, 0, 2, NULL, 0);
+    }
     return;
   }
 
@@ -253,14 +255,17 @@ update_contents(deco_browse_t *db)
     db->db_current_contents = DB_CONTENTS_ALBUM;
 
     prop_set_string(db->db_prop_contents, "album");
-    prop_nf_sort(db->db_pnf, "node.metadata.track", 0, 1, NULL, 0);
-    prop_nf_sort(db->db_pnf, NULL, 0, 2, NULL, 0);
 
-    if(!db->db_audio_filter)
-      db->db_audio_filter = 
-	prop_nf_pred_str_add(db->db_pnf, "node.type", 
-			     PROP_NF_CMP_NEQ, "audio", NULL,
-			     PROP_NF_MODE_EXCLUDE);
+    if(!(db->db_flags & DECO_FLAGS_NO_AUTO_SORTING)) {
+      prop_nf_sort(db->db_pnf, "node.metadata.track", 0, 1, NULL, 0);
+      prop_nf_sort(db->db_pnf, NULL, 0, 2, NULL, 0);
+
+      if(!db->db_audio_filter)
+        db->db_audio_filter = 
+          prop_nf_pred_str_add(db->db_pnf, "node.type", 
+                               PROP_NF_CMP_NEQ, "audio", NULL,
+                               PROP_NF_MODE_EXCLUDE);
+    }
     return;
   }
 
@@ -270,8 +275,10 @@ update_contents(deco_browse_t *db)
     db->db_current_contents = DB_CONTENTS_TV_SEASON;
 
     prop_set_string(db->db_prop_contents, "tvseason");
-    prop_nf_sort(db->db_pnf, "node.metadata.episode", 0, 1, NULL, 0);
-    prop_nf_sort(db->db_pnf, NULL, 0, 2, NULL, 0);
+    if(!(db->db_flags & DECO_FLAGS_NO_AUTO_SORTING)) {
+      prop_nf_sort(db->db_pnf, "node.metadata.episode.number", 0, 1, NULL, 0);
+      prop_nf_sort(db->db_pnf, NULL, 0, 2, NULL, 0);
+    }
     return;
   }
 
@@ -1100,12 +1107,11 @@ decoration_init(void)
 static void
 load_nfo(deco_item_t *di)
 {
-  char *buf = fa_load(rstr_get(di->di_url), NULL, NULL, NULL, 0, NULL, 0,
-		      NULL, NULL);
-  if(buf == NULL)
+  buf_t *b = fa_load(rstr_get(di->di_url), NULL, NULL, 0, NULL, 0, NULL, NULL);
+  if(b == NULL)
     return;
 
-  const char *tt = strstr(buf, "http://www.imdb.com/title/tt");
+  const char *tt = strstr(buf_cstr(b), "http://www.imdb.com/title/tt");
   if(tt != NULL) {
     tt += strlen("http://www.imdb.com/title/");
 
@@ -1116,5 +1122,5 @@ load_nfo(deco_item_t *di)
     
     rstr_release(r);
   }
-  free(buf);
+  buf_release(b);
 }

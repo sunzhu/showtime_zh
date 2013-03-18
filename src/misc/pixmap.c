@@ -33,8 +33,12 @@
 #include <libswscale/swscale.h>
 #include <libavutil/mem.h>
 #include <libavutil/common.h>
+#include <libavutil/pixdesc.h>
 #endif
 
+//#define DIV255(x) ((x) / 255)
+//#define DIV255(x) ((x) >> 8)
+#define DIV255(x) (((((x)+255)>>8)+(x))>>8)
 
 /**
  *
@@ -49,38 +53,7 @@ color_is_not_gray(uint32_t rgb)
 }
 
 
-/**
- *
- */
-static int 
-bytes_per_pixel(pixmap_type_t fmt)
-{
-  switch(fmt) {
-  case PIXMAP_BGR32:
-    return 4;
 
-  case PIXMAP_RGB24:
-    return 3;
-
-  case PIXMAP_IA:
-    return 2;
-    
-  case PIXMAP_I:
-    return 1;
-
-  default:
-    return 0;
-  }
-}
-
-
-
-static void *
-pm_pixel(pixmap_t *pm, unsigned int x, unsigned int y)
-{
-  return pm->pm_data + (y + pm->pm_margin) * pm->pm_linesize +
-    (x + pm->pm_margin) * bytes_per_pixel(pm->pm_type);
-}
 
 /**
  *
@@ -156,6 +129,119 @@ pixmap_create(int width, int height, pixmap_type_t type, int margin)
   return pm;
 }
 
+
+/**
+ *
+ */
+pixmap_t *
+pixmap_create_vector(int width, int height)
+{
+  pixmap_t *pm = calloc(1, sizeof(pixmap_t));
+  pm->pm_refcount = 1;
+  pm->pm_capacity = 256;
+  pm->pm_width = width;
+  pm->pm_height = height;
+  pm->pm_data = malloc(pm->pm_capacity * sizeof(int32_t));
+  if(pm->pm_data == NULL) {
+    free(pm);
+    return NULL;
+  }
+  pm->pm_type = PIXMAP_VECTOR;
+  return pm;
+}
+
+
+/**
+ *
+ */
+static const char vec_cmd_len[] = {
+  [VC_SET_FILL_ENABLE] = 1,
+  [VC_SET_FILL_COLOR] = 1,
+  [VC_SET_STROKE_WIDTH] = 1,
+  [VC_SET_STROKE_COLOR] = 1,
+  [VC_MOVE_TO] = 2,
+  [VC_LINE_TO] = 2,
+  [VC_CUBIC_TO] = 6,
+};
+
+
+/**
+ *
+ */
+static void
+vec_resize(pixmap_t *pm, vec_cmd_t cmd)
+{
+  int len = vec_cmd_len[cmd] + 1;
+  if(pm->pm_used + len > pm->pm_capacity) {
+    pm->pm_capacity = 2 * pm->pm_capacity + len + 16;
+    pm->pm_data = realloc(pm->pm_data, pm->pm_capacity * sizeof(float));
+  }
+}
+
+
+/**
+ *
+ */
+void
+vec_emit_0(pixmap_t *pm, vec_cmd_t cmd)
+{
+  vec_resize(pm, cmd);
+  pm->pm_int[pm->pm_used++] = cmd;
+}
+
+
+/**
+ *
+ */
+void
+vec_emit_i1(pixmap_t *pm, vec_cmd_t cmd, int32_t i)
+{
+  vec_resize(pm, cmd);
+
+  switch(cmd) {
+  case VC_SET_FILL_COLOR:
+  case VC_SET_STROKE_COLOR:
+    pm->pm_flags |= PIXMAP_COLORIZED;
+    break;
+  default:
+    break;
+  }
+
+  pm->pm_int[pm->pm_used++] = cmd;
+  pm->pm_int[pm->pm_used++] = i;
+}
+
+
+/**
+ *
+ */
+void
+vec_emit_f1(pixmap_t *pm, vec_cmd_t cmd, const float *a)
+{
+  vec_resize(pm, cmd);
+  pm->pm_int[pm->pm_used++] = cmd;
+  pm->pm_flt[pm->pm_used++] = a[0];
+  pm->pm_flt[pm->pm_used++] = a[1];
+}
+
+
+/**
+ *
+ */
+void
+vec_emit_f3(pixmap_t *pm, vec_cmd_t cmd, const float *a, const float *b, const float *c)
+{
+  vec_resize(pm, cmd);
+  int ptr = pm->pm_used;
+  pm->pm_int[ptr+0] = cmd;
+  pm->pm_flt[ptr+1] = a[0];
+  pm->pm_flt[ptr+2] = a[1];
+  pm->pm_flt[ptr+3] = b[0];
+  pm->pm_flt[ptr+4] = b[1];
+  pm->pm_flt[ptr+5] = c[0];
+  pm->pm_flt[ptr+6] = c[1];
+  pm->pm_used = ptr + 7;
+}
 
 
 /**
@@ -475,9 +561,6 @@ composite_GRAY8_on_BGR32(uint8_t *dst_, const uint8_t *src,
 
 #else
 
-//#define DIV255(x) ((x) / 255)
-//#define DIV255(x) ((x) >> 8)
-#define DIV255(x) (((((x)+255)>>8)+(x))>>8)
 
 
 static void
@@ -762,6 +845,240 @@ pixmap_box_blur(pixmap_t *pm, int boxw, int boxh)
 }
 
 
+
+/**
+ *
+ */
+static uint32_t
+mix_bgr32(uint32_t src, uint32_t dst)
+{
+  int SR =  src        & 0xff;
+  int SG = (src >> 8)  & 0xff;
+  int SB = (src >> 16) & 0xff;
+  int SA = (src >> 24) & 0xff;
+  
+  int DR =  dst        & 0xff;
+  int DG = (dst >> 8)  & 0xff;
+  int DB = (dst >> 16) & 0xff;
+  int DA = (dst >> 24) & 0xff;
+  
+  int FA = SA + DIV255((255 - SA) * DA);
+
+  if(FA == 0) {
+    dst = 0;
+  } else {
+    if(FA != 255)
+      SA = SA * 255 / FA;
+    
+    DA = 255 - SA;
+    
+    DB = DIV255(SB * SA + DB * DA);
+    DG = DIV255(SG * SA + DG * DA);
+    DR = DIV255(SR * SA + DR * DA);
+    
+    dst = FA << 24 | DB << 16 | DG << 8 | DR;
+  }
+  return dst;
+}
+
+
+
+/**
+ *
+ */
+static void
+drop_shadow_rgba(uint8_t *D, const uint32_t *a, const uint32_t *b,
+                 int width, int boxw, int m)
+{
+  uint32_t *d = (uint32_t *)D;
+
+  int x;
+  unsigned int v;
+  int s;
+  for(x = 0; x < boxw; x++) {
+    const int x1 = MIN(x + boxw, width - 1);
+    const int x2 = 0;
+
+    v = b[x1 + 0] + a[x2 + 0] - b[x2 + 0] - a[x1 + 0];
+    s = (v * m) >> 16;
+
+    *d = mix_bgr32(*d, s << 24);
+    d++;
+  }
+
+  for(; x < width - boxw; x++) {
+    const int x1 = (x + boxw);
+    const int x2 = (x - boxw);
+
+    v = b[x1 + 0] + a[x2 + 0] - b[x2 + 0] - a[x1 + 0];
+    s = (v * m) >> 16;
+    *d = mix_bgr32(*d, s << 24);
+    d++;
+  }
+
+  for(; x < width; x++) {
+    const int x1 = (width - 1);
+    const int x2 = (x - boxw);
+
+    v = b[x1 + 0] + a[x2 + 0] - b[x2 + 0] - a[x1 + 0];
+    s = (v * m) >> 16;
+    *d = mix_bgr32(*d, s << 24);
+    d++;
+  }
+}
+
+
+/**
+ *
+ */
+static void
+mix_ia(uint8_t *src, uint8_t *dst, int DR, int DA)
+{
+  int SR = src[0];
+  int SA = src[1];
+  
+  //  int DR = dst[0];
+  //  int DA = dst[1];
+  
+  int FA = SA + DIV255((255 - SA) * DA);
+
+  if(FA == 0) {
+    dst[0] = 0;
+    dst[1] = 0;
+  } else {
+    if(FA != 255)
+      SA = SA * 255 / FA;
+    
+    DA = 255 - SA;
+    
+    DR = DIV255(SR * SA + DR * DA);
+    dst[0] = DR;
+    dst[1] = FA;
+  }
+}
+
+/**
+ *
+ */
+static void
+drop_shadow_ia(uint8_t *d, const uint32_t *a, const uint32_t *b,
+               int width, int boxw, int m)
+{
+
+  int x;
+  unsigned int v;
+  int s;
+  for(x = 0; x < boxw; x++) {
+    const int x1 = 2 * MIN(x + boxw, width - 1);
+    const int x2 = 0;
+
+    v = b[x1 + 0] + a[x2 + 0] - b[x2 + 0] - a[x1 + 0];
+    s = (v * m) >> 16;
+
+    mix_ia(d, d, 0, s);
+    d+=2;
+  }
+
+  for(; x < width - boxw; x++) {
+    const int x1 = 2 * (x + boxw);
+    const int x2 = 2 * (x - boxw);
+
+    v = b[x1 + 0] + a[x2 + 0] - b[x2 + 0] - a[x1 + 0];
+    s = (v * m) >> 16;
+    mix_ia(d, d, 0, s);
+    d+=2;
+  }
+
+  for(; x < width; x++) {
+    const int x1 = 2 * (width - 1);
+    const int x2 = 2 * (x - boxw);
+
+    v = b[x1 + 0] + a[x2 + 0] - b[x2 + 0] - a[x1 + 0];
+    s = (v * m) >> 16;
+    mix_ia(d, d, 0, s);
+    d+=2;
+  }
+}
+
+
+/**
+ *
+ */
+void
+pixmap_drop_shadow(pixmap_t *pm, int boxw, int boxh)
+{
+  const uint8_t *s;
+  unsigned int *tmp, *t;
+  int ach;   // Alpha channel
+  int z;
+  int w = pm->pm_width;
+  int h = pm->pm_height;
+  int ls = pm->pm_linesize;
+  int x, y;
+
+  assert(boxw > 0);
+  assert(boxh > 0);
+
+  boxw = MIN(boxw, w);
+
+  void (*fn)(uint8_t *dst, const uint32_t *a, const uint32_t *b, int width,
+	     int boxw, int m);
+
+  switch(pm->pm_type) {
+  case PIXMAP_BGR32:
+    ach = 3;
+    z = 4;
+    fn = drop_shadow_rgba;
+    break;
+
+  case PIXMAP_IA:
+    ach = 1;
+    z = 2;
+    fn = drop_shadow_ia;
+    break;
+
+  default:
+    return;
+  }
+
+  tmp = malloc(pm->pm_width * pm->pm_height * sizeof(unsigned int));
+  if(tmp == NULL)
+    return;
+
+  s = pm->pm_data + ach;
+  t = tmp;
+
+  for(y = 0; y < boxh; y++)
+    for(x = 0; x < w; x++)
+      *t++ = 0;
+    
+  for(; y < h; y++) {
+
+    s = pm->pm_data + (y - boxh) * ls + ach;
+    for(x = 0; x < boxw; x++)
+      *t++ = 0;
+    
+    for(; x < w; x++) {
+      t[0] = *s + t[-1] + t[-w] - t[-w - 1];
+      s += z;
+      t++;
+    }
+  }
+  
+  int m = 65536 / ((boxw * 2 + 1) * (boxh * 2 + 1));
+
+  for(y = 0; y < h; y++) {
+    uint8_t *d = pm->pm_data + y * ls;
+
+    const unsigned int *a = tmp + pm->pm_width * MAX(0, y - boxh);
+    const unsigned int *b = tmp + pm->pm_width * MIN(h - 1, y + boxh);
+    fn(d, a, b, w, boxw, m);
+  }
+  free(tmp);
+}
+
+
+
 #if ENABLE_LIBAV
 
 /**
@@ -812,9 +1129,17 @@ pixmap_rescale_swscale(const AVPicture *pict, int src_pix_fmt,
     break;
   }
 
+  const int swscale_debug = 0;
+
+  if(swscale_debug)
+    TRACE(TRACE_DEBUG, "info", "Converting %d x %d [%s] to %d x %d [%s]",
+	  src_w, src_h, av_get_pix_fmt_name(src_pix_fmt),
+	  dst_w, dst_h, av_get_pix_fmt_name(dst_pix_fmt));
+  
   sws = sws_getContext(src_w, src_h, src_pix_fmt, 
 		       dst_w, dst_h, dst_pix_fmt,
-		       SWS_LANCZOS, NULL, NULL, NULL);
+		       SWS_LANCZOS | 
+		       (swscale_debug ? SWS_PRINT_INFO : 0), NULL, NULL, NULL);
   if(sws == NULL)
     return NULL;
 
@@ -921,12 +1246,11 @@ pixmap_from_avpic(AVPicture *pict, int pix_fmt,
 		  int req_w0, int req_h0,
 		  const image_meta_t *im)
 {
-  int x, y, i;
+  int i;
   int need_format_conv = 0;
   int want_rescale = 0; // Want rescaling cause it looks better
   int must_rescale = 0; // Must rescale cause we cant display it otherwise
-  uint32_t *palette, *u32p;
-  uint8_t *map;
+  uint32_t *palette;
   pixmap_type_t fmt = 0;
   pixmap_t *pm;
 
@@ -967,46 +1291,15 @@ pixmap_from_avpic(AVPicture *pict, int pix_fmt,
     break;
 
   case PIX_FMT_PAL8:
-    /* FFmpeg can not convert palette alpha values so we need to
-       do this ourselfs */
-    
-    /* It seems that some png implementation leavs the color set even
-       if alpha is set to zero. This resluts in ugly aliasing effects
-       when scaling image in opengl, so if alpha == 0, clear RGB */
-
-    map = pict->data[1];
-    for(i = 0; i < 4*256; i+=4) {
-      if(map[i + 3] == 0) {
-	map[i + 0] = 0;
-	map[i + 1] = 0;
-	map[i + 2] = 0;
-      }
-    }
-
-    map = pict->data[0];
     palette = (uint32_t *)pict->data[1];
 
-    AVPicture pict2;
-    
-    memset(&pict2, 0, sizeof(pict2));
-    
-    pict2.data[0] = av_malloc(src_w * src_h * 4);
-    pict2.linesize[0] = src_w * 4;
-
-    u32p = (void *)pict2.data[0];
-
-    for(y = 0; y < src_h; y++) {
-      for(x = 0; x < src_w; x++) {
-	*u32p++ = palette[map[x]];
-      }
-      map += pict->linesize[0];
+    for(i = 0; i < 256; i++) {
+      if((palette[i] >> 24) == 0)
+	palette[i] = 0;
     }
 
-    pm = pixmap_from_avpic(&pict2, PIX_FMT_BGRA, 
-			   src_w, src_h, req_w0, req_h0, im);
-
-    av_free(pict2.data[0]);
-    return pm;
+    need_format_conv = 1;
+    break;
   }
 
   int req_w = req_w0, req_h = req_h0;
@@ -1131,9 +1424,8 @@ pixmap_decode(pixmap_t *pm, const image_meta_t *im,
     snprintf(errbuf, errlen, "No codec for image format");
     return NULL;
   }
-  ctx = avcodec_alloc_context3(NULL);
-  ctx->codec_id   = codec->id;
-  ctx->codec_type = codec->type;
+
+  ctx = avcodec_alloc_context3(codec);
   ctx->lowres = lowres;
 
   if(avcodec_open2(ctx, codec, NULL) < 0) {
@@ -1149,7 +1441,6 @@ pixmap_decode(pixmap_t *pm, const image_meta_t *im,
   av_init_packet(&avpkt);
   avpkt.data = pm->pm_data;
   avpkt.size = pm->pm_size;
-
   int r = avcodec_decode_video2(ctx, frame, &got_pic, &avpkt);
 
   if(r < 0 || ctx->width == 0 || ctx->height == 0) {
@@ -1157,7 +1448,8 @@ pixmap_decode(pixmap_t *pm, const image_meta_t *im,
     avcodec_close(ctx);
     av_free(ctx);
     av_free(frame);
-    snprintf(errbuf, errlen, "Unable to decode image");
+    snprintf(errbuf, errlen, "Unable to decode image of size (%d x %d)",
+             ctx->width, ctx->height);
     return NULL;
   }
 #if 0

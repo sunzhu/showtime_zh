@@ -44,7 +44,7 @@
 
 static hts_mutex_t metadata_mutex;
 static prop_courier_t *metadata_courier;
-static struct metadata_source_list metadata_sources[METADATA_TYPE_num];
+static struct metadata_source_queue metadata_sources[METADATA_TYPE_num];
 prop_t *metadata_sources_settings[METADATA_TYPE_num];
 
 static void metadata_filename_to_title(const char *filename,
@@ -711,7 +711,7 @@ static metadata_source_t *
 get_ms(metadata_type_t type, int id)
 {
   metadata_source_t *ms;
-  LIST_FOREACH(ms, &metadata_sources[type], ms_link)
+  TAILQ_FOREACH(ms, &metadata_sources[type], ms_link)
     if(ms->ms_enabled && ms->ms_id == id)
       break;
   return ms;
@@ -955,7 +955,7 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
   metadata_t *md = NULL;
   int64_t rval;
   metadata_source_t *ms;
-  struct metadata_source_list *msl = &metadata_sources[mlv->mlv_type];
+  struct metadata_source_queue *msl = &metadata_sources[mlv->mlv_type];
   int r;
   int fixed_ds;
   const char *sq = rstr_get(mlv->mlv_custom_query);
@@ -974,7 +974,7 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
     goto bad;
   }
 
-  LIST_FOREACH(ms, &metadata_sources[mlv->mlv_type], ms_link)
+  TAILQ_FOREACH(ms, &metadata_sources[mlv->mlv_type], ms_link)
     ms->ms_mark = 0;
 
  redo:
@@ -997,7 +997,7 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
 
   if(md == NULL || !md->md_preferred) {
 
-    LIST_FOREACH(ms, &metadata_sources[mlv->mlv_type], ms_link) {
+    TAILQ_FOREACH(ms, &metadata_sources[mlv->mlv_type], ms_link) {
 
       /* Skip disabled datasources */
       if(!ms->ms_enabled)
@@ -1306,7 +1306,7 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
   }
 
   rstr_release(title);
-  LIST_FOREACH(ms, &metadata_sources[mlv->mlv_type], ms_link)
+  TAILQ_FOREACH(ms, &metadata_sources[mlv->mlv_type], ms_link)
     ms->ms_mark = 0;
 
   return 0;
@@ -1440,7 +1440,7 @@ load_sources(metadata_lazy_video_t *mlv)
   prop_link(_p("Automatic"), prop_create(c, "title"));
   pv = prop_vec_append(pv, c);
 
-  LIST_FOREACH(ms, &metadata_sources[mlv->mlv_type], ms_link) {
+  TAILQ_FOREACH(ms, &metadata_sources[mlv->mlv_type], ms_link) {
     if(!ms->ms_enabled)
       continue;
     c = prop_create_root(ms->ms_name);
@@ -1484,7 +1484,7 @@ mlv_set_source(metadata_lazy_video_t *mlv, const char *name)
       id = 1;
     } else {
       metadata_source_t *ms = NULL;
-      LIST_FOREACH(ms, &metadata_sources[mlv->mlv_type], ms_link) {
+      TAILQ_FOREACH(ms, &metadata_sources[mlv->mlv_type], ms_link) {
 	if(ms->ms_enabled && !strcmp(ms->ms_name, name)) {
 	  id = ms->ms_id;
 	  break;
@@ -1859,6 +1859,10 @@ metadata_bind_video_info(rstr_t *url, rstr_t *filename,
 
   pv = prop_vec_append(pv, mlv->mlv_info);
 
+  // We're gonna start binding stuff now which ties us in
+  // global data structures, so we need to lock
+
+  hts_mutex_lock(&metadata_mutex);
 
   // Metadata source selection
 
@@ -1981,6 +1985,8 @@ metadata_bind_video_info(rstr_t *url, rstr_t *filename,
   prop_vec_release(pv);
 
   prop_ref_dec(options);
+
+  hts_mutex_unlock(&metadata_mutex);
 
   return mlv;
 }
@@ -2518,6 +2524,7 @@ metadata_add_source(const char *name, const char *description,
   metadb_close(db);
 
   metadata_source_t *ms = calloc(1, sizeof(metadata_source_t));
+  ms->ms_type = type;
   ms->ms_prio = prio;
   ms->ms_name = strdup(name);
   ms->ms_description = strdup(description);
@@ -2527,9 +2534,13 @@ metadata_add_source(const char *name, const char *description,
   ms->ms_partial_props = partials;
   ms->ms_complete_props = complete;
 
+  hts_mutex_lock(&metadata_mutex);
+
   ms->ms_settings = 
     settings_add_dir_cstr(metadata_sources_settings[type],
 			  ms->ms_description, NULL, NULL, NULL, NULL);
+
+  prop_tag_set(ms->ms_settings, metadata_courier, ms);
 
   settings_create_bool(ms->ms_settings, "enabled", _p("Enabled"),
 		       ms->ms_enabled, NULL, ms_set_enable, ms,
@@ -2537,8 +2548,11 @@ metadata_add_source(const char *name, const char *description,
 
   ms_set_enable(ms, enabled);
 
-  hts_mutex_lock(&metadata_mutex);
-  LIST_INSERT_SORTED(&metadata_sources[type], ms, ms_link, ms_prio_cmp);
+  TAILQ_INSERT_SORTED(&metadata_sources[type], ms, ms_link, ms_prio_cmp);
+
+  metadata_source_t *n = TAILQ_NEXT(ms, ms_link);
+  prop_move(ms->ms_settings, n ? n->ms_settings : NULL);
+
   hts_mutex_unlock(&metadata_mutex);
 
   return ms;
@@ -2546,6 +2560,79 @@ metadata_add_source(const char *name, const char *description,
  err:
   metadb_close(db);
   return NULL;
+}
+
+
+
+/**
+ *
+ */
+static void
+class_handle_move(metadata_source_t *ms, metadata_source_t *before)
+{
+  int type = ms->ms_type;
+
+  TAILQ_REMOVE(&metadata_sources[type], ms, ms_link);
+
+  if(before) {
+    TAILQ_INSERT_BEFORE(before, ms, ms_link);
+  } else {
+    TAILQ_INSERT_TAIL(&metadata_sources[type], ms, ms_link);
+  }
+
+  void *db = metadb_get();
+
+  int prio = 1;
+  TAILQ_FOREACH(ms, &metadata_sources[type], ms_link)  {
+    sqlite3_stmt *stmt;
+    int rc;
+
+    ms->ms_prio = prio++;
+
+    rc = db_prepare(db, &stmt,
+		    "UPDATE datasource "
+                    "SET prio = ?1 "
+                    "WHERE "
+                    "id = ?2");
+
+    if(rc != SQLITE_OK) {
+      TRACE(TRACE_ERROR, "SQLITE", "SQL Error at %s:%d",
+	    __FUNCTION__, __LINE__);
+    } else {
+      sqlite3_bind_int(stmt, 1, ms->ms_prio);
+      sqlite3_bind_int(stmt, 2, ms->ms_id);
+      
+      db_step(stmt);
+      sqlite3_finalize(stmt);
+    }
+  }
+  metadb_close(db);
+}
+
+
+/**
+ *
+ */
+static void
+provider_class_node_sub(void *opaque, prop_event_t event, ...)
+{
+  prop_t *p1, *p2;
+  va_list ap;
+  va_start(ap, event);
+
+  switch(event) {
+  case PROP_REQ_MOVE_CHILD:
+    p1 = va_arg(ap, prop_t *);
+    p2 = va_arg(ap, prop_t *);
+    class_handle_move(prop_tag_get(p1, metadata_courier),
+                      p2 ? prop_tag_get(p2, metadata_courier) : NULL);
+    prop_move(p1, p2);
+    break;
+
+  default:
+    break;
+  }
+  va_end(ap);
 }
 
 
@@ -2565,8 +2652,16 @@ add_provider_class(prop_concat_t *pc,
 
   prop_link(title, prop_create(prop_create(d, "metadata"), "title"));
   prop_set_string(prop_create(d, "type"), "separator");
-  
+
+  prop_t *n = prop_create(c, "nodes");
+
   prop_concat_add_source(pc, prop_create(c, "nodes"), d);
+
+  prop_subscribe(0,
+                 PROP_TAG_CALLBACK, provider_class_node_sub, NULL,
+                 PROP_TAG_COURIER, metadata_courier,
+                 PROP_TAG_ROOT, n,
+                 NULL);
 }
 
 
@@ -2581,6 +2676,12 @@ mlp_dispatch(void)
     TAILQ_REMOVE(&mlpqueue, mlp, mlp_link);
     mlp->mlp_queued = 0;
     mlp->mlp_class->mlc_load(mlp);
+
+    // This is so lame.
+    // mlc_load should be able to be called unlocked
+    hts_mutex_unlock(&metadata_mutex);
+    usleep(1);
+    hts_mutex_lock(&metadata_mutex);
   }
 }
 

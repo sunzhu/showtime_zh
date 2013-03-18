@@ -337,7 +337,8 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
       if(mb->mb_data_type == MB_VIDEO) {
 	mb->mb_drive_clock = 1;
-	mb->mb_delta = fctx->start_time;
+        if(fctx->start_time != AV_NOPTS_VALUE)
+          mb->mb_delta = fctx->start_time;
       }
 
       mb->mb_keyframe = !!(pkt.flags & AV_PKT_FLAG_KEY);
@@ -733,7 +734,8 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
    */
   sub_scanner_t *ss =
     sub_scanner_create(url, mp->mp_prop_subtitle_tracks, &va,
-		       fctx->duration / 1000000);
+		       fctx->duration != AV_NOPTS_VALUE ? 
+                       fctx->duration / 1000000 : 0);
 
   /**
    * Init codec contexts
