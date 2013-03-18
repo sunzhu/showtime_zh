@@ -369,16 +369,15 @@ hc_logfile(http_connection_t *hc, const char *remain, void *opaque,
   if(remain == NULL)
     return 400;
   const int n = atoi(remain);
-  size_t size;
   const char *mode = http_arg_get_req(hc, "mode");
 
   char p1[500];
   snprintf(p1, sizeof(p1), "%s/log/showtime.log.%d", gconf.cache_path, n);
-  char *buf = fa_load(p1, &size, NULL, NULL, 0, NULL, 0, NULL, NULL);
-  
+  buf_t *buf = fa_load(p1, NULL, NULL, 0, NULL, 0, NULL, NULL);
+
   if(buf == NULL)
     return 404;
-  htsbuf_append_prealloc(&out, buf, size);
+  htsbuf_append_buf(&out, buf);
   if (mode != NULL && !strcmp(mode, "download")) {
     snprintf(p1, sizeof(p1), "attachment; filename=\"showtime.log.%d\"", n);
     http_set_response_hdr(hc, "Content-Disposition", p1);
@@ -481,6 +480,41 @@ hc_hexdump(http_connection_t *hc, const char *remain, void *opaque,
 
 
 
+
+/**
+ *
+ */
+static int
+hc_echo_init(http_connection_t *hc)
+{
+  TRACE(TRACE_DEBUG, "WS", "Connected to echo");
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
+hc_echo_data(http_connection_t *hc, int opcode, 
+	     uint8_t *data, size_t len, void *opaque)
+{
+  websocket_send(hc, opcode, data, len);
+  TRACE(TRACE_DEBUG, "WS", "Echoing %d bytes (opcode:%d)", len, opcode);
+  return 0;
+}
+
+
+/**
+ *
+ */
+static void
+hc_echo_fini(http_connection_t *hc, void *opaque)
+{
+  TRACE(TRACE_DEBUG, "WS", "Disconnected from echo");
+}
+
+
 /**
  *
  */
@@ -497,6 +531,8 @@ httpcontrol_init(void)
   http_path_add("/showtime/diag", NULL, hc_diagnostics, 1);
   http_path_add("/showtime/logfile", NULL, hc_logfile, 0);
   http_path_add("/showtime/replace", NULL, hc_binreplace, 1);
+  http_add_websocket("/showtime/ws/echo",
+		     hc_echo_init, hc_echo_data, hc_echo_fini);
 }
 
 INITME(INIT_GROUP_API, httpcontrol_init);

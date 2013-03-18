@@ -25,6 +25,7 @@
 #include "misc/str.h"
 #include "fileaccess/fileaccess.h"
 #include "networking/http_server.h"
+#include "htsmsg/htsmsg_store.h"
 
 static void nls_init(prop_t *parent, htsmsg_t *store);
 
@@ -474,16 +475,16 @@ static void
 nls_load_lang(const char *path)
 {
   char errbuf[200];
-  char *data = fa_load(path, NULL, NULL, errbuf, sizeof(errbuf), NULL, 0,
-		       NULL, NULL);
+  buf_t *b = fa_load(path, NULL, errbuf, sizeof(errbuf), NULL, 0, NULL, NULL);
 
-  if(data == NULL) {
+  if(b == NULL) {
     TRACE(TRACE_ERROR, "NLS", "Unable to load %s -- %s", path, errbuf);
     return;
   }
 
-  nls_load_from_data(data);
-  free(data);
+  buf_make_writable(b);
+  nls_load_from_data(buf_str(b));
+  buf_release(b);
 }
 
 
@@ -513,13 +514,13 @@ nls_lang_metadata(const char *path, char *errbuf, size_t errlen,
 		  char *language, size_t languagesize,
 		  char *native, size_t nativesize)
 {
-  char *data = fa_load(path, NULL, NULL, errbuf, errlen, NULL, 0,
-		       NULL, NULL);
+  buf_t *b = fa_load(path, NULL, errbuf, errlen, NULL, 0, NULL, NULL);
   char *s;
   const char *s2;
-  if(data == NULL)
+  if(b == NULL)
     return -1;
 
+  char *data = buf_str(b);
 
   *language = 0;
   *native = 0;
@@ -551,7 +552,7 @@ nls_lang_metadata(const char *path, char *errbuf, size_t errlen,
       break;
   }
 
-  free(data);
+  buf_release(b);
 
   if(*language && *native)
     return 0;

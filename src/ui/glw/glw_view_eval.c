@@ -325,7 +325,7 @@ token_resolve_ex(glw_view_eval_context_t *ec, token_t *t, int type)
   
   if(t->type == TOKEN_PROPERTY_SUBSCRIPTION) {
     ec->dynamic_eval |= GLW_VIEW_DYNAMIC_EVAL_PROP;
-    t = t->propsubr->gps_token ?: eval_alloc(t, ec, TOKEN_VOID);
+    t = t->t_propsubr->gps_token ?: eval_alloc(t, ec, TOKEN_VOID);
   }
   return t;
 }
@@ -1073,7 +1073,8 @@ clone_eval(glw_clone_t *c)
 {
   sub_cloner_t *sc = c->c_sc;
   glw_view_eval_context_t n;
-  token_t *body = glw_view_clone_chain(c->c_w->glw_root, sc->sc_cloner_body);
+  token_t *body = glw_view_clone_chain(c->c_w->glw_root, sc->sc_cloner_body,
+				       NULL);
   const glw_class_t *gc = c->c_w->glw_class;
 
   if(gc->gc_freeze != NULL)
@@ -1129,7 +1130,7 @@ clone_req_move(sub_cloner_t *sc, glw_t *w, const glw_move_op_t *mop)
   if(steps == 0)
     return;
 
-  w->glw_parent->glw_flags2 &= ~GLW2_FLOATING_FOCUS;
+  w->glw_parent->glw_flags &= ~GLW_FLOATING_FOCUS;
 
   if(steps < 0) {
     glw_t *x;
@@ -1492,13 +1493,13 @@ prop_callback_cloner(void *opaque, prop_event_t event, ...)
   case PROP_SET_INT:
   case PROP_SET_FLOAT:
     t = prop_callback_alloc_token(gr, gps, TOKEN_VOID);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     rpn = gps->gps_rpn;
     break;
 
   case PROP_SET_DIR:
     t = prop_callback_alloc_token(gr, gps, TOKEN_DIRECTORY);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     rpn = gps->gps_rpn;
     break;
 
@@ -1553,7 +1554,7 @@ prop_callback_cloner(void *opaque, prop_event_t event, ...)
 
   case PROP_SET_RLINK:
     t = prop_callback_alloc_token(gr, gps, TOKEN_LINK);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     t->t_link_rtitle = rstr_dup(va_arg(ap, rstr_t *));
     t->t_link_rurl   = rstr_dup(va_arg(ap, rstr_t *));
     rpn = gps->gps_rpn;
@@ -1607,13 +1608,13 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
   switch(event) {
   case PROP_SET_VOID:
     t = prop_callback_alloc_token(gr, gps, TOKEN_VOID);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     rpn = gps->gps_rpn;
     break;
 
   case PROP_SET_RSTRING:
     t = prop_callback_alloc_token(gr, gps, TOKEN_RSTRING);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     t->t_rstring =rstr_dup(va_arg(ap, rstr_t *));
     (void)va_arg(ap, prop_t *);
     t->t_rstrtype = va_arg(ap, prop_str_type_t);
@@ -1622,21 +1623,21 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
 
   case PROP_SET_CSTRING:
     t = prop_callback_alloc_token(gr, gps, TOKEN_CSTRING);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     t->t_cstring = va_arg(ap, const char *);
     rpn = gps->gps_rpn;
     break;
 
   case PROP_SET_INT:
     t = prop_callback_alloc_token(gr, gps, TOKEN_INT);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     t->t_int = va_arg(ap, int);
     rpn = gps->gps_rpn;
     break;
 
   case PROP_SET_FLOAT:
     t = prop_callback_alloc_token(gr, gps, TOKEN_FLOAT);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     t->t_float = va_arg(ap, double);
     (void)va_arg(ap, prop_t *);
     t->t_float_how = va_arg(ap, int);
@@ -1645,7 +1646,7 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
 
   case PROP_SET_RLINK:
     t = prop_callback_alloc_token(gr, gps, TOKEN_LINK);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     t->t_link_rtitle = rstr_dup(va_arg(ap, rstr_t *));
     t->t_link_rurl   = rstr_dup(va_arg(ap, rstr_t *));
     rpn = gps->gps_rpn;
@@ -1653,7 +1654,7 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
 
   case PROP_SET_DIR:
     t = prop_callback_alloc_token(gr, gps, TOKEN_PROPERTY_REF);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     rpn = gps->gps_rpn;
     t->t_prop = prop_ref_inc(va_arg(ap, prop_t *));
     break;
@@ -1752,7 +1753,7 @@ prop_callback_counter(void *opaque, prop_event_t event, ...)
   }
 
   t = prop_callback_alloc_token(gr, gps, TOKEN_INT);
-  t->propsubr = gps;
+  t->t_propsubr = gps;
   t->t_int = sc->sc_entries;
 
   rpn = gps->gps_rpn;
@@ -2050,14 +2051,14 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
   case PROP_SET_VOID:
     vectorizer_clean(gr, sv);
     t = prop_callback_alloc_token(gr, gps, TOKEN_VOID);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     rpn = gps->gps_rpn;
     break;
 
   case PROP_SET_RSTRING:
     vectorizer_clean(gr, sv);
     t = prop_callback_alloc_token(gr, gps, TOKEN_RSTRING);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     t->t_rstring =rstr_dup(va_arg(ap, rstr_t *));
     (void)va_arg(ap, prop_t *);
     t->t_rstrtype = va_arg(ap, prop_str_type_t);
@@ -2067,7 +2068,7 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
   case PROP_SET_CSTRING:
     vectorizer_clean(gr, sv);
     t = prop_callback_alloc_token(gr, gps, TOKEN_CSTRING);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     t->t_cstring = va_arg(ap, const char *);
     rpn = gps->gps_rpn;
     break;
@@ -2075,7 +2076,7 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
   case PROP_SET_INT:
     vectorizer_clean(gr, sv);
     t = prop_callback_alloc_token(gr, gps, TOKEN_INT);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     t->t_int = va_arg(ap, int);
     rpn = gps->gps_rpn;
     break;
@@ -2083,7 +2084,7 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
   case PROP_SET_FLOAT:
     vectorizer_clean(gr, sv);
     t = prop_callback_alloc_token(gr, gps, TOKEN_FLOAT);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     t->t_float = va_arg(ap, double);
     (void)va_arg(ap, prop_t *);
     t->t_float_how = va_arg(ap, int);
@@ -2093,7 +2094,7 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
   case PROP_SET_RLINK:
     vectorizer_clean(gr, sv);
     t = prop_callback_alloc_token(gr, gps, TOKEN_LINK);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     t->t_link_rtitle = rstr_dup(va_arg(ap, rstr_t *));
     t->t_link_rurl   = rstr_dup(va_arg(ap, rstr_t *));
     rpn = gps->gps_rpn;
@@ -2102,7 +2103,7 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
 
   case PROP_SET_DIR:
     t = prop_callback_alloc_token(gr, gps, TOKEN_VECTOR);
-    t->propsubr = gps;
+    t->t_propsubr = gps;
     break;
 
   case PROP_ADD_CHILD:
@@ -2269,7 +2270,7 @@ subscribe_prop(glw_view_eval_context_t *ec, struct token *self, int type)
   if(ec->w->glw_flags2 & GLW2_EXPEDITE_SUBSCRIPTIONS)
     f |= PROP_SUB_EXPEDITE;
 
-  if(ec->debug || ec->w->glw_flags & GLW_DEBUG)
+  if(ec->debug || ec->w->glw_flags2 & GLW2_DEBUG)
     f |= PROP_SUB_DEBUG;
 
   if(prop != NULL) {
@@ -2311,7 +2312,7 @@ subscribe_prop(glw_view_eval_context_t *ec, struct token *self, int type)
     self->child = NULL;
   }
 
-  self->propsubr = gps;
+  self->t_propsubr = gps;
   self->type = TOKEN_PROPERTY_SUBSCRIPTION;
   return 0;
 }
@@ -2550,9 +2551,22 @@ glw_view_eval_block(token_t *t, glw_view_eval_context_t *ec)
 	glw_signal_handler_register(w, eval_dynamic_widget_meta_sig, t, 1000);
 
       continue;
+      
+    case TOKEN_FLOAT:
+    case TOKEN_INT:
+    case TOKEN_VECTOR_FLOAT:
+    case TOKEN_VOID:
+    case TOKEN_CSTRING:
+    case TOKEN_RSTRING:
+    case TOKEN_IDENTIFIER:
+      if(t->t_attrib->set(ec, t->t_attrib, t))
+        return -1;
+      break;
 
     default:
-      glw_view_seterr(ec->ei, t, "Unexpected token");
+      glw_view_seterr(ec->ei, t, "Unexpected token %s in evaluator",
+                      token2name(t));
+      abort();
       return -1;
     }
     p = &t->next;
@@ -2570,25 +2584,19 @@ glwf_widget(glw_view_eval_context_t *ec, struct token *self,
   int r;
   const glw_class_t *c;
   glw_view_eval_context_t n;
-  token_t *a = argv[0];
-  token_t *b = argv[1];
+  token_t *b = argv[0];
 
   if(ec->w == NULL) 
     return glw_view_seterr(ec->ei, self, 
 			    "Widget can not be created in this scope");
-
-  if(a->type != TOKEN_IDENTIFIER)
-    return glw_view_seterr(ec->ei, self, 
-			    "widget: Invalid first argument, "
-			    "expected widget class");
     
   if(b->type != TOKEN_BLOCK)
     return glw_view_seterr(ec->ei, self, 
 			    "widget: Invalid second argument, "
 			    "expected block");
 
-  if((c = glw_class_find_by_name(rstr_get(a->t_rstring))) == NULL)
-    return glw_view_seterr(ec->ei, self, "widget: Invalid class");
+
+  c = self->t_func_arg;
 
   memset(&n, 0, sizeof(n));
   n.prop = ec->prop;
@@ -2616,6 +2624,38 @@ glwf_widget(glw_view_eval_context_t *ec, struct token *self,
     c->gc_thaw(n.w);
 
   return r ? -1 : 0;
+}
+
+
+/**
+ *
+ */
+static token_t *
+glwf_resolve_widget_class(glw_root_t *gr, errorinfo_t *ei, token_t *t)
+{
+  assert(t->next->type == TOKEN_LEFT_PARENTHESIS);
+  token_t *a = t->next->next;
+  const glw_class_t *c;
+
+  if(a->type != TOKEN_IDENTIFIER) {
+    glw_view_seterr(ei, t,
+                    "widget: Invalid first argument, expected widget class");
+    return NULL;
+  }
+
+  if((c = glw_class_find_by_name(rstr_get(a->t_rstring))) == NULL) {
+    glw_view_seterr(ei, t,
+                    "widget: No such widget: %s", rstr_get(a->t_rstring));
+    return NULL;
+  }
+
+  t->t_func_arg = c;
+
+  token_t *r = t->next->next->next->next;
+  glw_view_token_free(gr, t->next->next->next);
+  glw_view_token_free(gr, t->next->next);
+  t->next->next = r;
+  return r;
 }
 
 
@@ -2682,12 +2722,12 @@ glwf_cloner(glw_view_eval_context_t *ec, struct token *self,
   }
 
   if(a->type == TOKEN_DIRECTORY) {
-    sub_cloner_t *sc = (sub_cloner_t *)a->propsubr;
+    sub_cloner_t *sc = (sub_cloner_t *)a->t_propsubr;
     sc->sc_anchor = self->t_extra;
 
     cloner_cleanup(ec->gr, sc);
 
-    sc->sc_cloner_body = glw_view_clone_chain(ec->gr, c);
+    sc->sc_cloner_body = glw_view_clone_chain(ec->gr, c, NULL);
     sc->sc_cloner_class = cl;
 
     /* Create pending childs */
@@ -2777,7 +2817,7 @@ glw_event_map_eval_block_fire(glw_t *w, glw_event_map_t *gem, event_t *src)
   n.sublist = &l;
   n.event = src;
 
-  body = glw_view_clone_chain(n.gr, b->block);
+  body = glw_view_clone_chain(n.gr, b->block, NULL);
   glw_view_eval_block(body, &n);
   glw_prop_subscription_destroy_list(w->glw_root, &l);
   glw_view_free_chain(n.gr, body);
@@ -2822,7 +2862,7 @@ glw_event_map_eval_block_create(glw_view_eval_context_t *ec,
 {
   glw_event_map_eval_block_t *b = malloc(sizeof(glw_event_map_eval_block_t));
 
-  b->block = glw_view_clone_chain(ec->gr, block);
+  b->block = glw_view_clone_chain(ec->gr, block, NULL);
 
   b->prop        = prop_ref_inc(ec->prop);
   b->prop_parent = prop_ref_inc(ec->prop_parent);
@@ -3232,6 +3272,7 @@ typedef struct glwf_changed_extra {
   union {
     rstr_t *rstr;
     float value;
+    int i;
     const char *cstr;
     prop_t *prop;
   } u;
@@ -3270,7 +3311,7 @@ glwf_changed(glw_view_eval_context_t *ec, struct token *self,
 
   if(a->type != TOKEN_FLOAT && a->type != TOKEN_RSTRING &&
      a->type != TOKEN_VOID && a->type != TOKEN_CSTRING && 
-     a->type != TOKEN_PROPERTY_REF)
+     a->type != TOKEN_INT && a->type != TOKEN_PROPERTY_REF)
     return glw_view_seterr(ec->ei, self,
 			   "Invalid first operand (%s) to changed()",
 			   token2name(a));
@@ -3300,6 +3341,10 @@ glwf_changed(glw_view_eval_context_t *ec, struct token *self,
 
     case TOKEN_FLOAT:
       e->u.value = a->t_float;
+      break;
+
+    case TOKEN_INT:
+      e->u.i = a->t_int;
       break;
 
     case TOKEN_PROPERTY_REF:
@@ -3335,6 +3380,13 @@ glwf_changed(glw_view_eval_context_t *ec, struct token *self,
     case TOKEN_FLOAT:
       if(e->u.value != a->t_float) {
 	e->u.value = a->t_float;
+	change = 1;
+      }
+      break;
+
+    case TOKEN_INT:
+      if(e->u.i != a->t_int) {
+	e->u.i = a->t_int;
 	change = 1;
       }
       break;
@@ -5834,7 +5886,7 @@ glwf_selectedElement(glw_view_eval_context_t *ec, struct token *self,
  *
  */
 static const token_func_t funcvec[] = {
-  {"widget", 2, glwf_widget},
+  {"widget", 1, glwf_widget, NULL, NULL, glwf_resolve_widget_class},
   {"cloner", 3, glwf_cloner},
   {"space", 1, glwf_space},
   {"onEvent", -1, glwf_onEvent},
@@ -5905,19 +5957,27 @@ static const token_func_t funcvec[] = {
 /**
  *
  */
-int 
-glw_view_function_resolve(token_t *t)
+
+token_t *
+glw_view_function_resolve(glw_root_t *gr, errorinfo_t *ei, token_t *t)
 {
   int i;
+  const char *fname = rstr_get(t->t_rstring);
 
   for(i = 0; i < sizeof(funcvec) / sizeof(funcvec[0]); i++)
-    if(!strcmp(funcvec[i].name, rstr_get(t->t_rstring))) {
+    if(!strcmp(funcvec[i].name, fname)) {
       rstr_release(t->t_rstring);
       t->t_func = &funcvec[i];
       t->type = TOKEN_FUNCTION;
       if(t->t_func->ctor != NULL)
 	t->t_func->ctor(t);
-      return 0;
+
+      if(t->t_func->preproc != NULL)
+        return t->t_func->preproc(gr, ei, t);
+      else
+        return t->next->next;
     }
-  return -1;
+
+  glw_view_seterr(ei, t, "Unknown function: %s", fname);
+  return NULL;
 }

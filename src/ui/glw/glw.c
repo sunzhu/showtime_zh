@@ -194,6 +194,9 @@ glw_init(glw_root_t *gr)
 
   glw_text_bitmap_init(gr);
 
+  prop_setv(gr->gr_prop_ui, "skin", "path", NULL,
+	    PROP_SET_STRING, gr->gr_skin);
+
   gr->gr_pointer_visible    = prop_create(gr->gr_prop_ui, "pointerVisible");
   gr->gr_is_fullscreen      = prop_create(gr->gr_prop_ui, "fullscreen");
   gr->gr_screensaver_active = prop_create(gr->gr_prop_ui, "screensaverActive");
@@ -334,8 +337,7 @@ glw_create(glw_root_t *gr, const glw_class_t *class,
   w->glw_sharpness = 1.0f;
   w->glw_refcnt = 1;
   w->glw_alignment = class->gc_default_alignment;
-  w->glw_flags = GLW_NAV_FOCUSABLE;
-  w->glw_flags2 = GLW2_ENABLED;
+  w->glw_flags2 = GLW2_ENABLED | GLW2_NAV_FOCUSABLE;
 
   LIST_INSERT_HEAD(&gr->gr_active_dummy_list, w, glw_active_link);
 
@@ -839,7 +841,7 @@ glw_move(glw_t *w, glw_t *b)
   } else {
     TAILQ_INSERT_BEFORE(b, w, glw_parent_link);
   }
-  if(p->glw_flags2 & GLW2_FLOATING_FOCUS) {
+  if(p->glw_flags & GLW_FLOATING_FOCUS) {
     if(w == TAILQ_FIRST(&p->glw_childs)) {
       glw_t *w2 = TAILQ_NEXT(w, glw_parent_link);
       if(w2 != NULL && p->glw_focused == w2) {
@@ -1040,7 +1042,7 @@ glw_focus_set(glw_root_t *gr, glw_t *w, int how)
 	 * This allows the focus to "stay" at the first entry even if we
 	 * insert entries in random order
 	 */
-	int ff = p->glw_flags2 & GLW2_FLOATING_FOCUS && 
+	int ff = p->glw_flags & GLW_FLOATING_FOCUS && 
 	  (x == TAILQ_FIRST(&p->glw_childs) ||
            how == GLW_FOCUS_SET_AUTOMATIC_FF);
 
@@ -1142,7 +1144,7 @@ static void
 glw_focus_init_widget(glw_t *w, float weight)
 {
   w->glw_focus_weight = weight;
-  int v = w->glw_flags & GLW_AUTOREFOCUSABLE && was_interactive(w);
+  int v = w->glw_flags2 & GLW2_AUTOREFOCUSABLE && was_interactive(w);
   glw_focus_set(w->glw_root, w, v);
 }
 
@@ -1497,7 +1499,7 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
 
 	case GLW_POINTER_LEFT_RELEASE:
 	  if(gr->gr_pointer_press == w) {
-	    if(w->glw_flags & GLW_FOCUS_ON_CLICK)
+	    if(w->glw_flags2 & GLW2_FOCUS_ON_CLICK)
 	      glw_focus_set(gr, w, GLW_FOCUS_SET_INTERACTIVE); 
 
 	    glw_path_modify(w, 0, GLW_IN_PRESSED_PATH, NULL);

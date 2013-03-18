@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include "misc/queue.h"
+#include "misc/buf.h"
 
 #define HTSMSG_ERR_FIELD_NOT_FOUND       -1
 #define HTSMSG_ERR_CONVERSION_IMPOSSIBLE -2
@@ -40,9 +41,10 @@ typedef struct htsmsg {
   int hm_islist;
 
   /**
-   * Data to be free'd when the message is destroyed
+   * 
    */
-  const void *hm_data;
+  void (*hm_free_opaque)(void *);
+  void *hm_opaque;
 } htsmsg_t;
 
 
@@ -85,6 +87,8 @@ typedef struct htsmsg_field {
  ((f)->hmf_type == HMF_MAP ? &(f)->hmf_msg : NULL)
 
 #define HTSMSG_FOREACH(f, msg) TAILQ_FOREACH(f, &(msg)->hm_fields, hmf_link)
+
+#define HTSMSG_INDEX(i) ((const char *)(intptr_t)(-(i+1)))
 
 /**
  * Create a new map
