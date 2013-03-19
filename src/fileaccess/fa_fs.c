@@ -34,7 +34,11 @@
 
 typedef struct fs_handle {
   fa_handle_t h;
-  int fd;
+  int* fds;
+  int split_count;
+  off_t* split_sizes;
+  off_t total_size;
+  int64_t read_pos;
 } fs_handle_t;
 
 
@@ -50,8 +54,56 @@ fs_urlsnprintf(char *buf, size_t bufsize, const char *prefix, const char *base,
   snprintf(buf, bufsize, "%s%s%s%s", prefix, base,
 	   blen > 0 && base[blen - 1] == '/' ? "" : "/", fname);
 }
-	       
 
+static int is_splitted_file_name(char* s)
+{
+    int ret = 0;
+
+    if (s != NULL)
+    {
+      size_t size = strlen(s);
+
+      if (size >= 4 && s[size-4] == '.' && s[size-3] == '0' && s[size-2] == '0' && s[size-1] >= '1'&&s[size-1]<='9')
+        ret = s[size-1]-'0';
+    }
+    return ret;
+}
+
+static char* get_actual_name(char* s)
+{
+    int len=strlen(s);
+    return strncpy(calloc(len+1-4),s,len-4);
+}
+
+static char* get_split_piece_name(char* fn,int num)
+{
+    int split_fn_length=strlen(fn)+4;
+    char* split_name=calloc(split_fn_length+1);
+    sprintf(split_name, "%s.%03d", fn, num+1);
+    return split_name;
+}
+
+static int get_split_piece_count(char* fn)
+{
+    int count=0;
+    while(split_exists(fn,count))
+        count++;
+    return count;
+}
+
+static int file_exists(char* fn)
+{
+    struct stat st;
+    return !stat(fn,&st)&&!S_ISDIR(st.st_mode);
+}
+
+static int split_exists(char* fn,int num)
+{
+    char* sfn=get_split_piece_name(fn,num);
+    int ret=file_exists(sfn);
+    free(sfn);
+    return ret;
+}
 
 static int
 fs_scandir(fa_dir_t *fd, const char *url, char *errbuf, size_t errlen)
@@ -61,6 +113,8 @@ fs_scandir(fa_dir_t *fd, const char *url, char *errbuf, size_t errlen)
   struct dirent *d;
   int type;
   DIR *dir;
+  int split_num=0;
+  char* actual_name;
 
   if((dir = opendir(url)) == NULL) {
     snprintf(errbuf, errlen, "%s", strerror(errno));
@@ -84,9 +138,24 @@ fs_scandir(fa_dir_t *fd, const char *url, char *errbuf, size_t errlen)
       continue;
     }
     
-    fs_urlsnprintf(buf, sizeof(buf), "file://", url, d->d_name);
+    if(type==CONTENT_FILE&&(split_num=is_splitted_file_name(d->d_name))>0)
+    {
+        if(split_num==1)//only add the first splitted piece
+        {
+            actual_name=get_actual_name(d->d_name);
+            fs_urlsnprintf(buf, sizeof(buf), "file://", url, actual_name);
+            fa_dir_add(fd, buf, actual_name, type);  
+            free(actual_name);          
+        }
+        else
+            continue;
+    }
+    else
+    {
+        fs_urlsnprintf(buf, sizeof(buf), "file://", url, d->d_name);
 
-    fa_dir_add(fd, buf, d->d_name, type);
+        fa_dir_add(fd, buf, d->d_name, type);
+    }
   }
   closedir(dir);
   return 0;
@@ -99,16 +168,45 @@ static fa_handle_t *
 fs_open(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
 	int flags, struct prop *stats)
 {
-  fs_handle_t *fh;
-
+  fs_handle_t *fh=NULL;
+  int piece_num=0;
+  char* piece_name;
+  struct stat st;
+  int i;
   int fd = open(url, O_RDONLY, 0);
-  if(fd == -1) {
+  if(fd == -1) 
+  {
+      piece_num=get_split_piece_count(url);
+      if(piece_num>0)
+      {
+            fh = calloc(sizeof(fs_handle_t));
+            fh->split_count=piece_num;
+            fh->fds=malloc(sizeof(int)*piece_num);
+            fh->split_sizes=malloc(sizeof(off_t)*piece_num);
+            for(i=0;i<piece_num;i++)
+            {
+                char* pname=get_split_piece_name(url,i);
+                fd=open(pname, O_RDONLY, 0);
+                fh->fds[i] = fd; 
+                fstat(fd,&st);
+                fh->split_sizes[i]=st.st_size;
+                fh->total_size+=st.st_size;
+                free(pname);
+            }
+            fh->h.fh_proto = fap;
+            return &fh->h;
+      }
     snprintf(errbuf, errlen, "%s", strerror(errno));
     return NULL;
   }
-  fh = malloc(sizeof(fs_handle_t));
-  fh->fd = fd;
-
+  //normal file
+  fh = calloc(sizeof(fs_handle_t));
+  fh->split_count=1;
+  fh->fds=malloc(sizeof(int));
+  fh->split_sizes=malloc(sizeof(off_t));
+  fh->fds[0] = fd;
+  fstat(fd,&st);
+  fh->total_size=st.st_size;
   fh->h.fh_proto = fap;
 
   return &fh->h;
@@ -121,8 +219,25 @@ static void
 fs_close(fa_handle_t *fh0)
 {
   fs_handle_t *fh = (fs_handle_t *)fh0;
-  close(fh->fd);
+  int i;
+  for(i=0;i<fh->split_count;i++)
+    close(fh->fds[i]);
+  free(fh->fds);
+  free(fh->split_sizes);
   free(fh);
+}
+
+static int get_current_read_piece_num(fs_handle_t *fh)
+{
+    int i=0;
+    off_t size=fh->split_sizes[0];
+    for(i=0;i<fh->split_count;i++)
+    {
+        if(fh->read_pos<=size)
+            break;
+        size+=fh->split_sizes[i+1];
+    }
+    return i;
 }
 
 /**
@@ -132,8 +247,11 @@ static int
 fs_read(fa_handle_t *fh0, void *buf, size_t size)
 {
   fs_handle_t *fh = (fs_handle_t *)fh0;
-
-  return read(fh->fd, buf, size);
+  int pn=get_current_read_piece_num(fh);
+  int rsize=read(fh->fds[pn],buf,size);
+  if(rsize<size&&pn<fh->split_count-1)
+      rsize+=read(fh->fds[pn+1],buf+rsize,size-rsize);
+  return rsize;
 }
 
 /**
@@ -143,7 +261,22 @@ static int64_t
 fs_seek(fa_handle_t *fh0, int64_t pos, int whence)
 {
   fs_handle_t *fh = (fs_handle_t *)fh0;
-  return lseek(fh->fd, pos, whence);
+  int64_t act_pos;
+  int i;
+  int pn;
+  
+  if(whence==SEEK_SET)
+      act_pos=pos;
+  else if(whence==SEEK_CUR)
+      act_pos=pos+fh->read_pos;
+  else//whence==SEEK_END
+      act_pos=fh->total_size-pos;
+  fh->read_pos=act_pos;
+  pn=get_current_read_piece_num(fh);
+  pos=act_pos;
+  for(i=0;i<pn;i++)
+      pos=pos-fh->split_sizes[i];
+  return lseek(fh->fds[pn], pos, SEEK_SET);
 }
 
 /**
@@ -153,12 +286,7 @@ static int64_t
 fs_fsize(fa_handle_t *fh0)
 {
   fs_handle_t *fh = (fs_handle_t *)fh0;
-  struct stat st;
-  
-  if(fstat(fh->fd, &st) < 0)
-    return -1;
-
-  return st.st_size;
+  return fh->total_size;
 }
 
 
@@ -170,7 +298,26 @@ fs_stat(fa_protocol_t *fap, const char *url, struct fa_stat *fs,
 	char *errbuf, size_t errlen, int non_interactive)
 {
   struct stat st;
+  int piece_num,i;
   if(stat(url, &st)) {
+      piece_num=get_split_piece_count(url);
+      if(piece_num>0)
+      {
+            memset(fs, 0, sizeof(struct fa_stat));
+            for(i=0;i<piece_num;i++)
+            {
+                char* pname=get_split_piece_name(url,i);
+                stat(pname,&st);
+                fs->fs_size +=st.st_size;
+                if(i==0)
+                {
+                    fs->fs_mtime = st.st_mtime;
+                    fs->fs_type = CONTENT_FILE;
+                }
+                free(pname);
+            }
+            return FAP_STAT_OK;
+      }
     snprintf(errbuf, errlen, "%s", strerror(errno));
     return FAP_STAT_ERR;
   }
