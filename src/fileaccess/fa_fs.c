@@ -72,23 +72,7 @@ static int is_splitted_file_name(char* s)
 static char* get_actual_name(char* s)
 {
     int len=strlen(s);
-    return strncpy(calloc(len+1-4),s,len-4);
-}
-
-static char* get_split_piece_name(char* fn,int num)
-{
-    int split_fn_length=strlen(fn)+4;
-    char* split_name=calloc(split_fn_length+1);
-    sprintf(split_name, "%s.%03d", fn, num+1);
-    return split_name;
-}
-
-static int get_split_piece_count(char* fn)
-{
-    int count=0;
-    while(split_exists(fn,count))
-        count++;
-    return count;
+    return strncpy(calloc(len+1-4,sizeof(char)),s,len-4);
 }
 
 static int file_exists(char* fn)
@@ -97,12 +81,28 @@ static int file_exists(char* fn)
     return !stat(fn,&st)&&!S_ISDIR(st.st_mode);
 }
 
-static int split_exists(char* fn,int num)
+static char* get_split_piece_name(const char* fn,int num)
+{
+    int split_fn_length=strlen(fn)+4;
+    char* split_name=calloc(split_fn_length+1,sizeof(char));
+    sprintf(split_name, "%s.%03d", fn, num+1);
+    return split_name;
+}
+
+static int split_exists(const char* fn,int num)
 {
     char* sfn=get_split_piece_name(fn,num);
     int ret=file_exists(sfn);
     free(sfn);
     return ret;
+}
+
+static int get_split_piece_count(const char* fn)
+{
+    int count=0;
+    while(split_exists(fn,count))
+        count++;
+    return count;
 }
 
 static int
@@ -170,7 +170,6 @@ fs_open(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
 {
   fs_handle_t *fh=NULL;
   int piece_num=0;
-  char* piece_name;
   struct stat st;
   int i;
   int fd = open(url, O_RDONLY, 0);
@@ -179,7 +178,7 @@ fs_open(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
       piece_num=get_split_piece_count(url);
       if(piece_num>0)
       {
-            fh = calloc(sizeof(fs_handle_t));
+            fh = calloc(1,sizeof(fs_handle_t));
             fh->split_count=piece_num;
             fh->fds=malloc(sizeof(int)*piece_num);
             fh->split_sizes=malloc(sizeof(off_t)*piece_num);
@@ -200,7 +199,7 @@ fs_open(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
     return NULL;
   }
   //normal file
-  fh = calloc(sizeof(fs_handle_t));
+  fh = calloc(1,sizeof(fs_handle_t));
   fh->split_count=1;
   fh->fds=malloc(sizeof(int));
   fh->split_sizes=malloc(sizeof(off_t));
