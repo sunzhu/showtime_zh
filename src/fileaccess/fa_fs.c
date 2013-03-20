@@ -249,7 +249,14 @@ fs_read(fa_handle_t *fh0, void *buf, size_t size)
   int pn=get_current_read_piece_num(fh);
   int rsize=read(fh->fds[pn],buf,size);
   if(rsize<size&&pn<fh->split_count-1)
+  {
+      //TRACE(TRACE_DEBUG, "FS", "Current read position: %u. Current piece size: %u.", fh->read_pos, fh->split_sizes[pn]);
+      //TRACE(TRACE_DEBUG, "FS", "Requested to read %u bytes but only read %u bytes.", size, rsize);
+      //TRACE(TRACE_DEBUG, "FS", "Reading next piece %d, handler=%d.", pn+1, fh->fds[pn+1]);
+      lseek(fh->fds[pn+1], 0, SEEK_SET);
       rsize+=read(fh->fds[pn+1],buf+rsize,size-rsize);
+  }
+  fh->read_pos+=rsize;
   return rsize;
 }
 
