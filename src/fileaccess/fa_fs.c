@@ -206,6 +206,7 @@ fs_open(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
   fh->fds[0] = fd;
   fstat(fd,&st);
   fh->total_size=st.st_size;
+  fh->split_sizes[0]=st.st_size;
   fh->h.fh_proto = fap;
 
   return &fh->h;
