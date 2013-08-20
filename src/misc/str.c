@@ -769,12 +769,6 @@ char *
 utf8_from_bytes(const char *str, int len, const charset_t *cs,
 		char *how, size_t howlen)
 {
-  if(cp==NULL)
-  {
-	char *utf8str=malloc(len*3);
-	GB2312StrToUtf8(utf8str,str,len);
-	return utf8str;
-  }
   char *r, *d;
   len = !len ? strlen(str) : len;
 
@@ -789,8 +783,13 @@ utf8_from_bytes(const char *str, int len, const charset_t *cs,
 	  snprintf(how, howlen, "Decoded as %s (detected language: %s)",
 		   name, lang);
 	else
-	  TRACE(TRACE_ERROR, "STR", "Language %s not found internally",
+	{
+	  char *utf8str=malloc(len*3);
+	  TRACE(TRACE_ERROR, "STR", "Language %s not found internally. Decoded as GB2312.",
 		name);
+	  GB2312StrToUtf8(utf8str,str,len);
+	  return utf8str;
+	}
       }
     } else {
       snprintf(how, howlen, "Decoded as %s (specified by user)",
