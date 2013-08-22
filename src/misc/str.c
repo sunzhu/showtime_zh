@@ -791,15 +791,14 @@ utf8_from_bytes(const char *str, int len, const charset_t *cs,
 	       cs->title);
     }
   } else {
+    snprintf(how, howlen, "Decoded as %s (specified by request)",
+	     cs->title);
 	if(strcmp(cs->id,"GB2312")==0)
 	{
 		char *utf8str=malloc(len*3);
-	  	TRACE(TRACE_DEBUG, "STR", "Decoded as GB2312 (specified by request).");
 	  	GB2312StrToUtf8(utf8str,str,len);
 	  	return utf8str;
 	}
-    snprintf(how, howlen, "Decoded as %s (specified by request)",
-	     cs->title);
   }
 
   const uint16_t *cp = cs ? cs->ptr : NULL;
