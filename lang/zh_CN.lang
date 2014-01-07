@@ -320,17 +320,23 @@ msg: 检查当前安装的版本
 id: Checking for updates...
 msg: 正在检查更新...
 
+id: Checking installed version of %s
+# Missing translation
+msg: 
+
 id: Current version:
 msg: 当前版本：
 
 id: Download and install...
 msg: 正在下载并安装...
 
-id: Downloading...
-msg: 正在下载...
+id: Downloading %s
+# Missing translation
+msg: 
 
-id: Installing...
-msg: 正在安装...
+id: Installing %s
+# Missing translation
+msg: 
 
 id: New version %s is available for download
 msg: 新版本%s可用
@@ -338,8 +344,9 @@ msg: 新版本%s可用
 id: No upgrade available
 msg: 无可用更新
 
-id: Patching binary
-msg: 补丁包
+id: Patching %s
+# Missing translation
+msg: 
 
 id: Restarting Showtime in %d seconds...
 msg: %d秒后重启Showtime...
@@ -358,6 +365,10 @@ msg: 测试版
 
 id: Unable to query for new version
 msg: 无法检查最新版
+
+id: Verifying %s
+# Missing translation
+msg: 
 
 #
 # ./glwskins/default/pages/video.view
@@ -416,8 +427,25 @@ msg: 未载入媒体
 #
 # ./glwskins/default/sysinfo.view
 #
-id: Memory usage:
-msg: 内存使用率：
+id: CPU Temp
+# Missing translation
+msg: 
+
+id: GPU Temp
+# Missing translation
+msg: 
+
+id: Memory usage
+# Missing translation
+msg: 
+
+id: System Free
+# Missing translation
+msg: 
+
+id: System Total
+# Missing translation
+msg: 
 
 #
 # ./glwskins/default/universe.view
@@ -442,6 +470,17 @@ msg: 使用原标题
 #
 id: System is low on memory (%d kB RAM available)
 msg: 系统内存偏少(%d kB RAM可用)
+
+#
+# ./src/arch/rpi/rpi_cec.c
+#
+id: Configure how Showtime communicates with your TV
+# Missing translation
+msg: 
+
+id: Consumer Electronics Control
+# Missing translation
+msg: 
 
 #
 # ./src/backend/dvd/cdda.c
@@ -639,13 +678,8 @@ id: File access
 msg: 文件访问
 
 id: %d archive parts
-<<<<<<< HEAD
 msg[0]: %d个分卷
 msg[1]: %d个分卷
-=======
-msg[0]: 
-msg[1]: 
->>>>>>> upstream/master
 
 id: %d directories
 msg[0]: %d个文件夹
@@ -658,6 +692,10 @@ msg[1]: %d个文件
 #
 # ./src/i18n.c
 #
+id: Default character set
+# Missing translation
+msg: 
+
 id: Ignore 'The' at beginning of words when sorting
 msg: 排序时忽略开头的'The'
 
@@ -679,9 +717,6 @@ msg: 音频首选语言代码
 id: Primary subtitle language code
 msg: 字幕首选语言代码
 
-id: SRT character set
-msg: SRT字幕字符集
-
 id: Secondary audio language code
 msg: 音频次选语言代码
 
@@ -693,6 +728,12 @@ msg: 音频第三语言代码
 
 id: Tertiary subtitle language code
 msg: 字幕第三语言代码
+
+#
+# ./src/js/js_page.c
+#
+id: No handler for URL
+msg: 无法处理URL
 
 #
 # ./src/keymapper.c
@@ -874,9 +915,6 @@ msg: 收藏夹
 id: Music
 msg: 音乐
 
-id: No handler for URL
-msg: 无法处理URL
-
 id: Other
 msg: 其它
 
@@ -900,6 +938,17 @@ msg: 类型
 
 id: URL
 msg: URL
+
+#
+# ./src/networking/connman.c
+#
+id: Enable Wi-Fi
+# Missing translation
+msg: 
+
+id: Network connections
+# Missing translation
+msg: 
 
 #
 # ./src/networking/ftp_server.c
@@ -1036,6 +1085,10 @@ msg: 视频流
 id: Automatic standby
 msg: 自动关机
 
+id: Enable SSH server
+# Missing translation
+msg: 
+
 id: Logout
 msg: 注销
 
@@ -1045,12 +1098,23 @@ msg: 打开Shell
 id: Power off system
 msg: 关机
 
+id: SSH server
+# Missing translation
+msg: 
+
+id: Standby
+# Missing translation
+msg: 
+
 id: Starting and stopping Showtime
 msg: 启动和关闭Showtime
 
 #
 # ./src/sd/sd.c
 #
+id: Enabled on home screen
+msg: 已在首页启用
+
 id: Name
 msg: 名称
 
@@ -1092,6 +1156,10 @@ msg: 网络设置
 
 id: Settings useful for developers
 msg: 供开发者使用的设置
+
+id: System name
+# Missing translation
+msg: 
 
 id: System related settings
 msg: 系统相关设置
@@ -1272,12 +1340,6 @@ msg: 软件更新
 
 id: Upgrade to releases from
 msg: 更新选择
-
-#
-# ./src/upnp/upnp.c
-#
-id: Enabled on home screen
-msg: 已在首页启用
 
 #
 # ./src/upnp/upnp_browse.c

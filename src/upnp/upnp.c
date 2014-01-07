@@ -143,15 +143,16 @@ send_dev_description(http_connection_t *hc, const char *remain, void *opaque,
 		 "<dlna:X_DLNADOC xmlns:dlna=\"urn:schemas-dlna-org:device-1-0\">DMR-1.50</dlna:X_DLNADOC>"
 		 "<dlna:X_DLNADOC xmlns:dlna=\"urn:schemas-dlna-org:device-1-0\">M-DMR-1.50</dlna:X_DLNADOC>"
 		 "<deviceType>urn:schemas-upnp-org:device:MediaRenderer:2</deviceType>"
-		 "<friendlyName>Showtime</friendlyName>"
-		 "<manufacturer>Andreas Öman</manufacturer>"
-		 "<modelDescription>HTS Showtime Mediaplayer</modelDescription>"
-		 "<modelName>HTS Showtime Mediaplayer</modelName>"
+		 "<friendlyName>%s</friendlyName>"
+		 "<manufacturer>Lonelycoder AB</manufacturer>"
+		 "<modelDescription>Showtime Media center</modelDescription>"
+		 "<modelName>Showtime Media center</modelName>"
 		 "<modelNumber>%s</modelNumber>"
 		 "<UDN>uuid:%s</UDN>"
 		 "<UPC/>"
 		 "<presentationURL/>"
 		 "<serviceList>",
+		 gconf.system_name,
 		 htsversion_full,
 		 upnp_uuid);
 
@@ -424,10 +425,17 @@ add_content_directory(upnp_service_t *us, const char *hostname, int port)
   us->us_settings = settings_add_dir_cstr(gconf.settings_sd, title, NULL,
 					  us->us_icon_url, buf, NULL);
 
+  us->us_service = service_create(svcid, NULL, us->us_local_url, NULL,
+				  us->us_icon_url, 1, 0,
+				  SVC_ORIGIN_DISCOVERED);
+
+  prop_t *root = us->us_service->s_root;
+
   us->us_setting_enabled =
     setting_create(SETTING_BOOL, us->us_settings, SETTINGS_INITIAL_UPDATE,
                    SETTING_TITLE(_p("Enabled on home screen")),
-                   SETTING_VALUE(1),
+                   SETTING_VALUE(0),
+		   SETTING_WRITE_PROP(prop_create(root, "enabled")),
                    SETTING_HTSMSG_CUSTOM_SAVER("enabled",
                                                us->us_settings_store,
                                                upnp_settings_saver,
@@ -435,9 +443,11 @@ add_content_directory(upnp_service_t *us, const char *hostname, int port)
                    NULL);
 
   us->us_setting_title =
-    setting_create(SETTING_STRING, us->us_settings, SETTINGS_INITIAL_UPDATE,
+    setting_create(SETTING_STRING, us->us_settings,
+		   SETTINGS_INITIAL_UPDATE | SETTINGS_EMPTY_IS_DEFAULT,
                    SETTING_TITLE(_p("Name")),
                    SETTING_VALUE(title),
+		   SETTING_WRITE_PROP(prop_create(root, "title")),
                    SETTING_HTSMSG_CUSTOM_SAVER("title",
                                                us->us_settings_store,
                                                upnp_settings_saver,
@@ -450,24 +460,12 @@ add_content_directory(upnp_service_t *us, const char *hostname, int port)
     setting_create(SETTING_STRING, us->us_settings, SETTINGS_INITIAL_UPDATE,
                    SETTING_TITLE(_p("Type")),
                    SETTING_VALUE(contents),
+		   SETTING_WRITE_PROP(prop_create(root, "type")),
                    SETTING_HTSMSG_CUSTOM_SAVER("type",
                                                us->us_settings_store,
                                                upnp_settings_saver,
                                                us),
                    NULL);
-
-  us->us_service = service_create(svcid, NULL, us->us_local_url, NULL,
-				  us->us_icon_url, 1, 0,
-				  SVC_ORIGIN_DISCOVERED);
-
-  prop_link(settings_get_value(us->us_setting_title),
-	    prop_create(us->us_service->s_root, "title"));
-  prop_link(settings_get_value(us->us_setting_type),
-	    prop_create(us->us_service->s_root, "type"));
-  prop_link(settings_get_value(us->us_setting_enabled),
-	    prop_create(us->us_service->s_root, "enabled"));
-
-
 }
 
 

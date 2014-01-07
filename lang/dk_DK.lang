@@ -1,6 +1,5 @@
 ﻿language: Danish
 native: Dansk
-maintainer: Klaus Rauteberg <showtime@rautenberg.dk>
 #
 # ./glwskins/default/cmdmenu.view
 #
@@ -320,12 +319,12 @@ msg: Ændringslog for %s udgivelser
 id: Check for updates now
 msg: Søg efter opdateringer nu
 
-id: Checking current installed version
-# Missing translation
-msg: 
-
 id: Checking for updates...
 msg: Søger efter opdateringer...
+
+id: Checking installed version of %s
+# Missing translation
+msg: 
 
 id: Current version:
 msg: Aktuel version:
@@ -333,11 +332,13 @@ msg: Aktuel version:
 id: Download and install...
 msg: Download og installer...
 
-id: Downloading...
-msg: Downloader...
+id: Downloading %s
+# Missing translation
+msg: 
 
-id: Installing...
-msg: Installerer...
+id: Installing %s
+# Missing translation
+msg: 
 
 id: New version %s is available for download
 msg: Ny version %s er klar til download
@@ -345,7 +346,7 @@ msg: Ny version %s er klar til download
 id: No upgrade available
 msg: Ingen opdatering tilgængelig
 
-id: Patching binary
+id: Patching %s
 # Missing translation
 msg: 
 
@@ -366,6 +367,10 @@ msg: Tester
 
 id: Unable to query for new version
 msg: Kan ikke forespørge efter ny version
+
+id: Verifying %s
+# Missing translation
+msg: 
 
 #
 # ./glwskins/default/pages/video.view
@@ -425,8 +430,25 @@ msg: Intet medie hentet
 #
 # ./glwskins/default/sysinfo.view
 #
-id: Memory usage:
-msg: Hukommelsesforbrug:
+id: CPU Temp
+# Missing translation
+msg: 
+
+id: GPU Temp
+# Missing translation
+msg: 
+
+id: Memory usage
+# Missing translation
+msg: 
+
+id: System Free
+# Missing translation
+msg: 
+
+id: System Total
+# Missing translation
+msg: 
 
 #
 # ./glwskins/default/universe.view
@@ -451,6 +473,17 @@ msg: Brug orginaltitel
 #
 id: System is low on memory (%d kB RAM available)
 msg: Systemet mangler hukommelse (%d Kb RAM tilgængelig)
+
+#
+# ./src/arch/rpi/rpi_cec.c
+#
+id: Configure how Showtime communicates with your TV
+# Missing translation
+msg: 
+
+id: Consumer Electronics Control
+# Missing translation
+msg: 
 
 #
 # ./src/backend/dvd/cdda.c
@@ -667,6 +700,10 @@ msg[1]:
 #
 # ./src/i18n.c
 #
+id: Default character set
+# Missing translation
+msg: 
+
 id: Ignore 'The' at beginning of words when sorting
 # Missing translation
 msg: 
@@ -689,9 +726,6 @@ msg: Primært sprog for lyd
 id: Primary subtitle language code
 msg: Primært sprog for undertekster
 
-id: SRT character set
-msg: Karaktersæt for SRT undertekster
-
 id: Secondary audio language code
 msg: Sekundær sprog for lyd
 
@@ -703,6 +737,12 @@ msg: Tertiær sprog for lyd
 
 id: Tertiary subtitle language code
 msg: Tertiær sprog for undertekster
+
+#
+# ./src/js/js_page.c
+#
+id: No handler for URL
+msg: Ingen håndtering af URL-adressen
 
 #
 # ./src/keymapper.c
@@ -892,9 +932,6 @@ msg: Bogmærker
 id: Music
 msg: Musik
 
-id: No handler for URL
-msg: Ingen håndtering af URL-adressen
-
 id: Other
 msg: Andre
 
@@ -919,6 +956,17 @@ msg: Type
 
 id: URL
 msg: URL
+
+#
+# ./src/networking/connman.c
+#
+id: Enable Wi-Fi
+# Missing translation
+msg: 
+
+id: Network connections
+# Missing translation
+msg: 
 
 #
 # ./src/networking/ftp_server.c
@@ -1062,6 +1110,10 @@ msg: Video streaming
 id: Automatic standby
 msg: Automatisk standby
 
+id: Enable SSH server
+# Missing translation
+msg: 
+
 id: Logout
 msg: Log ud
 
@@ -1071,12 +1123,23 @@ msg: Åben shell
 id: Power off system
 msg: Sluk systemet
 
+id: SSH server
+# Missing translation
+msg: 
+
+id: Standby
+# Missing translation
+msg: 
+
 id: Starting and stopping Showtime
 msg: Starter og stopper Showtime
 
 #
 # ./src/sd/sd.c
 #
+id: Enabled on home screen
+msg: Tillgænglig på startsiden
+
 id: Name
 msg: Navn
 
@@ -1120,6 +1183,10 @@ msg:
 
 id: Settings useful for developers
 msg: Indstillinger nyttige for udviklere
+
+id: System name
+# Missing translation
+msg: 
 
 id: System related settings
 msg: Systemrelaterede indstillinger
@@ -1315,12 +1382,6 @@ msg: Softwareopdatering
 
 id: Upgrade to releases from
 msg: Opdatere til udgivelser fra
-
-#
-# ./src/upnp/upnp.c
-#
-id: Enabled on home screen
-msg: Tillgænglig på startsiden
 
 #
 # ./src/upnp/upnp_browse.c

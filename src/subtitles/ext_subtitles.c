@@ -629,7 +629,6 @@ subtitles_create(const char *path, char *buf, size_t len, AVRational *fr)
 
   if(s)
     es_sort(s);
-  free(buf);
   return s;
 }
 
@@ -728,6 +727,7 @@ subtitles_from_zipfile(media_pipe_t *mp, buf_t *b, AVRational *fr)
   }
 
   memfile_unregister(id);
+  buf_release(b);
   return ret;
 }
 
@@ -777,11 +777,17 @@ subtitles_load(media_pipe_t *mp, const char *url, AVRational *fr)
     }
   }
 
+  uint8_t header[64];
+  memcpy(header, b->b_ptr, MIN(b->b_size, 64));
+
   b = buf_make_writable(b);
   sub = subtitles_create(url, b->b_ptr, b->b_size, fr);
-
-  if(sub == NULL)
-    TRACE(TRACE_ERROR, "Subtitles", "Unable to load %s -- Unknown format", 
-	  url);
+  if(sub == NULL) {
+    TRACE(TRACE_ERROR, "Subtitles",
+	  "Unable to load %s -- Unknown format (%d bytes), dump of first 64 bytes follows",
+	  url, (int)b->b_size);
+    hexdump("Subtitles", header, MIN(b->b_size, 64));
+  }
+  buf_release(b);
   return sub;
 }

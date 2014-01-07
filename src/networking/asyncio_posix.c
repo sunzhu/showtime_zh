@@ -98,6 +98,7 @@ asyncio_dopoll(void)
   LIST_FOREACH(af, &asyncio_fds, af_link) {
     fds[n].fd = af->af_fd;
     fds[n].events = af->af_poll_events;
+    fds[n].revents = 0;
     afds[n] = af;
     af->af_refcount++;
     n++;
@@ -105,12 +106,7 @@ asyncio_dopoll(void)
 
   assert(n == asyncio_num_fds);
 
-  int r = poll(fds, n, -1);
-  if(r == -1) {
-    TRACE(TRACE_ERROR, "ASYNCIO", "Poll failed -- %s", strerror(errno));
-    sleep(1);
-    return;
-  }
+  poll(fds, n, -1);
 
   for(int i = 0; i < n; i++) {
     af = afds[i];
@@ -165,11 +161,13 @@ asyncio_rem_events(asyncio_fd_t *af, int events)
  *
  */
 asyncio_fd_t *
-asyncio_add_fd(int fd, int events, asyncio_fd_callback_t *cb, void *opaque)
+asyncio_add_fd(int fd, int events, asyncio_fd_callback_t *cb, void *opaque,
+	       const char *name)
 {
   asyncio_fd_t *af = calloc(1, sizeof(asyncio_fd_t));
   af->af_refcount = 1;
   af->af_fd = fd;
+  af->af_name = strdup(name);
   asyncio_set_events(af, events);
   af->af_callback = cb;
   af->af_opaque = opaque;
@@ -217,7 +215,7 @@ asyncio_thread(void *aux)
 
   asyncio_courier = prop_courier_create_notify(asyncio_courier_notify, NULL);
   asyncio_add_fd(asyncio_pipe[0], ASYNCIO_READ, asyncio_courier_poll,
-                 asyncio_courier);
+                 asyncio_courier, "Courier");
 
   init_group(INIT_GROUP_ASYNCIO);
 
@@ -350,9 +348,8 @@ asyncio_listen(const char *name, int port, asyncio_accept_callback_t *cb,
   TRACE(TRACE_INFO, "TCP", "%s: Listening on port %d", name, port);
 
   asyncio_fd_t *af = asyncio_add_fd(fd, ASYNCIO_READ | ASYNCIO_CLOSED,
-                                    asyncio_accept, opaque);
+                                    asyncio_accept, opaque, name);
   af->af_accept_callback = cb;
-  af->af_name = strdup(name);
   af->af_port = port;
   return af;
 }
