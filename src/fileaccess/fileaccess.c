@@ -219,7 +219,7 @@ fa_normalize(const char *url, char *dst, size_t dstlen)
  */
 void *
 fa_open_ex(const char *url, char *errbuf, size_t errsize, int flags,
-	   struct prop *stats)
+	   struct fa_open_extra *foe)
 {
   fa_protocol_t *fap;
   char *filename;
@@ -229,10 +229,10 @@ fa_open_ex(const char *url, char *errbuf, size_t errsize, int flags,
     // Only do caching if we are in read only mode
 #if ENABLE_READAHEAD_CACHE
     if(flags & FA_CACHE)
-      return fa_cache_open(url, errbuf, errsize, flags & ~FA_CACHE, stats);
+      return fa_cache_open(url, errbuf, errsize, flags & ~FA_CACHE, foe);
 #endif
     if(flags & (FA_BUFFERED_SMALL | FA_BUFFERED_BIG))
-      return fa_buffered_open(url, errbuf, errsize, flags, stats);
+      return fa_buffered_open(url, errbuf, errsize, flags, foe);
   }
 
   if((filename = fa_resolve_proto(url, &fap, NULL, errbuf, errsize)) == NULL)
@@ -242,7 +242,7 @@ fa_open_ex(const char *url, char *errbuf, size_t errsize, int flags,
     snprintf(errbuf, errsize, "FS does not support writing");
     fh = NULL;
   } else {
-    fh = fap->fap_open(fap, filename, errbuf, errsize, flags, stats);
+    fh = fap->fap_open(fap, filename, errbuf, errsize, flags, foe);
   }
   fap_release(fap);
   free(filename);
@@ -261,7 +261,8 @@ fa_open_ex(const char *url, char *errbuf, size_t errsize, int flags,
  */
 void *
 fa_open_vpaths(const char *url, const char **vpaths,
-	       char *errbuf, size_t errsize, int flags)
+	       char *errbuf, size_t errsize, int flags,
+               fa_open_extra_t *foe)
 {
   fa_protocol_t *fap;
   char *filename;
@@ -271,9 +272,9 @@ fa_open_vpaths(const char *url, const char **vpaths,
     return NULL;
   
   if(flags & (FA_BUFFERED_SMALL | FA_BUFFERED_BIG))
-    return fa_buffered_open(url, errbuf, errsize, flags, NULL);
+    return fa_buffered_open(url, errbuf, errsize, flags, foe);
 
-  fh = fap->fap_open(fap, filename, errbuf, errsize, flags, NULL);
+  fh = fap->fap_open(fap, filename, errbuf, errsize, flags, foe);
 #ifdef FA_DUMP
   fh->fh_dump_fd = -1;
 #endif
@@ -368,6 +369,19 @@ fa_fsize(void *fh_)
 {
   fa_handle_t *fh = fh_;
   return fh->fh_proto->fap_fsize(fh);
+}
+
+
+/**
+ *
+ */
+void
+fa_set_read_timeout(void *fh_, int ms)
+{
+  fa_handle_t *fh = fh_;
+  if(fh->fh_proto->fap_set_read_timeout == NULL)
+    return;
+  fh->fh_proto->fap_set_read_timeout(fh, ms);
 }
 
 /**
@@ -1261,7 +1275,7 @@ fileaccess_init(void)
 
   store = htsmsg_store_load("faconf") ?: htsmsg_create_map();
 
-  settings_create_separator(gconf.settings_general, _p("File access"));
+  settings_create_separator(gconf.settings_general, _p("File browsing"));
 
   setting_create(SETTING_BOOL, gconf.settings_general, SETTINGS_INITIAL_UPDATE,
                  SETTING_TITLE(_p("Enable file deletion from item menu")),
@@ -1269,33 +1283,43 @@ fileaccess_init(void)
                  SETTING_HTSMSG("delete", store, "faconf"),
                  NULL);
 
+  setting_create(SETTING_BOOL, gconf.settings_general, SETTINGS_INITIAL_UPDATE,
+                 SETTING_TITLE(_p("Show filename extensions")),
+                 SETTING_WRITE_BOOL(&gconf.show_filename_extensions),
+                 SETTING_HTSMSG("filenameextensions", store, "faconf"),
+                 NULL);
+
   return 0;
 }
 
 
 /**
- * WTF does cache_control mean?
  *
- * NULL          - Normal transparent caching (With expiry, etc)
+ */
+typedef struct loadarg {
+  SIMPLEQ_ENTRY(loadarg) link;
+  const char *key;
+  const char *value;
+} loadarg_t;
+
+/**
  *
- * ptr to an int - If it's pointing to an int the load will stop if
- *                 there is an entry in the cache and it is
- *                 expired. In this case the pointed to int will be
- *                 set to 1.
- *
- * DISABLE_CACHE - No cache operations at all
- *
- * BYPASS_CACHE - Don't read from cache. But use cache metadata when
- *                loading object from network. This is used to refresh
- *                objects we already know are expired. Typically
- *                used by image loaders to refresh already displayed
- *                expired images.
  */
 buf_t *
-fa_load(const char *url, const char **vpaths,
-	char *errbuf, size_t errlen, int *cache_control, int flags,
-	fa_load_cb_t *cb, void *opaque)
+fa_load(const char *url, ...)
 {
+  const char **vpaths = NULL;
+  char *errbuf = NULL;
+  size_t errlen = 0;
+  int *cache_control = NULL;
+  int flags = 0;
+  fa_load_cb_t *cb = NULL;
+  void *opaque = NULL;
+  cancellable_t *c = NULL;
+  int min_expire = 0;
+  struct http_header_list *request_headers = NULL;
+  struct http_header_list *response_headers = NULL;
+
   fa_protocol_t *fap;
   fa_handle_t *fh;
   char *filename;
@@ -1304,6 +1328,102 @@ fa_load(const char *url, const char **vpaths,
   time_t mtime = 0;
   int is_expired = 0;
   buf_t *buf = NULL;
+  int tag;
+  loadarg_t *la;
+  va_list ap;
+  va_start(ap, url);
+
+  SIMPLEQ_HEAD(, loadarg) qargs;
+  SIMPLEQ_INIT(&qargs);
+
+  while((tag = va_arg(ap, int)) != 0) {
+    switch(tag) {
+    case FA_LOAD_TAG_ERRBUF:
+      errbuf = va_arg(ap, char *);
+      errlen = va_arg(ap, size_t);
+      break;
+
+    case FA_LOAD_TAG_CACHE_CONTROL:
+      cache_control = va_arg(ap, int *);
+      break;
+
+    case FA_LOAD_TAG_FLAGS:
+      flags = va_arg(ap, int);
+      break;
+
+    case FA_LOAD_TAG_PROGRESS_CALLBACK:
+      cb = va_arg(ap, fa_load_cb_t *);
+      opaque = va_arg(ap, void *);
+      break;
+
+    case FA_LOAD_TAG_CANCELLABLE:
+      c = va_arg(ap, cancellable_t *);
+      break;
+
+    case FA_LOAD_TAG_VPATHS:
+      vpaths = va_arg(ap, const char **);
+      break;
+
+    case FA_LOAD_TAG_QUERY_ARG:
+      la = alloca(sizeof(loadarg_t));
+      la->key = va_arg(ap, const char *);
+      la->value = va_arg(ap, const char *);
+      if(la->value != NULL && la->key != NULL)
+        SIMPLEQ_INSERT_TAIL(&qargs, la, link);
+      break;
+
+    case FA_LOAD_TAG_QUERY_ARGVEC: {
+      const char **args = va_arg(ap, const char **);
+
+      while(args[0] != NULL) {
+        if(args[1] != NULL) {
+          la = alloca(sizeof(loadarg_t));
+          la->key = args[0];
+          la->value = args[1];
+          SIMPLEQ_INSERT_TAIL(&qargs, la, link);
+        }
+        args += 2;
+      }
+    }
+      break;
+
+    case FA_LOAD_TAG_MIN_EXPIRE:
+      min_expire = va_arg(ap, int);
+      break;
+
+    case FA_LOAD_TAG_REQUEST_HEADERS:
+      request_headers = va_arg(ap, struct http_header_list *);
+      break;
+
+    case FA_LOAD_TAG_RESPONSE_HEADERS:
+      response_headers = va_arg(ap, struct http_header_list *);
+      break;
+
+    default:
+      abort();
+    }
+  }
+
+  va_end(ap);
+
+  if(SIMPLEQ_FIRST(&qargs) != NULL) {
+    // Construct URL with query args
+    htsbuf_queue_t q;
+    htsbuf_queue_init(&q, 0);
+
+    htsbuf_append(&q, url, strlen(url));
+    char prefix = '?';
+    SIMPLEQ_FOREACH(la, &qargs, link) {
+      htsbuf_append(&q, &prefix, 1);
+      htsbuf_append_and_escape_url(&q, la->key);
+      htsbuf_append(&q, "=", 1);
+      htsbuf_append_and_escape_url(&q, la->value);
+      prefix = '&';
+    }
+    char *newurl = htsbuf_to_string(&q);
+    url = mystrdupa(newurl); // Copy it to stack to avoid all free()s
+    free(newurl);
+  }
 
   if((filename = fa_resolve_proto(url, &fap, vpaths, errbuf, errlen)) == NULL)
     return NULL;
@@ -1345,7 +1465,8 @@ fa_load(const char *url, const char **vpaths,
       blobcache_get_meta(url, "fa_load", &etag, &mtime);
     
     data2 = fap->fap_load(fap, filename, errbuf, errlen,
-			  &etag, &mtime, &max_age, flags, cb, opaque);
+			  &etag, &mtime, &max_age, flags, cb, opaque, c,
+                          request_headers, response_headers);
     
     fap_release(fap);
     free(filename);
@@ -1373,9 +1494,21 @@ fa_load(const char *url, const char **vpaths,
       */
     int no_change;
 
+    /*
+     * If caller specified a minimum expire (to force stuff to stay in
+     * cache for a given time), up max_age
+     */
+    max_age = MAX(min_expire, max_age);
+
     if(data2 && cache_control != DISABLE_CACHE &&
        (cache_control || max_age || etag || mtime)) {
-      no_change = blobcache_put(url, "fa_load", data2, max_age, etag, mtime);
+
+      int bc_flags = 0;
+      if(flags & FA_IMPORTANT)
+        bc_flags |= BLOBCACHE_IMPORTANT_ITEM;
+
+      no_change = blobcache_put(url, "fa_load", data2, max_age, etag, mtime,
+                                bc_flags);
 
     } else {
       no_change = 0;
@@ -1570,64 +1703,57 @@ fa_url_get_last_component(char *dst, size_t dstlen, const char *url)
 buf_t *
 fa_load_and_close(fa_handle_t *fh)
 {
-  size_t r;
+  int r;
   size_t size = fa_fsize(fh);
-  if(size == -1)
-    return NULL;
-
-  uint8_t *mem = mymalloc(size+1);
-  if(mem == NULL)
-    return NULL;
+  uint8_t *mem;
 
   fa_seek(fh, 0, SEEK_SET);
-  r = fa_read(fh, mem, size);
-  fa_close(fh);
 
-  if(r != size) {
-    free(mem);
-    return NULL;
+  if(size == -1) {
+    size = 0;
+    size_t alloced = 0;
+    mem = NULL;
+
+    while(1) {
+
+      alloced = alloced * 2 + 1000;
+      mem = myreallocf(mem, alloced + 1);
+      if(mem == NULL) {
+        fa_close(fh);
+        return NULL;
+      }
+
+      int max_read = alloced - size;
+      r = fa_read(fh, mem + size, max_read);
+      if(r < 0) {
+        fa_close(fh);
+        free(mem);
+        return NULL;
+      }
+
+      size += r;
+
+      if(r < max_read)
+        break;
+    }
+
+  } else {
+
+    mem = mymalloc(size+1);
+    if(mem == NULL)
+      return NULL;
+
+    r = fa_read(fh, mem, size);
+    fa_close(fh);
+
+    if(r != size) {
+      free(mem);
+      return NULL;
+    }
   }
 
   mem[size] = 0;
   return buf_create_and_adopt(size, mem, &free);
-}
-
-
-/**
- *
- */
-buf_t *
-fa_load_query(const char *url0,
-	      char *errbuf, size_t errlen, int *cache_control,
-	      const char **arguments, int flags)
-{
-  htsbuf_queue_t q;
-  htsbuf_queue_init(&q, 0);
-
-  htsbuf_append(&q, url0, strlen(url0));
-  if(arguments != NULL) {
-    const char **args = arguments;
-    char prefix = '?';
-    
-    while(args[0] != NULL) {
-      if(args[1] != NULL) {
-	htsbuf_append(&q, &prefix, 1);
-	htsbuf_append_and_escape_url(&q, args[0]);
-	htsbuf_append(&q, "=", 1);
-	htsbuf_append_and_escape_url(&q, args[1]);
-	prefix = '&';
-      }
-      args += 2;
-    }
-  }
-  
-  char *url = htsbuf_to_string(&q);
-
-  buf_t *b = fa_load(url, NULL, errbuf, errlen, cache_control, flags,
-                     NULL, NULL);
-  free(url);
-  htsbuf_queue_flush(&q);
-  return b;
 }
 
 

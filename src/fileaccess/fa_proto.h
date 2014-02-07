@@ -68,7 +68,7 @@ typedef struct fa_protocol {
    */
   fa_handle_t *(*fap_open)(struct fa_protocol *fap, const char *url,
 			   char *errbuf, size_t errsize, int flags,
-			   struct prop *stats);
+                           fa_open_extra_t *foe);
 
   /**
    * Close filehandle
@@ -160,7 +160,10 @@ typedef struct fa_protocol {
   buf_t *(*fap_load)(struct fa_protocol *fap, const char *url,
                      char *errbuf, size_t errlen,
                      char **etag, time_t *mtime, int *max_age,
-                     int flags, fa_load_cb_t *cb, void *opaque);
+                     int flags, fa_load_cb_t *cb, void *opaque,
+                     cancellable_t *c,
+                     struct http_header_list *request_headers,
+                     struct http_header_list *response_headers);
 
   /**
    * Normalize the given URL.
@@ -198,6 +201,14 @@ typedef struct fa_protocol {
 
   int (*fap_makedirs)(struct fa_protocol *fap, const char *url,
                       char *errbuf, size_t errsize);
+
+
+  /**
+   * Set read timeout
+   *
+   * If a read cannot be satisfied within this time, we return error
+   */
+  void (*fap_set_read_timeout)(fa_handle_t *fh, int ms);
 
 } fa_protocol_t;
 

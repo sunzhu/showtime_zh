@@ -600,7 +600,12 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
    * Check file type
    */
   fa_handle_t *fh;
-  fh = fa_open_ex(url, errbuf, errlen, FA_BUFFERED_BIG, mp->mp_prop_io);
+
+  fa_open_extra_t foe = {
+    .foe_stats = mp->mp_prop_io
+  };
+
+  fh = fa_open_ex(url, errbuf, errlen, FA_BUFFERED_BIG, &foe);
   if(fh == NULL)
     return NULL;
 
@@ -614,9 +619,7 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
     if(utf8_verify(tmp)) {
       title = rstr_alloc(tmp);
     } else {
-      char *t = utf8_from_bytes(tmp, 0, NULL, NULL, 0);
-      title = rstr_alloc(t);
-      free(t);
+      title = rstr_from_bytes(tmp, 0, NULL, NULL, 0);
     }
 
     va.title = rstr_get(title);
@@ -854,12 +857,10 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
 
   // Start it
   mp_configure(mp, (seek_is_fast ? MP_PLAY_CAPS_SEEK : 0) | MP_PLAY_CAPS_PAUSE,
-	       MP_BUFFER_DEEP, fctx->duration);
+	       MP_BUFFER_DEEP, fctx->duration, "video");
 
   if(!(va.flags & BACKEND_VIDEO_NO_AUDIO))
     mp_become_primary(mp);
-
-  prop_set_string(mp->mp_prop_type, "video");
 
   seek_index_t *si = build_index(mp, fctx, url);
   seek_index_t *ci = build_chapters(mp, fctx, url);

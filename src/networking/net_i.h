@@ -23,6 +23,7 @@
 #pragma once
 
 #include "net.h"
+#include "misc/cancellable.h"
 
 #if ENABLE_OPENSSL
 #include <openssl/ssl.h>
@@ -55,4 +56,9 @@ struct tcpcon {
     havege_state *hs;
 #endif
 
+  cancellable_t *c;
+
 };
+
+void tcp_cancel(void *aux);
+

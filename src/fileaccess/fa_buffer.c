@@ -81,6 +81,8 @@ typedef struct buffered_file {
 
   int64_t bf_size;
 
+  int bf_flags;
+
   char *bf_url;
 
   buffered_zone_t bf_zones[BF_ZONES];
@@ -267,7 +269,8 @@ fab_close(fa_handle_t *handle)
 #ifdef FILE_PARKING
   buffered_file_t *closeme = NULL, *bf = (buffered_file_t *)handle;
 
-  if(bf->bf_src->fh_proto->fap_flags & FAP_NO_PARKING) {
+  if(bf->bf_src->fh_proto->fap_flags & FAP_NO_PARKING ||
+     bf->bf_flags & FA_NO_PARKING) {
     fab_destroy((buffered_file_t *)handle);
     return;
   }
@@ -534,6 +537,19 @@ fab_seek_is_fast(fa_handle_t *handle)
 /**
  *
  */
+static void
+fab_set_read_timeout(fa_handle_t *handle, int ms)
+{
+  buffered_file_t *bf = (buffered_file_t *)handle;
+  fa_handle_t *fh = bf->bf_src;
+  if(fh->fh_proto->fap_set_read_timeout != NULL)
+    fh->fh_proto->fap_set_read_timeout(fh, ms);
+}
+
+
+/**
+ *
+ */
 static fa_protocol_t fa_protocol_buffered = {
   .fap_name  = "buffer",
   .fap_close = fab_close,
@@ -541,6 +557,7 @@ static fa_protocol_t fa_protocol_buffered = {
   .fap_seek  = fab_seek,
   .fap_fsize = fab_fsize,
   .fap_seek_is_fast = fab_seek_is_fast,
+  .fap_set_read_timeout = fab_set_read_timeout,
 };
 
 
@@ -549,7 +566,7 @@ static fa_protocol_t fa_protocol_buffered = {
  */
 fa_handle_t *
 fa_buffered_open(const char *url, char *errbuf, size_t errsize, int flags,
-		 struct prop *stats)
+                 struct fa_open_extra *foe)
 {
   buffered_file_t *closeme = NULL;
   fa_handle_t *fh = NULL;
@@ -584,7 +601,7 @@ fa_buffered_open(const char *url, char *errbuf, size_t errsize, int flags,
   int mflags = flags;
   flags &= ~ (FA_BUFFERED_SMALL | FA_BUFFERED_BIG);
 
-  fh = fa_open_ex(url, errbuf, errsize, flags, stats);
+  fh = fa_open_ex(url, errbuf, errsize, flags, foe);
   if(fh == NULL)
     return NULL;
 
@@ -595,6 +612,7 @@ fa_buffered_open(const char *url, char *errbuf, size_t errsize, int flags,
   bf->bf_url = strdup(url);
   bf->bf_min_request = mflags & FA_BUFFERED_BIG ? 256 * 1024 : 64 * 1024;
   bf->bf_mem_size = 1024 * 1024;
+  bf->bf_flags = flags;
 
   bf->bf_src = fh;
   bf->bf_size = -1;

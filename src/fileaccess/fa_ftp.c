@@ -209,7 +209,7 @@ fc_connect(const char *hostname, int port,
     hts_mutex_unlock(&ftp_global_mutex);
   }
 
-  if((tc = tcp_connect(hostname, port, errbuf, errlen, 5000, 0)) == NULL)
+  if((tc = tcp_connect(hostname, port, errbuf, errlen, 5000, 0, NULL)) == NULL)
     return NULL;
 
   fc = calloc(1, sizeof(ftp_connection_t));
@@ -339,7 +339,7 @@ ftp_open_data_transfer(ftp_connection_t *fc)
 
   snprintf(host, sizeof(host), "%d.%d.%d.%d", d[0], d[1], d[2], d[3]);
   int port = d[4] * 256 + d[5];
-  tcpcon_t *tc = tcp_connect(host, port, buf, sizeof(buf), 5000, 0);
+  tcpcon_t *tc = tcp_connect(host, port, buf, sizeof(buf), 5000, 0, NULL);
   if(tc == NULL) {
     TRACE(TRACE_ERROR, "FTP", "Data channel connection failed to %s:%d -- %s",
           host, port, buf);
@@ -418,7 +418,7 @@ ftp_file_size(ftp_file_t *ff)
 
   if(r == 213)
     ff->ff_size = strtoll(ret, NULL, 10);
-  return -1;
+  return ff->ff_size;
 }
 
 #if 0
@@ -483,6 +483,8 @@ static int
 ftp_list_dir_LIST(ftp_connection_t *fc, const char *path, fa_dir_t *fd)
 {
   tcpcon_t *tc = ftp_open_data_transfer(fc);
+  if(tc == NULL)
+    return -1;
 
   char resp[1024];
 
@@ -576,7 +578,7 @@ ftp_scandir(fa_protocol_t *fap, fa_dir_t *fd,
 static fa_handle_t *
 ftp_open(struct fa_protocol *fap, const char *url,
          char *errbuf, size_t errsize, int flags,
-         struct prop *stats)
+         struct fa_open_extra *foe)
 {
   ftp_file_t *ff = ftp_file_init(url, errbuf, errsize, 0);
   if(ff == NULL)
@@ -596,14 +598,17 @@ static void
 ftp_close(fa_handle_t *fh)
 {
   ftp_file_t *ff = (ftp_file_t *)fh;
-  int r = 0;
+  int drop = 0;
+  FTP_TRACE("[%dd]: Close, xfer:%s", ff->ff_fc->fc_id,
+            ff->ff_xfer ? "yes" : "no");
   if(ff->ff_xfer != NULL) {
     tcp_close(ff->ff_xfer);
     ff->ff_xfer = NULL;
-    r = fc_read_result(ff->ff_fc, NULL, 0);
+    fc_read_result(ff->ff_fc, NULL, 0);
+    drop = 1;
   }
   // Disconnect control channel if we got a permanent error
-  ftp_file_release(ff, r >= 500);
+  ftp_file_release(ff, drop);
 }
 
 

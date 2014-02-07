@@ -336,7 +336,7 @@ js_cache_put(JSContext *cx, JSObject *obj, uintN argc, jsval *argv, jsval *rval)
 
   // put json encoded object onto cache
   snprintf(stash, sizeof(stash), "plugin/%s/%s", jsp->jsp_id, lstash);
-  blobcache_put(key, stash, b, maxage, NULL, 0);
+  blobcache_put(key, stash, b, maxage, NULL, 0, 0);
   buf_release(b);
   return JS_TRUE;
 }
@@ -406,7 +406,9 @@ js_get_descriptor(JSContext *cx, JSObject *obj,
 
   snprintf(pe + 1, sizeof(pdesc) - (pe - pdesc), "plugin.json");
 
-  b = fa_load(pdesc, NULL, errbuf, sizeof(errbuf), NULL, 0, NULL, NULL);
+  b = fa_load(pdesc,
+               FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
+               NULL);
   if (b == NULL) {
     TRACE(TRACE_ERROR, "JS", "Unable to read %s -- %s", pdesc, errbuf);
     return JS_FALSE;

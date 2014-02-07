@@ -71,6 +71,7 @@ struct media_buf;
 struct media_queue;
 struct media_pipe;
 struct video_decoder;
+struct cancellable;
 
 #define MP_SKIP_LIMIT 2000000 /* µs that must before a skip back is
 				 actually considered a restart */
@@ -210,7 +211,7 @@ typedef struct media_buf {
   enum {
     MB_VIDEO,
     MB_AUDIO,
-
+    MB_SET_PROP_STRING,
 
     MB_DVD_CLUT,
     MB_DVD_RESET_SPU,
@@ -252,14 +253,15 @@ typedef struct media_buf {
     int32_t mb_data32;
     int mb_rate;
     int mb_codecid;
-    int mb_font_context;
     float mb_float;
+    prop_t *mb_prop;
   };
 
 
   uint8_t mb_stream;
 
   uint8_t mb_channels;
+  uint16_t mb_font_context;
 
 } media_buf_t;
 
@@ -342,6 +344,7 @@ typedef struct media_pipe {
 #define MP_PRIMABLE      0x1
 #define MP_ON_STACK      0x2
 #define MP_VIDEO         0x4
+#define MP_FLUSH_ON_HOLD 0x8
 
   int mp_eof;   // End of file: We don't expect to need to read more data
   int mp_hold;  // Paused
@@ -385,7 +388,6 @@ typedef struct media_pipe {
   /* Props */
 
   prop_t *mp_prop_root;
-  prop_t *mp_prop_type;
   prop_t *mp_prop_io;
   prop_t *mp_prop_ctrl;
   prop_t *mp_prop_notifications;
@@ -480,6 +482,11 @@ typedef struct media_pipe {
   int mp_vol_user;
   float mp_vol_ui;
 
+  /**
+   * Cancellable must be accessed under mp_mutex protection
+   */
+  struct cancellable *mp_cancellable;
+
 } media_pipe_t;
 
 extern void (*media_pipe_init_extra)(media_pipe_t *mp);
@@ -571,7 +578,7 @@ media_buf_t *media_buf_alloc_locked(media_pipe_t *mp, size_t payloadsize);
 media_buf_t *media_buf_alloc_unlocked(media_pipe_t *mp, size_t payloadsize);
 media_buf_t *media_buf_from_avpkt_unlocked(media_pipe_t *mp, struct AVPacket *pkt);
 
-media_pipe_t *mp_create(const char *name, int flags, const char *type);
+media_pipe_t *mp_create(const char *name, int flags);
 
 void mp_reinit_streams(media_pipe_t *mp);
 
@@ -600,6 +607,9 @@ void mp_send_cmd(media_pipe_t *mp, media_queue_t *mq, int cmd);
 void mp_send_cmd_data(media_pipe_t *mp, media_queue_t *mq, int cmd, void *d);
 void mp_send_cmd_u32(media_pipe_t *mp, media_queue_t *mq, int cmd, 
 		     uint32_t u);
+
+void mp_send_prop_set_string(media_pipe_t *mp, media_queue_t *mq,
+                             prop_t *prop, const char *str);
 
 void mp_flush(media_pipe_t *mp, int blackout);
 
@@ -638,18 +648,21 @@ void mp_set_url(media_pipe_t *mp, const char *url);
 
 void mp_send_volume_update_locked(media_pipe_t *mp);
 
-#define MP_PLAY_CAPS_SEEK 0x1
-#define MP_PLAY_CAPS_PAUSE 0x2
-#define MP_PLAY_CAPS_EJECT 0x4
+#define MP_PLAY_CAPS_SEEK          0x1
+#define MP_PLAY_CAPS_PAUSE         0x2
+#define MP_PLAY_CAPS_EJECT         0x4
+#define MP_PLAY_CAPS_FLUSH_ON_HOLD 0x8
 
 #define MP_BUFFER_NONE    0
 #define MP_BUFFER_SHALLOW 2
 #define MP_BUFFER_DEEP    3
 
 void mp_configure(media_pipe_t *mp, int caps, int buffer_mode,
-		  int64_t duration);
+		  int64_t duration, const char *type);
 
 void mp_set_duration(media_pipe_t *mp, int64_t duration);
+
+void mp_set_cancellable(media_pipe_t *mp, struct cancellable *c);
 
 int64_t mq_realtime_delay(media_queue_t *mq);
 

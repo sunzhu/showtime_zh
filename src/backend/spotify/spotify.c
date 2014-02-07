@@ -4210,7 +4210,7 @@ be_spotify_play(const char *url, media_pipe_t *mp,
   hts_mutex_unlock(&spotify_mutex);
 
   mp_configure(mp, MP_PLAY_CAPS_SEEK | MP_PLAY_CAPS_PAUSE,
-	       MP_BUFFER_NONE, 0);
+	       MP_BUFFER_NONE, 0, "tracks");
 
   mp_set_playstatus_by_hold(mp, hold, NULL);
 
@@ -4283,7 +4283,7 @@ be_spotify_play(const char *url, media_pipe_t *mp,
 static pixmap_t *
 be_spotify_imageloader(const char *url, const image_meta_t *im,
 		       const char **vpaths, char *errbuf, size_t errlen,
-		       int *cache_control, be_load_cb_t *cb, void *opaque)
+		       int *cache_control, cancellable_t *c)
 {
   if(ONLY_CACHED(cache_control)) {
     snprintf(errbuf, errlen, "Not cached");

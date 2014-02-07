@@ -223,6 +223,8 @@ typedef struct http_file {
 
   char hf_fast_fail;
 
+  char hf_no_retries;
+
   char hf_req_compression;
   
   char hf_content_encoding;
@@ -231,7 +233,14 @@ typedef struct http_file {
 
   int hf_max_age;
 
+  int hf_read_timeout;
+
   prop_t *hf_stats_speed;
+
+  const struct http_header_list *hf_user_request_headers;
+  struct http_header_list *hf_user_response_headers;
+
+  cancellable_t *hf_c;
 
 #define STAT_VEC_SIZE 20
   int hf_stats[STAT_VEC_SIZE];
@@ -261,7 +270,8 @@ http_connection_destroy(http_connection_t *hc, int dbg, const char *reason)
  */
 static http_connection_t *
 http_connection_get(const char *hostname, int port, int ssl,
-		    char *errbuf, int errlen, int dbg, int timeout)
+		    char *errbuf, int errlen, int dbg, int timeout,
+                    cancellable_t *c)
 {
   http_connection_t *hc, *next;
   tcpcon_t *tc;
@@ -290,6 +300,7 @@ http_connection_get(const char *hostname, int port, int ssl,
       HTTP_TRACE(dbg, "Reusing connection to %s:%d (id=%d)",
 		 hc->hc_hostname, hc->hc_port, hc->hc_id);
       hc->hc_reused = 1;
+      tcp_set_cancellable(hc->hc_tc, c);
       return hc;
     }
   }
@@ -297,7 +308,8 @@ http_connection_get(const char *hostname, int port, int ssl,
   id = ++http_connection_tally;
   hts_mutex_unlock(&http_connections_mutex);
 
-  if((tc = tcp_connect(hostname, port, errbuf, errlen, timeout, ssl)) == NULL) {
+  if((tc = tcp_connect(hostname, port, errbuf, errlen,
+                       timeout, ssl, c)) == NULL) {
     HTTP_TRACE(dbg, "Connection to %s:%d failed", hostname, port);
     return NULL;
   }
@@ -324,6 +336,8 @@ http_connection_park(http_connection_t *hc, int dbg, int max_age)
   http_connection_t *next;
 
   time(&now);
+
+  tcp_set_cancellable(hc->hc_tc, NULL);
 
   HTTP_TRACE(dbg, "Parking connection to %s:%d (id=%d)",
 	     hc->hc_hostname, hc->hc_port, hc->hc_id);
@@ -1130,7 +1144,10 @@ http_read_content(http_file_t *hf)
       csize = strtol(chunkheader, NULL, 16);
 
       if(csize > 0) {
-	buf = myrealloc(buf, s + csize + 1);
+	buf = myreallocf(buf, s + csize + 1);
+        if(buf == NULL);
+          return NULL;
+
 	if(tcp_read_data(hc->hc_tc, buf + s, csize, NULL, 0))
 	  break;
 
@@ -1420,7 +1437,7 @@ http_detach(http_file_t *hf, int reusable, const char *reason)
   if(hf->hf_connection == NULL)
     return;
 
-  if(reusable && !gconf.disable_http_reuse) {
+  if(reusable && !gconf.disable_http_reuse && hf->hf_read_timeout == 0) {
     http_connection_park(hf->hf_connection, hf->hf_debug, hf->hf_max_age);
   } else {
     http_connection_destroy(hf->hf_connection, hf->hf_debug, reason);
@@ -1552,6 +1569,21 @@ authenticate(http_file_t *hf, char *errbuf, size_t errlen, int *non_interactive,
 /**
  *
  */
+static void
+http_set_read_timeout(fa_handle_t *fh, int ms)
+{
+  http_file_t *hf = (http_file_t *)fh;
+
+  hf->hf_read_timeout = ms;
+
+  if(hf->hf_connection != NULL)
+    tcp_set_read_timeout(hf->hf_connection->hc_tc, ms);
+}
+
+
+/**
+ *
+ */
 static int
 http_connect(http_file_t *hf, char *errbuf, int errlen)
 {
@@ -1597,7 +1629,10 @@ http_connect(http_file_t *hf, char *errbuf, int errlen)
     timeout = 2000;
 
   hf->hf_connection = http_connection_get(hostname, port, ssl, errbuf, errlen,
-					  hf->hf_debug, timeout);
+					  hf->hf_debug, timeout, hf->hf_c);
+
+  if(hf->hf_read_timeout != 0 && hf->hf_connection != NULL)
+    tcp_set_read_timeout(hf->hf_connection->hc_tc, hf->hf_read_timeout);
 
   return hf->hf_connection ? 0 : -1;
 }
@@ -1661,7 +1696,7 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
 		     &cookies);
   http_headers_free(&cookies);
 
-  http_headers_send(&q, &headers, NULL, NULL);
+  http_headers_send(&q, &headers, hf->hf_user_request_headers, NULL);
 
 
   if(hf->hf_debug)
@@ -1669,7 +1704,7 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
 
   tcp_write_queue(hf->hf_connection->hc_tc, &q);
 
-  code = http_read_response(hf, NULL);
+  code = http_read_response(hf, hf->hf_user_response_headers);
   if(code == -1 && hf->hf_connection->hc_reused) {
     http_detach(hf, 0, "Read error on reused connection, retrying");
     goto reconnect;
@@ -1677,8 +1712,13 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
 
   switch(code) {
   case 200:
-    if(hf->hf_streaming)
+    if(hf->hf_streaming) {
+      if(hf->hf_filesize == -1)
+        hf->hf_rsize = INT64_MAX;
+
+      HF_TRACE(hf, "Opened in streaming mode");
       return 0;
+    }
 
     if(nohead) {
       http_detach(hf, 0, "Range request not understood");
@@ -1912,10 +1952,10 @@ again:
   http_cookie_append(hf->hf_connection->hc_hostname, hf->hf_path, &headers,
 		     &cookies);
   http_headers_free(&cookies);
-  http_headers_send(&q, &headers, NULL, NULL);
+  http_headers_send(&q, &headers, hf->hf_user_request_headers, NULL);
 
   tcp_write_queue(hf->hf_connection->hc_tc, &q);
-  code = http_read_response(hf, NULL);
+  code = http_read_response(hf, hf->hf_user_response_headers);
   if(code == -1 && hf->hf_connection->hc_reused) {
     http_detach(hf, 0, "Read error on reused connection");
     goto reconnect;
@@ -1978,7 +2018,7 @@ http_scandir(fa_protocol_t *fap, fa_dir_t *fd, const char *url,
  */
 static fa_handle_t *
 http_open_ex(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
-             int *non_interactive, int flags, prop_t *stats)
+             int *non_interactive, int flags, struct fa_open_extra *foe)
 {
   http_file_t *hf = calloc(1, sizeof(http_file_t));
   hf->hf_version = 1;
@@ -1986,9 +2026,15 @@ http_open_ex(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
   hf->hf_debug = !!(flags & FA_DEBUG) || gconf.enable_http_debug;
   hf->hf_streaming = !!(flags & FA_STREAMING);
   hf->hf_fast_fail = !!(flags & FA_FAST_FAIL);
-  if(stats != NULL) {
-    hf->hf_stats_speed = prop_ref_inc(prop_create(stats, "bitrate"));
-    prop_set_int(prop_create(stats, "bitrateValid"), 1);
+  hf->hf_no_retries = !!(flags & FA_NO_RETRIES);
+  if(foe != NULL) {
+    if(foe->foe_stats != NULL) {
+      hf->hf_stats_speed = prop_ref_inc(prop_create(foe->foe_stats, "bitrate"));
+      prop_set(foe->foe_stats, "bitrateValid", PROP_SET_INT, 1);
+    }
+    hf->hf_user_request_headers  = foe->foe_request_headers;
+    hf->hf_user_response_headers = foe->foe_response_headers;
+    hf->hf_c = foe->foe_c;
   }
 
   if(!http_open0(hf, 1, errbuf, errlen, non_interactive)) {
@@ -2002,9 +2048,9 @@ http_open_ex(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
 
 static fa_handle_t *
 http_open(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
-	  int flags, struct prop *stats)
+	  int flags, struct fa_open_extra *foe)
 {
-  return http_open_ex(fap, url, errbuf, errlen, NULL, flags, stats);
+  return http_open_ex(fap, url, errbuf, errlen, NULL, flags, foe);
 }
 
 
@@ -2052,22 +2098,24 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
     /* If not connected, try to (re-)connect */
   retry:
     if((hc = hf->hf_connection) == NULL) {
+      if(hf->hf_no_retries)
+        return -1;
+
       if(http_connect(hf, NULL, 0))
 	return -1;
       hc = hf->hf_connection;
     }
 
     if(hf->hf_rsize > 0) {
-      /* We have pending data input on the socket */
-
-      if(hf->hf_rsize < size - totsize)
-	/* We can not read more data than is available */
-	read_size = hf->hf_rsize;
-      else
-	read_size = size - totsize;
+      /*
+       * We have pending data input on the socket,
+       * However, we can not read more data than is available,
+       */
+      read_size = MIN(hf->hf_rsize, size - totsize);
 
     } else {
 
+      HF_TRACE(hf, "read() needs to send a new GET request");
       read_size = size - totsize;
 
       /* Must send a new request */
@@ -2114,13 +2162,13 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
 
       http_cookie_append(hc->hc_hostname, hf->hf_path, &headers, &cookies);
       http_headers_free(&cookies);
-      http_headers_send(&q, &headers, NULL, NULL);
+      http_headers_send(&q, &headers, hf->hf_user_request_headers, NULL);
       if(hf->hf_debug)
 	htsbuf_hexdump(&q, "HTTP");
 
       tcp_write_queue(hc->hc_tc, &q);
 
-      code = http_read_response(hf, NULL);
+      code = http_read_response(hf, hf->hf_user_response_headers);
       if(code == -1 && hf->hf_connection->hc_reused) {
 	http_detach(hf, 0, "Read error on reused connection, retrying");
 	goto retry;
@@ -2164,7 +2212,24 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
 
       if(hf->hf_rsize < read_size)
 	read_size = hf->hf_rsize;
+    }
 
+    if(hf->hf_filesize == -1 && hf->hf_streaming &&
+       !hf->hf_chunked_transfer) {
+      // Read until EOF
+
+      while(read_size) {
+        int r = tcp_read_to_eof(hc->hc_tc, buf + totsize, read_size,
+                                NULL, NULL);
+        if(r < 0)
+          return totsize;
+
+        read_size               -= r;
+        hf->hf_pos              += r;
+        totsize                 += r;
+        hf->hf_consecutive_read += r;
+      }
+      return totsize;
     }
 
 
@@ -2181,16 +2246,17 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
     if(read_size > 0) {
       assert(totsize + read_size <= size);
       if(tcp_read_data(hc->hc_tc, buf + totsize, read_size, NULL, NULL)) {
-	// Fail but we can retry a couple of times
-	http_detach(hf, 0, "Read error during fa_read()");
-	continue;
+        // Fail, so disconnect
+        http_detach(hf, 0, "Read error during fa_read()");
+        // But we can retry a couple of times
+        continue;
       }
 
-      hf->hf_pos   += read_size;
-      hf->hf_rsize -= read_size;
-      totsize      += read_size;
-
+      hf->hf_pos              += read_size;
+      hf->hf_rsize            -= read_size;
+      totsize                 += read_size;
       hf->hf_consecutive_read += read_size;
+
     } else {
       hf->hf_rsize = 0;
     }
@@ -2368,7 +2434,10 @@ static buf_t *
 http_load(struct fa_protocol *fap, const char *url,
 	  char *errbuf, size_t errlen,
 	  char **etag, time_t *mtime, int *max_age,
-	  int flags, fa_load_cb_t *cb, void *opaque)
+	  int flags, fa_load_cb_t *cb, void *opaque,
+          cancellable_t *c,
+          struct http_header_list *request_headers,
+          struct http_header_list *response_headers)
 {
   buf_t *b;
   int err;
@@ -2379,23 +2448,30 @@ http_load(struct fa_protocol *fap, const char *url,
   LIST_INIT(&headers_in);
   LIST_INIT(&headers_out);
 
+  if(request_headers == NULL)
+    request_headers = &headers_in;
+
+  if(response_headers == NULL)
+    response_headers = &headers_out;
+
   if(mtime != NULL && *mtime) {
     char txt[40];
     http_asctime(*mtime, txt, sizeof(txt));
-    http_header_add(&headers_in, "If-Modified-Since", txt, 0);
+    http_header_add(request_headers, "If-Modified-Since", txt, 0);
   }
 
   if(etag != NULL && *etag != NULL) {
-    http_header_add(&headers_in, "If-None-Match", *etag, 0);
+    http_header_add(request_headers, "If-None-Match", *etag, 0);
   }
 
   err = http_req(url,
                  HTTP_RESULT_PTR(&b),
                  HTTP_ERRBUF(errbuf, errlen),
                  HTTP_FLAGS(flags),
-                 HTTP_RESPONSE_HEADERS(&headers_out),
-                 HTTP_REQUEST_HEADERS(&headers_in),
+                 HTTP_RESPONSE_HEADERS(response_headers),
+                 HTTP_REQUEST_HEADERS(request_headers),
                  HTTP_PROGRESS_CALLBACK(cb, opaque),
+                 HTTP_CANCELLABLE(c),
                  NULL);
 
   if(err == -1) {
@@ -2408,20 +2484,20 @@ http_load(struct fa_protocol *fap, const char *url,
     goto done;
   }
 
-  s = http_header_get(&headers_out, "content-type");
+  s = http_header_get(response_headers, "content-type");
   if(s != NULL && b != NULL)
     b->b_content_type = rstr_alloc(s);
 
   if(mtime != NULL) {
     *mtime = 0;
-    if((s = http_header_get(&headers_out, "last-modified")) != NULL) {
+    if((s = http_header_get(response_headers, "last-modified")) != NULL) {
       http_ctime(mtime, s);
     }
   }
 
   if(etag != NULL) {
     free(*etag);
-    if((s = http_header_get(&headers_out, "etag")) != NULL) {
+    if((s = http_header_get(response_headers, "etag")) != NULL) {
       *etag = strdup(s);
     } else {
       *etag = NULL;
@@ -2429,14 +2505,14 @@ http_load(struct fa_protocol *fap, const char *url,
   }
 
   if(max_age != NULL) {
-    if((s  = http_header_get(&headers_out, "date")) != NULL && 
-       (s2 = http_header_get(&headers_out, "expires")) != NULL) {
+    if((s  = http_header_get(response_headers, "date")) != NULL && 
+       (s2 = http_header_get(response_headers, "expires")) != NULL) {
       time_t expires, sdate;
       if(!http_ctime(&sdate, s) && !http_ctime(&expires, s2))
 	*max_age = expires - sdate;
     }
 
-    if((s = http_header_get(&headers_out, "cache-control")) != NULL) {
+    if((s = http_header_get(response_headers, "cache-control")) != NULL) {
       if((s2 = strstr(s, "max-age=")) != NULL) {
 	*max_age = atoi(s2 + strlen("max-age="));
       }
@@ -2448,8 +2524,11 @@ http_load(struct fa_protocol *fap, const char *url,
   }
 
  done:
-  http_headers_free(&headers_in);
-  http_headers_free(&headers_out);
+  if(request_headers == &headers_in)
+    http_headers_free(&headers_in);
+
+  if(response_headers == &headers_out)
+    http_headers_free(&headers_out);
   return b;
 }
 
@@ -2532,6 +2611,7 @@ static fa_protocol_t fa_protocol_http = {
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
   .fap_seek_is_fast = http_seek_is_fast,
+  .fap_set_read_timeout = http_set_read_timeout,
 };
 
 FAP_REGISTER(http);
@@ -2553,6 +2633,7 @@ static fa_protocol_t fa_protocol_https = {
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
   .fap_seek_is_fast = http_seek_is_fast,
+  .fap_set_read_timeout = http_set_read_timeout,
 };
 
 FAP_REGISTER(https);
@@ -2769,10 +2850,10 @@ dav_propfind(http_file_t *hf, fa_dir_t *fd, char *errbuf, size_t errlen,
 		       &cookies);
     http_headers_free(&cookies);
 
-    http_headers_send(&q, &headers, NULL, NULL);
+    http_headers_send(&q, &headers, hf->hf_user_request_headers, NULL);
 
     tcp_write_queue(hf->hf_connection->hc_tc, &q);
-    code = http_read_response(hf, NULL);
+    code = http_read_response(hf, hf->hf_user_response_headers);
 
     if(code == -1) {
       if(hf->hf_connection->hc_reused)
@@ -2893,6 +2974,7 @@ static fa_protocol_t fa_protocol_webdav = {
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
   .fap_seek_is_fast = http_seek_is_fast,
+  .fap_set_read_timeout = http_set_read_timeout,
 };
 FAP_REGISTER(webdav);
 
@@ -2912,6 +2994,7 @@ static fa_protocol_t fa_protocol_webdavs = {
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
   .fap_seek_is_fast = http_seek_is_fast,
+  .fap_set_read_timeout = http_set_read_timeout,
 };
 FAP_REGISTER(webdavs);
 
@@ -2943,15 +3026,14 @@ typedef struct http_read_aux {
 /**
  *
  */
-static int
+static void
 http_request_partial(void *opaque, int amount)
 {
   http_read_aux_t *hra = opaque;
 
   amount += hra->bytes_completed;
   if(hra->cb != NULL)
-    return hra->cb(hra->opaque, amount, hra->total);
-  return 0;
+    hra->cb(hra->opaque, amount, hra->total);
 }
 
 
@@ -2973,9 +3055,8 @@ append_buf(http_file_t *hf, struct http_read_aux *hra,
            const void *data, int size)
 {
   buf_t *b = hra->decoded_opaque;
-  char *tmp = myrealloc(b->b_ptr, b->b_size + size + 1);
+  char *tmp = myreallocf(b->b_ptr, b->b_size + size + 1);
   if(tmp == NULL) {
-    free(b->b_ptr);
     snprintf(hra->errbuf, hra->errlen, "out of memory");
     return -1;
   }
@@ -3263,6 +3344,10 @@ http_req(const char *url, ...)
     case HTTP_TAG_PROGRESS_CALLBACK:
       hra.cb = va_arg(ap, fa_load_cb_t *);
       hra.opaque = va_arg(ap, void *);
+      break;
+
+    case HTTP_TAG_CANCELLABLE:
+      hf->hf_c = va_arg(ap, cancellable_t *);
       break;
 
     default:

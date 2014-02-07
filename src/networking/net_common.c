@@ -190,6 +190,27 @@ tcp_read_data(tcpcon_t *tc, void *buf, size_t bufsize,
  *
  */
 int
+tcp_read_to_eof(tcpcon_t *tc, void *buf, size_t bufsize,
+                net_read_cb_t *cb, void *opaque)
+{
+  int r = htsbuf_read(&tc->spill, buf, bufsize);
+  if(r == bufsize)
+    return bufsize;
+
+  int x = tc->read(tc, buf + r, bufsize - r, 0, cb, opaque);
+  if(x < 0) {
+    if(r)
+      return r;
+    return x;
+  }
+  return r + x;
+}
+
+
+/**
+ *
+ */
+int
 tcp_read_data_nowait(tcpcon_t *tc, char *buf, const size_t bufsize)
 {
   int tot = htsbuf_read(&tc->spill, buf, bufsize);
@@ -288,4 +309,32 @@ int
 tcp_get_fd(const tcpcon_t *tc)
 {
   return tc->fd;
+}
+
+
+/**
+ *
+ */
+void
+tcp_cancel(void *aux)
+{
+  tcpcon_t *tc = aux;
+  shutdown(tc->fd, SHUT_RDWR);
+}
+
+
+/**
+ *
+ */
+void
+tcp_set_cancellable(tcpcon_t *tc, struct cancellable *c)
+{
+  if(tc->c == c)
+    return;
+
+  cancellable_unbind(tc->c);
+
+  tc->c = c;
+  if(tc->c != NULL)
+    cancellable_bind(tc->c, tcp_cancel, tc);
 }

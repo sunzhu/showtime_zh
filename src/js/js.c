@@ -584,8 +584,10 @@ js_getAuthCredentials(JSContext *cx, JSObject *obj,
   flags |= forcetmp ? 0 : KEYRING_SHOW_REMEMBER_ME | KEYRING_REMEMBER_ME_SET;
 
 
+  jsrefcount s = JS_SuspendRequest(cx);
   r = keyring_lookup(buf, &username, &password, NULL, NULL,
 		     source, reason, flags);
+  JS_ResumeRequest(cx, s);
 
   if(r == 1) {
     *rval = BOOLEAN_TO_JSVAL(0);
@@ -1133,7 +1135,7 @@ js_plugin_unload0(JSContext *cx, js_plugin_t *jsp)
   js_page_flush_from_plugin(cx, jsp);
   js_io_flush_from_plugin(cx, jsp);
   js_service_flush_from_plugin(cx, jsp);
-  js_setting_group_flush_from_plugin(cx, jsp);
+  js_setting_group_flush_from_list(cx, &jsp->jsp_setting_groups);
   js_event_destroy_handlers(cx, &jsp->jsp_event_handlers);
   js_subscription_flush_from_list(cx, &jsp->jsp_subscriptions);
   js_subprovider_flush_from_plugin(cx, jsp);
@@ -1291,7 +1293,7 @@ js_plugin_load(const char *id, const char *url, char *errbuf, size_t errlen)
   
   ref = fa_reference(url);
 
-  if((buf = fa_load(url, NULL, errbuf, errlen, NULL, 0, NULL, NULL)) == NULL) {
+  if((buf = fa_load(url, FA_LOAD_ERRBUF(errbuf, errlen), NULL)) == NULL) {
     fa_unreference(ref);
     return -1;
   }
@@ -1434,9 +1436,6 @@ js_init(void)
   jsval val;
   JSFunction *fn;
 
-  js_page_init();
-  js_hook_init();
-
   JS_SetCStringsAreUTF8();
 
   runtime = JS_NewRuntime(0x1000000);
@@ -1506,6 +1505,11 @@ js_fini(void)
 
 
   prop_unsubscribe(js_event_sub);
+
+  if(js_wait_for_models_to_terminate()) {
+    TRACE(TRACE_ERROR, "JS", "Javascript models failed to terminate on time\n"
+          "No problem since we will exit soon anyway");
+  }
 
   prop_courier_destroy(js_global_pc);
 
