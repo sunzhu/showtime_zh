@@ -33,8 +33,9 @@
 #include "navigator.h"
 #include "misc/redblack.h"
 #include "misc/buf.h"
+#include "misc/cancellable.h"
 
-typedef int (fa_load_cb_t)(void *opaque, int loaded, int total);
+typedef void (fa_load_cb_t)(void *opaque, int loaded, int total);
 
 struct prop;
 struct backend;
@@ -134,6 +135,9 @@ LIST_HEAD(fa_protocol_list, fa_protocol);
 #define FA_APPEND          0x800  /* Only if FA_WRITE:
                                      Seek to EOF when opening
                                      otherwise truncate */
+#define FA_IMPORTANT       0x1000
+#define FA_NO_RETRIES      0x2000
+#define FA_NO_PARKING      0x4000
 
 /**
  *
@@ -144,6 +148,19 @@ typedef struct fa_handle {
   int fh_dump_fd;
 #endif
 } fa_handle_t;
+
+
+struct http_header_list;
+
+/**
+ *
+ */
+typedef struct fa_open_extra {
+  const struct http_header_list *foe_request_headers;
+  struct http_header_list *foe_response_headers;
+  struct prop *foe_stats;
+  struct cancellable *foe_c;
+} fa_open_extra_t;
 
 
 /**
@@ -164,9 +181,10 @@ fa_dir_t *fa_get_parts(const char *url, char *errbuf, size_t errsize);
 #define fa_open(u, e, es) fa_open_ex(u, e, es, 0, NULL)
 
 void *fa_open_ex(const char *url, char *errbuf, size_t errsize, int flags,
-		 struct prop *stats);
+		 struct fa_open_extra *foe);
 void *fa_open_vpaths(const char *url, const char **vpaths,
-		     char *errbuf, size_t errsize, int flags);
+		     char *errbuf, size_t errsize, int flags,
+                     struct fa_open_extra *foe);
 void fa_close(void *fh);
 int fa_read(void *fh, void *buf, size_t size);
 int fa_write(void *fh, const void *buf, size_t size);
@@ -176,6 +194,7 @@ int fa_seek_is_fast(void *fh);
 int fa_stat(const char *url, struct fa_stat *buf, char *errbuf, size_t errsize);
 int fa_findfile(const char *path, const char *file, 
 		char *fullpath, size_t fullpathlen);
+void fa_set_read_timeout(void *fh_, int ms);
 
 int fa_can_handle(const char *url, char *errbuf, size_t errsize);
 
@@ -217,15 +236,56 @@ void fa_scanner_page(const char *url, time_t mtime,
 
 int fa_scanner_scan(const char *url, time_t mtime);
 
-buf_t *fa_load(const char *url, const char **vpaths,
-               char *errbuf, size_t errlen, int *cache_control, int flags,
-               fa_load_cb_t *cb, void *opaque);
+/**
+ *
+ * A word about cache control
+ *
+ * NULL          - Normal transparent caching (With expiry, etc)
+ *
+ * ptr to an int - If it's pointing to an int the load will stop if
+ *                 there is an entry in the cache and it is
+ *                 expired. In this case the pointed to int will be
+ *                 set to 1.
+ *
+ * DISABLE_CACHE - No cache operations at all
+ *
+ * BYPASS_CACHE - Don't read from cache. But use cache metadata when
+ *                loading object from network. This is used to refresh
+ *                objects we already know are expired. Typically
+ *                used by image loaders to refresh already displayed
+ *                expired images.
+ */
+
+enum {
+  FA_LOAD_TAG_ERRBUF = 1,
+  FA_LOAD_TAG_CACHE_CONTROL,
+  FA_LOAD_TAG_FLAGS,
+  FA_LOAD_TAG_PROGRESS_CALLBACK,
+  FA_LOAD_TAG_CANCELLABLE,
+  FA_LOAD_TAG_VPATHS,
+  FA_LOAD_TAG_QUERY_ARG,
+  FA_LOAD_TAG_QUERY_ARGVEC,
+  FA_LOAD_TAG_MIN_EXPIRE,
+  FA_LOAD_TAG_REQUEST_HEADERS,
+  FA_LOAD_TAG_RESPONSE_HEADERS,
+
+};
+
+#define FA_LOAD_ERRBUF(a, b)            FA_LOAD_TAG_ERRBUF, a, b
+#define FA_LOAD_CACHE_CONTROL(a)        FA_LOAD_TAG_CACHE_CONTROL, a
+#define FA_LOAD_FLAGS(a)                FA_LOAD_TAG_FLAGS, a
+#define FA_LOAD_PROGRESS_CALLBACK(a, b) FA_LOAD_TAG_PROGRESS_CALLBACK, a, b
+#define FA_LOAD_CANCELLABLE(a)          FA_LOAD_TAG_CANCELLABLE, a
+#define FA_LOAD_VPATHS(a)               FA_LOAD_TAG_VPATHS, a
+#define FA_LOAD_QUERY_ARG(a, b)         FA_LOAD_TAG_QUERY_ARG, a, b
+#define FA_LOAD_QUERY_ARGVEC(a)         FA_LOAD_TAG_QUERY_ARGVEC, a
+#define FA_LOAD_MIN_EXPIRE(a)           FA_LOAD_TAG_MIN_EXPIRE, a
+#define FA_LOAD_REQUEST_HEADERS(a)      FA_LOAD_TAG_REQUEST_HEADERS, a
+#define FA_LOAD_RESPONSE_HEADERS(a)     FA_LOAD_TAG_RESPONSE_HEADERS, a
+
+buf_t *fa_load(const char *url, ...)  __attribute__((__sentinel__(0)));
 
 buf_t *fa_load_and_close(fa_handle_t *fh);
-
-buf_t *fa_load_query(const char *url,
-                     char *errbuf, size_t errlen, int *cache_control,
-                     const char **arguments, int flags);
 
 int fa_parent(char *dst, size_t dstlen, const char *url)
   __attribute__ ((warn_unused_result));
@@ -242,7 +302,7 @@ void fa_pathjoin(char *dst, size_t dstlen, const char *p1, const char *p2);
 
 void fa_url_get_last_component(char *dst, size_t dstlen, const char *url);
 
-// Cache
+// Cache (XXX: Remove me)
 
 void fa_cache_init(void);
 
@@ -252,7 +312,7 @@ fa_handle_t *fa_cache_open(const char *url, char *errbuf,
 // Buffered I/O
 
 fa_handle_t *fa_buffered_open(const char *url, char *errbuf, size_t errsize,
-			      int flags, struct prop *stats);
+			      int flags, struct fa_open_extra *foe);
 
 // Memory backed files
 
@@ -298,6 +358,7 @@ enum {
   HTTP_TAG_RESPONSE_HEADERS,
   HTTP_TAG_METHOD,
   HTTP_TAG_PROGRESS_CALLBACK,
+  HTTP_TAG_CANCELLABLE,
 };
 
 
@@ -313,8 +374,9 @@ enum {
 #define HTTP_RESPONSE_HEADERS(a)           HTTP_TAG_RESPONSE_HEADERS, a
 #define HTTP_METHOD(a)                     HTTP_TAG_METHOD, a
 #define HTTP_PROGRESS_CALLBACK(a, b)       HTTP_TAG_PROGRESS_CALLBACK, a, b
+#define HTTP_CANCELLABLE(a)                HTTP_TAG_CANCELLABLE, a
 
-int http_req(const char *url, ...);
+int http_req(const char *url, ...)  __attribute__((__sentinel__(0)));
 
 int http_client_oauth(struct http_auth_req *har,
 		      const char *consumer_key,

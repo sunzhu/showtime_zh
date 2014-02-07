@@ -91,8 +91,7 @@ ssl_read(tcpcon_t *tc, void *buf, size_t len, int all,
     tot += c;
 
     if(cb != NULL)
-      if(cb(opaque, tot))
-	return -1;
+      cb(opaque, tot);
   }
   return tot;
 }
@@ -130,8 +129,7 @@ polarssl_read(tcpcon_t *tc, void *buf, size_t len, int all,
       return -1;
     tot += ret;
     if(cb != NULL)
-      if(cb(opaque, tot))
-	return -1;
+      cb(opaque, tot);
   }
   return tot;
 }
@@ -187,8 +185,7 @@ tcp_read(tcpcon_t *tc, void *buf, size_t len, int all,
 	return len;
       
       if(cb != NULL)
-	if(cb(opaque, off))
-	  return -1;
+	cb(opaque, off);
 
     } else {
       return x < 1 ? -1 : x;
@@ -250,13 +247,12 @@ tcp_from_fd(int fd)
 }
 
 
-
 /**
  *
  */
 tcpcon_t *
 tcp_connect(const char *hostname, int port, char *errbuf, size_t errbufsize,
-	    int timeout, int ssl)
+	    int timeout, int ssl, cancellable_t *c)
 {
   struct hostent *hp;
   char *tmphstbuf;
@@ -362,6 +358,15 @@ tcp_connect(const char *hostname, int port, char *errbuf, size_t errbufsize,
 
     free(tmphstbuf);
   }
+
+  tcpcon_t *tc = calloc(1, sizeof(tcpcon_t));
+  tc->fd = fd;
+  tc->c = c;
+  htsbuf_queue_init(&tc->spill, 0);
+
+  if(c != NULL)
+    cancellable_bind(c, tcp_cancel, tc);
+
   if(r == -1) {
     if(errno == EINPROGRESS) {
       struct pollfd pfd;
@@ -371,16 +376,16 @@ tcp_connect(const char *hostname, int port, char *errbuf, size_t errbufsize,
       pfd.revents = 0;
 
       r = poll(&pfd, 1, timeout);
-      if(r == 0) {
+      if(r < 1) {
+
+
 	/* Timeout */
-	snprintf(errbuf, errbufsize, "Connection attempt timed out");
-	close(fd);
-	return NULL;
-      }
-      
-      if(r == -1) {
-	snprintf(errbuf, errbufsize, "poll() error: %s", strerror(errno));
-	close(fd);
+        if(!r)
+          snprintf(errbuf, errbufsize, "Connection attempt timed out");
+        else
+          snprintf(errbuf, errbufsize, "poll() error: %s", strerror(errno));
+
+        tcp_close(tc);
 	return NULL;
       }
 
@@ -394,18 +399,15 @@ tcp_connect(const char *hostname, int port, char *errbuf, size_t errbufsize,
 
   if(err != 0) {
     snprintf(errbuf, errbufsize, "%s", strerror(err));
-    close(fd);
+    tcp_close(tc);
     return NULL;
   }
-  
+
   fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
 
   val = 1;
   setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val));
 
-  tcpcon_t *tc = calloc(1, sizeof(tcpcon_t));
-  tc->fd = fd;
-  htsbuf_queue_init(&tc->spill, 0);
   
 
   if(ssl) {
@@ -462,10 +464,10 @@ tcp_connect(const char *hostname, int port, char *errbuf, size_t errbufsize,
       ssl_set_bio(tc->ssl, net_recv, &tc->fd, net_send, &tc->fd);
       ssl_set_ciphersuites(tc->ssl, ssl_default_ciphersuites );
       ssl_set_session(tc->ssl, tc->ssn );
-      
+
       tc->read = polarssl_read;
       tc->write = polarssl_write;
-      
+
     } else
 #endif
     {
@@ -505,18 +507,21 @@ tcp_close(tcpcon_t *tc)
     free(tc->hs);
   }
 #endif
+  cancellable_unbind(tc->c);
   close(tc->fd);
   htsbuf_queue_flush(&tc->spill);
   free(tc);
 }
 
+
+/**
+ *
+ */
 void
 tcp_shutdown(tcpcon_t *tc)
 {
   shutdown(tc->fd, SHUT_RDWR);
 }
-
-
 
 
 /**
@@ -528,6 +533,20 @@ tcp_huge_buffer(tcpcon_t *tc)
   int v = 192 * 1024;
   if(setsockopt(tc->fd, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v)) == -1)
     TRACE(TRACE_ERROR, "TCP", "Unable to increase RCVBUF");
+}
+
+
+/**
+ *
+ */
+void
+tcp_set_read_timeout(tcpcon_t *tc, int ms)
+{
+  struct timeval tv;
+  tv.tv_sec  = ms / 1000;
+  tv.tv_usec = (ms % 1000) * 1000;
+  if(setsockopt(tc->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1)
+    TRACE(TRACE_ERROR, "TCP", "Unable to set RCVTIMO");
 }
 
 

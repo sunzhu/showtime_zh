@@ -78,7 +78,7 @@ diag_html(http_connection_t *hc, htsbuf_queue_t *out)
 
   for(i = 0; i <= 5; i++) {
     struct stat st;
-    snprintf(p1, sizeof(p1), "%s/log/showtime.log.%d", gconf.cache_path,i);
+    snprintf(p1, sizeof(p1), "%s/log/showtime-%d.log", gconf.cache_path,i);
     if(stat(p1, &st)) 
       continue;
     char timestr[32];
@@ -130,6 +130,8 @@ hc_root_old(http_connection_t *hc)
 
   diag_html(hc, &out);
 
+  htsbuf_qprintf(&out, "<p><a href=\"/showtime/translation\">Upload and test new translation (.lang) file</a></p>");
+
   htsbuf_qprintf(&out, "</body></html>");
 		 
   return http_send_reply(hc, 0, "text/html", NULL, NULL, 0, &out);
@@ -172,7 +174,7 @@ hc_image(http_connection_t *hc, const char *remain, void *opaque,
   }
 
   pm = backend_imageloader(url, &im, NULL, errbuf, sizeof(errbuf), NULL,
-			   NULL, NULL);
+			   NULL);
   rstr_release(url);
   if(pm == NULL)
     return http_error(hc, 404, "Unable to load image %s : %s",
@@ -440,8 +442,8 @@ hc_logfile(http_connection_t *hc, const char *remain, void *opaque,
   const char *mode = http_arg_get_req(hc, "mode");
 
   char p1[500];
-  snprintf(p1, sizeof(p1), "%s/log/showtime.log.%d", gconf.cache_path, n);
-  buf_t *buf = fa_load(p1, NULL, NULL, 0, NULL, 0, NULL, NULL);
+  snprintf(p1, sizeof(p1), "%s/log/showtime-%d.log", gconf.cache_path, n);
+  buf_t *buf = fa_load(p1, NULL);
 
   if(buf == NULL)
     return 404;
@@ -649,7 +651,7 @@ hc_serve_file(http_connection_t *hc, const char *file, const char *contenttype)
     }
   }
 
-  buf_t *b = fa_load(file, NULL, NULL, 0, NULL, 0, NULL, NULL);
+  buf_t *b = fa_load(file, NULL);
   if(b == NULL)
     return 404;
 

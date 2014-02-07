@@ -168,13 +168,12 @@ tmdb_configure(void)
 
     buf_t *result;
     char errbuf[256];
-    result = fa_load_query("http://api.themoviedb.org/3/configuration",
-			   errbuf, sizeof(errbuf), NULL,
-			   (const char *[]){
-			     "api_key", TMDB_APIKEY,
-			       "language", getlang(),
-			       NULL, NULL},
-			   FA_COMPRESSION);
+    result = fa_load("http://api.themoviedb.org/3/configuration",
+                     FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
+                     FA_LOAD_QUERY_ARG("api_key", TMDB_APIKEY),
+                     FA_LOAD_QUERY_ARG("language", getlang()),
+                     FA_LOAD_FLAGS(FA_COMPRESSION | FA_IMPORTANT),
+                     NULL);
 
     if(result == NULL) {
       TRACE(TRACE_INFO, "TMDB", "Unable to get configuration -- %s", errbuf);
@@ -213,13 +212,12 @@ tmdb_load_movie_cast(const char *lookup_id)
   snprintf(url, sizeof(url), "http://api.themoviedb.org/3/movie/%s/casts",
 	   lookup_id);
 
-  result = fa_load_query(url, errbuf, sizeof(errbuf),
-			 NULL,
-			 (const char *[]){
-			   "api_key", TMDB_APIKEY,
-			     "language", getlang(),
-			     NULL, NULL},
-			 FA_COMPRESSION);
+  result = fa_load(url,
+                   FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
+                   FA_LOAD_QUERY_ARG("api_key", TMDB_APIKEY),
+                   FA_LOAD_QUERY_ARG("language", getlang()),
+                   FA_LOAD_FLAGS(FA_COMPRESSION),
+                   NULL);
   if(result == NULL) {
     TRACE(TRACE_INFO, "TMDB", "Load error %s", errbuf);
     return NULL;
@@ -307,13 +305,12 @@ tmdb_load_movie_info(void *db, const char *item_url, const char *lookup_id,
 
   snprintf(url, sizeof(url), "http://api.themoviedb.org/3/movie/%s", lookup_id);
 
-  result = fa_load_query(url, errbuf, sizeof(errbuf),
-			 NULL,
-			 (const char *[]){
-			   "api_key", TMDB_APIKEY,
-			     "language", getlang(),
-			     NULL, NULL},
-			 FA_COMPRESSION);
+  result = fa_load(url,
+                   FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
+                   FA_LOAD_QUERY_ARG("api_key", TMDB_APIKEY),
+                   FA_LOAD_QUERY_ARG("language", getlang()),
+                   FA_LOAD_FLAGS(FA_COMPRESSION),
+                   NULL);
   if(result == NULL) {
     TRACE(TRACE_INFO, "TMDB", "Load error %s", errbuf);
     return METADATA_TEMPORARY_ERROR;
@@ -413,14 +410,14 @@ tmdb_query_by_title_and_year(void *db, const char *item_url,
   else
     yeartxt[0] = 0;
 
-  result = fa_load_query("http://api.themoviedb.org/3/search/movie",
-			 errbuf, sizeof(errbuf), NULL,
-			 (const char *[]){"query", title,
-			     "year", *yeartxt ? yeartxt : NULL,
-			     "api_key", TMDB_APIKEY,
-			     "language", getlang(),
-			     NULL, NULL},
-			 FA_COMPRESSION);
+  result = fa_load("http://api.themoviedb.org/3/search/movie",
+                   FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
+                   FA_LOAD_QUERY_ARG("query", title),
+                   FA_LOAD_QUERY_ARG("year", *yeartxt ? yeartxt : NULL),
+                   FA_LOAD_QUERY_ARG("api_key", TMDB_APIKEY),
+                   FA_LOAD_QUERY_ARG("language", getlang()),
+                   FA_LOAD_FLAGS(FA_COMPRESSION),
+                   NULL);
 
   if(result == NULL)
     return METADATA_TEMPORARY_ERROR;
@@ -606,7 +603,7 @@ be_tmdb_canhandle(const char *url)
 static pixmap_t *
 be_tmdb_imageloader(const char *url, const image_meta_t *im,
 		    const char **vpaths, char *errbuf, size_t errlen,
-		    int *cache_control, be_load_cb_t *cb, void *opaque)
+		    int *cache_control, cancellable_t *c)
 {
   tmdb_image_size_t *s;
   const char *p;
@@ -645,7 +642,7 @@ be_tmdb_imageloader(const char *url, const image_meta_t *im,
   rstr_t *rstr = htsmsg_json_serialize_to_rstr(m, "imageset:");
   htsmsg_destroy(m);
   pixmap_t *pm = backend_imageloader(rstr, im, vpaths, errbuf, errlen,
-				     cache_control, cb, opaque);
+				     cache_control, c);
   rstr_release(rstr);
   return pm;
   

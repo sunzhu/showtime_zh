@@ -67,6 +67,8 @@ void (*media_pipe_fini_extra)(media_pipe_t *mp);
 
 static int mp_seek_in_queues(media_pipe_t *mp, int64_t pos);
 
+static void mp_flush_locked(media_pipe_t *mp);
+
 static void seek_by_propchange(void *opaque, prop_event_t event, ...);
 
 static void update_av_delta(void *opaque, int value);
@@ -267,7 +269,7 @@ mq_destroy(media_queue_t *mq)
  *
  */
 media_pipe_t *
-mp_create(const char *name, int flags, const char *type)
+mp_create(const char *name, int flags)
 {
   media_pipe_t *mp;
   prop_t *p;
@@ -304,9 +306,6 @@ mp_create(const char *name, int flags, const char *type)
 
   mp->mp_prop_root = prop_create(media_prop_sources, NULL);
   mp->mp_prop_metadata    = prop_create(mp->mp_prop_root, "metadata");
-
-  mp->mp_prop_type = prop_create(mp->mp_prop_root, "type");
-  prop_set_string(mp->mp_prop_type, type);
 
   mp->mp_prop_primary = prop_create(mp->mp_prop_root, "primary");
 
@@ -843,6 +842,10 @@ send_hold(media_pipe_t *mp)
   event_t *e = event_create_int(EVENT_HOLD, mp->mp_hold);
   TAILQ_INSERT_TAIL(&mp->mp_eq, e, e_link);
   hts_cond_signal(&mp->mp_backpressure);
+
+  if(mp->mp_flags & MP_FLUSH_ON_HOLD)
+    mp_flush_locked(mp);
+
   if(mp->mp_hold_changed != NULL)
     mp->mp_hold_changed(mp);
 }
@@ -919,6 +922,14 @@ mp_enqueue_event_locked(media_pipe_t *mp, event_t *e)
   } else if(event_is_action(e, ACTION_CYCLE_SUBTITLE)) {
     track_mgr_next_track(&mp->mp_subtitle_track_mgr);
   } else {
+
+    if(event_is_type(e, EVENT_PLAYQUEUE_JUMP) || 
+       event_is_action(e, ACTION_STOP) ||
+       event_is_action(e, ACTION_SKIP_FORWARD)) {
+      if(mp->mp_cancellable != NULL)
+        cancellable_cancel(mp->mp_cancellable);
+    }
+
     atomic_add(&e->e_refcount, 1);
     TAILQ_INSERT_TAIL(&mp->mp_eq, e, e_link);
     hts_cond_signal(&mp->mp_backpressure);
@@ -1252,14 +1263,12 @@ mp_seek_in_queues(media_pipe_t *mp, int64_t pos)
 /**
  *
  */
-void
-mp_flush(media_pipe_t *mp, int blank)
+static void
+mp_flush_locked(media_pipe_t *mp)
 {
   media_queue_t *v = &mp->mp_video;
   media_queue_t *a = &mp->mp_audio;
   media_buf_t *mb;
-
-  hts_mutex_lock(&mp->mp_mutex);
 
   mq_flush_locked(mp, a, 0);
   mq_flush_locked(mp, v, 0);
@@ -1280,9 +1289,18 @@ mp_flush(media_pipe_t *mp, int blank)
     atomic_add(&media_buffer_hungry, -1);
     mp->mp_satisfied = 1;
   }
+}
 
+
+/**
+ *
+ */
+void
+mp_flush(media_pipe_t *mp, int blank)
+{
+  hts_mutex_lock(&mp->mp_mutex);
+  mp_flush_locked(mp);
   hts_mutex_unlock(&mp->mp_mutex);
-
 }
 
 
@@ -1329,6 +1347,38 @@ mp_send_cmd_u32(media_pipe_t *mp, media_queue_t *mq, int cmd, uint32_t u)
   mb = media_buf_alloc_locked(mp, 0);
   mb->mb_data_type = cmd;
   mb->mb_data32 = u;
+  mb_enq(mp, mq, mb);
+  hts_mutex_unlock(&mp->mp_mutex);
+}
+
+
+/**
+ *
+ */
+static void
+mb_prop_dtor(media_buf_t *mb)
+{
+  prop_ref_dec(mb->mb_prop);
+}
+
+
+/**
+ *
+ */
+void
+mp_send_prop_set_string(media_pipe_t *mp, media_queue_t *mq,
+                        prop_t *prop, const char *str)
+{
+  media_buf_t *mb;
+
+  int datasize = strlen(str) + 1;
+  hts_mutex_lock(&mp->mp_mutex);
+
+  mb = media_buf_alloc_locked(mp, datasize);
+  memcpy(mb->mb_data, str, datasize);
+  mb->mb_data_type = MB_SET_PROP_STRING;
+  mb->mb_prop = prop_ref_inc(prop);
+  mb->mb_dtor = mb_prop_dtor;
   mb_enq(mp, mq, mb);
   hts_mutex_unlock(&mp->mp_mutex);
 }
@@ -1749,13 +1799,22 @@ mp_set_duration(media_pipe_t *mp, int64_t duration)
  *
  */
 void
-mp_configure(media_pipe_t *mp, int caps, int buffer_size, int64_t duration)
+mp_configure(media_pipe_t *mp, int caps, int buffer_size, int64_t duration,
+             const char *type)
 {
+  hts_mutex_lock(&mp->mp_mutex);
   mp->mp_max_realtime_delay = 0;
+
+  if(caps & MP_PLAY_CAPS_FLUSH_ON_HOLD)
+    mp->mp_flags |= MP_FLUSH_ON_HOLD;
+  else
+    mp->mp_flags &= ~MP_FLUSH_ON_HOLD;
 
   prop_set_int(mp->mp_prop_canSeek,  caps & MP_PLAY_CAPS_SEEK  ? 1 : 0);
   prop_set_int(mp->mp_prop_canPause, caps & MP_PLAY_CAPS_PAUSE ? 1 : 0);
   prop_set_int(mp->mp_prop_canEject, caps & MP_PLAY_CAPS_EJECT ? 1 : 0);
+
+  prop_set(mp->mp_prop_root, "type", PROP_SET_STRING, type);
 
   switch(buffer_size) {
   case MP_BUFFER_NONE:
@@ -1773,6 +1832,19 @@ mp_configure(media_pipe_t *mp, int caps, int buffer_size, int64_t duration)
 
   prop_set_int(mp->mp_prop_buffer_limit, mp->mp_buffer_limit);
   mp_set_duration(mp, duration);
+  hts_mutex_unlock(&mp->mp_mutex);
+}
+
+
+/**
+ *
+ */
+void
+mp_set_cancellable(media_pipe_t *mp, struct cancellable *c)
+{
+  hts_mutex_lock(&mp->mp_mutex);
+  mp->mp_cancellable = c;
+  hts_mutex_unlock(&mp->mp_mutex);
 }
 
 

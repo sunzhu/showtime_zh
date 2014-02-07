@@ -114,6 +114,8 @@ SRCS +=	src/misc/ptrvec.c \
 	src/misc/pool.c \
 	src/misc/buf.c \
 	src/misc/charset_detector.c \
+	src/misc/big5.c \
+	src/misc/cancellable.c \
 
 SRCS-${CONFIG_TREX} += ext/trex/trex.c
 
@@ -308,6 +310,11 @@ SRCS  += src/backend/htsp/htsp.c \
 # TV
 ##############################################################
 SRCS  += src/backend/hls/hls.c \
+
+##############################################################
+# Icecast
+##############################################################
+SRCS  += src/backend/icecast/icecast.c \
 
 ##############################################################
 # Spotify

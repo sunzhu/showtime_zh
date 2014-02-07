@@ -1014,7 +1014,7 @@ htsp_thread(void *aux)
     while(1) {
       char errbuf[256];
       hc->hc_tc = tcp_connect(hc->hc_hostname, hc->hc_port,
-			      errbuf, sizeof(errbuf), 3000, 0);
+			      errbuf, sizeof(errbuf), 3000, 0, NULL);
       if(hc->hc_tc != NULL)
 	break;
 
@@ -1067,7 +1067,7 @@ htsp_connection_find(const char *url, char *path, size_t pathlen,
 
   TRACE(TRACE_DEBUG, "HTSP", "Connecting to %s:%d", hostname, port);
 
-  tc = tcp_connect(hostname, port, errbuf, errlen, 3000, 0);
+  tc = tcp_connect(hostname, port, errbuf, errlen, 3000, 0, NULL);
   if(tc == NULL) {
     hts_mutex_unlock(&htsp_global_mutex);
     TRACE(TRACE_ERROR, "HTSP", "Connection to %s:%d failed: %s", 
@@ -1427,7 +1427,7 @@ htsp_subscriber(htsp_connection_t *hc, htsp_subscription_t *hs,
 
   prop_set_string(mp->mp_prop_playstatus, "play");
 
-  mp_configure(mp, mp_flags, MP_BUFFER_DEEP, 0);
+  mp_configure(mp, mp_flags, MP_BUFFER_DEEP, 0, "tv");
 
   if(primary)
     mp_become_primary(mp);
@@ -1801,8 +1801,6 @@ be_htsp_playvideo(const char *url, media_pipe_t *mp,
 
   hs->hs_sid = atomic_add(&hc->hc_sid_generator, 1);
   hs->hs_mp = mp;
-
-  prop_set_string(mp->mp_prop_type, "tv");
 
   hts_mutex_lock(&hc->hc_subscription_mutex);
   LIST_INSERT_HEAD(&hc->hc_subscriptions, hs, hs_link);

@@ -175,6 +175,14 @@ void *mymalloc(size_t size);
 
 void *myrealloc(void *ptr, size_t size);
 
+static inline void *myreallocf(void *ptr, size_t size)
+{
+  void *r = myrealloc(ptr, size);
+  if(ptr != NULL && size > 0 && r == NULL)
+    free(ptr);
+  return r;
+}
+
 void *mycalloc(size_t count, size_t size);
 
 void *mymemalign(size_t align, size_t size);
@@ -239,6 +247,7 @@ typedef struct gconf {
   int enable_fa_scanner_debug;
   int enable_smb_debug;
   int enable_mem_debug;
+  int enable_callout_debug;
 
   const char *devplugin;
   const char *plugin_repo;
@@ -264,7 +273,7 @@ typedef struct gconf {
   int state_plugins_loaded;
 
   int fa_allow_delete;
-
+  int show_filename_extensions;
   int ignore_the_prefix;
 
   uint32_t log_server_ipv4;

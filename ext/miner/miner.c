@@ -337,7 +337,7 @@ miner_main_thread(void *aux)
 
   while(m->m_running) {
     m->m_tc = tcp_connect(hostname, port, errbuf, sizeof(errbuf),
-			  20000, 0);
+			  20000, 0, NULL);
 
     reconnect_timeout = MIN(reconnect_timeout * 2, 120);
 
@@ -513,8 +513,9 @@ miner_init(void)
   snprintf(url, sizeof(url), "%s/resources/spuminer/a.out", 
           showtime_dataroot());
 
-  if((b = fa_load(url, NULL, errmsg, sizeof(errmsg), NULL,
-                 0, NULL, NULL)) == NULL) {
+  if((b = fa_load(url,
+                  FA_LOAD_ERRBUF(errmsg, sizeof(errmsg)),
+                  NULL)) == NULL) {
     TRACE(TRACE_ERROR, "SPUMINER", "Unable to load SPU image %s -- %s",
          url, errmsg);
     return;

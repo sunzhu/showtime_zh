@@ -79,8 +79,7 @@ be_sid2player_play(const char *url0, media_pipe_t *mp,
 
   buf_t *b;
 
-  if((b = fa_load(url, NULL, errbuf, errlen, NULL, 0,
-		  NULL, NULL)) == NULL)
+  if((b = fa_load(url, FA_LOAD_ERRBUF(errbuf, errlen), NULL)) == NULL)
     return NULL;
 
   player = sidcxx_load(b->b_ptr, b->b_size, subsong, errbuf, errlen);
@@ -90,7 +89,7 @@ be_sid2player_play(const char *url0, media_pipe_t *mp,
 
   mp_set_playstatus_by_hold(mp, hold, NULL);
   mp->mp_audio.mq_stream = 0;
-  mp_configure(mp, MP_PLAY_CAPS_PAUSE, MP_BUFFER_NONE, 0);
+  mp_configure(mp, MP_PLAY_CAPS_PAUSE, MP_BUFFER_NONE, 0, "tracks");
   mp_become_primary(mp);
 
   while(1) {
