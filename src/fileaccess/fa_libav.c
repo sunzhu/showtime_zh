@@ -54,11 +54,11 @@ fa_libav_seek(void *opaque, int64_t offset, int whence)
  *
  */
 AVIOContext *
-fa_libav_reopen(fa_handle_t *fh)
+fa_libav_reopen(fa_handle_t *fh, int no_seek)
 {
   AVIOContext *avio;
 
-  int seekable = fa_fsize(fh) != -1;
+  int seekable = !no_seek && fa_fsize(fh) != -1;
 
   if(seekable)
     if(fa_seek(fh, 0, SEEK_SET) != 0)
@@ -104,7 +104,10 @@ static const struct {
   { "video/x-msvideo", "avi" },
   { "video/vnd.dlna.mpeg-tts,", "mpegts" },
   { "video/avi", "avi" },
+  { "video/nsv", "nsv" },
   { "audio/x-mpeg", "mp3" },
+  { "audio/mpeg", "mp3" },
+  { "application/ogg", "ogg" },
 };
 
 
@@ -112,8 +115,9 @@ static const struct {
  *
  */
 AVFormatContext *
-fa_libav_open_format(AVIOContext *avio, const char *url, 
-		     char *errbuf, size_t errlen, const char *mimetype)
+fa_libav_open_format(AVIOContext *avio, const char *url,
+		     char *errbuf, size_t errlen, const char *mimetype,
+                     int probe_size, int max_analyze_duration)
 {
   AVInputFormat *fmt = NULL;
   AVFormatContext *fctx;
@@ -135,8 +139,7 @@ fa_libav_open_format(AVIOContext *avio, const char *url,
   }
 
   if(fmt == NULL) {
-
-    if((err = av_probe_input_buffer(avio, &fmt, url, NULL, 0, 0)) != 0)
+    if((err = av_probe_input_buffer(avio, &fmt, url, NULL, 0, probe_size)) != 0)
       return fa_libav_open_error(errbuf, errlen,
 				 "Unable to probe file", err);
 
@@ -148,18 +151,30 @@ fa_libav_open_format(AVIOContext *avio, const char *url,
 
   fctx = avformat_alloc_context();
   fctx->pb = avio;
+  if(max_analyze_duration != -1)
+    fctx->max_analyze_duration = max_analyze_duration;
 
   if((err = avformat_open_input(&fctx, url, fmt, NULL)) != 0) {
-    if(mimetype != NULL)
-      return fa_libav_open_format(avio, url, errbuf, errlen, NULL);
+    if(mimetype != NULL) {
+      TRACE(TRACE_DEBUG, "libav",
+            "Unable to open using mimetype %s, retrying with probe",
+            mimetype);
+      return fa_libav_open_format(avio, url, errbuf, errlen, NULL, probe_size,
+                                  max_analyze_duration);
+    }
     return fa_libav_open_error(errbuf, errlen,
 			       "Unable to open file as input format", err);
   }
 
   if(avformat_find_stream_info(fctx, NULL) < 0) {
     avformat_close_input(&fctx);
-    if(mimetype != NULL)
-      return fa_libav_open_format(avio, url, errbuf, errlen, NULL);
+    if(mimetype != NULL) {
+      TRACE(TRACE_DEBUG, "libav",
+            "Unable to find stream info using mimetype %s, retrying with probe",
+            mimetype);
+      return fa_libav_open_format(avio, url, errbuf, errlen, NULL, probe_size,
+                                  max_analyze_duration);
+    }
     return fa_libav_open_error(errbuf, errlen,
 			       "Unable to handle file contents", err);
   }

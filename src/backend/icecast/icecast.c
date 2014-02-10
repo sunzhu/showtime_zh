@@ -32,6 +32,7 @@
 #include "fileaccess/fa_libav.h"
 #include "misc/str.h"
 #include "misc/cancellable.h"
+#include "htsmsg/htsmsg_xml.h"
 #include "networking/http.h"
 
 TAILQ_HEAD(icecast_source_queue, icecast_source);
@@ -62,6 +63,8 @@ typedef struct icecast_play_context {
   prop_t *ipc_radio_info;
 
   cancellable_t ipc_cancellable;
+
+  char ipc_streaminfo_set;
 
 } icecast_play_context_t;
 
@@ -134,6 +137,41 @@ parse_m3u(icecast_play_context_t *ipc, char *buf)
 /**
  *
  */
+static void
+parse_xspf(icecast_play_context_t *ipc, buf_t *b)
+{
+  char errbuf[512];
+  htsmsg_t *m = htsmsg_xml_deserialize_buf2(b, errbuf, sizeof(errbuf));
+  if(m == NULL) {
+    TRACE(TRACE_ERROR, "Radio", "Unable to parse XSPF -- %s", errbuf);
+    return;
+  }
+
+  htsmsg_t *list = htsmsg_get_map_multi(m,
+                                        "tags", "playlist",
+                                        "tags", "trackList",
+                                        "tags", NULL);
+
+  if(list != NULL) {
+    htsmsg_field_t *f;
+    HTSMSG_FOREACH(f, list) {
+      htsmsg_t *t;
+      if((t = htsmsg_get_map_by_field_if_name(f, "track")) == NULL)
+        continue;
+      if((t = htsmsg_get_map(t, "tags")) == NULL)
+        continue;
+      const char *loc = htsmsg_get_cdata(t, "location");
+      if(loc != NULL)
+        add_source(ipc, loc);
+    }
+  }
+  htsmsg_destroy(m);
+}
+
+
+/**
+ *
+ */
 static int
 num_deads(const icecast_play_context_t *ipc)
 {
@@ -161,7 +199,8 @@ open_stream(icecast_play_context_t *ipc)
   const char *url;
 
   const int flags = FA_STREAMING | FA_NO_RETRIES |
-    FA_BUFFERED_SMALL | FA_NO_PARKING | FA_DEBUG;
+    FA_BUFFERED_NO_PREFETCH |
+    FA_BUFFERED_SMALL | FA_NO_PARKING;
 
  again:
   num_dead = num_deads(ipc);
@@ -191,6 +230,16 @@ open_stream(icecast_play_context_t *ipc)
 
     int is_m3u = 0;
     int is_pls = 0;
+    int is_xspf = 0;
+
+    if(ct != NULL)
+      TRACE(TRACE_DEBUG, "Radio", "%s content-type: %s", ipc->ipc_url, ct);
+
+    if(ct != NULL && !strcasecmp(ct, "application/xspf+xml")) {
+      is_xspf = 1;
+      goto load;
+    }
+
     int r = fa_read(fh, pbuf, sizeof(pbuf)-1);
     if(r < 0) {
       TRACE(TRACE_ERROR, "Radio", "Unable to probe %s",
@@ -199,16 +248,18 @@ open_stream(icecast_play_context_t *ipc)
     }
     pbuf[r] = 0;
 
-    if(ct != NULL) {
+    if(ct != NULL &&
+       (!strcasecmp(ct, "application/x-mpegurl") ||
+        !strcasecmp(ct, "audio/x-mpegurl"))) {
       TRACE(TRACE_DEBUG, "Radio",
-            "%s content-type: %s", ipc->ipc_url, ct);
+            "%s is an .m3u playlist according to content-type", ipc->ipc_url);
+      is_m3u = 1;
+    }
 
-      if(!strcasecmp(ct, "application/x-mpegurl") ||
-         !strcasecmp(ct, "audio/x-mpegurl")) {
-        TRACE(TRACE_DEBUG, "Radio",
-              "%s is an .m3u playlist according to content-type", ipc->ipc_url);
-        is_m3u = 1;
-      }
+    if(r > 5 && !memcmp(pbuf, "<?xml", 5)) {
+      TRACE(TRACE_DEBUG, "Radio", "%s is a XSPF playlist based on content",
+            ipc->ipc_url);
+      is_xspf = 1;
     }
 
     if(r > 10 && !memcmp(pbuf, "[playlist]", 10)) {
@@ -222,8 +273,8 @@ open_stream(icecast_play_context_t *ipc)
       is_m3u = 1;
     }
 
-
-    if(is_pls || is_m3u) {
+ load:
+    if(is_pls || is_m3u || is_xspf) {
 
       buf_t *b = fa_load_and_close(fh);
       if(b == NULL) {
@@ -234,7 +285,10 @@ open_stream(icecast_play_context_t *ipc)
 
       flush_sources(ipc);
 
-      if(is_pls) {
+      if(is_xspf) {
+        parse_xspf(ipc, b);
+        b = NULL;
+      } else if(is_pls) {
         parse_pls(ipc, buf_str(b));
       } else {
         parse_m3u(ipc, buf_str(b));
@@ -293,15 +347,17 @@ open_stream(icecast_play_context_t *ipc)
       fh = icy_meta_parser(ipc, fh, stride);
   }
 
-  AVIOContext *avio = fa_libav_reopen(fh);
+  AVIOContext *avio = fa_libav_reopen(fh, 1);
 
   if(avio == NULL) {
     fa_close(fh);
     return -1;
   }
 
-  if((fctx = fa_libav_open_format(avio, url,
-                                  errbuf, sizeof(errbuf), NULL)) == NULL) {
+  const char *ct = http_header_get(&ipc->ipc_response_headers, "content-type");
+
+  if((fctx = fa_libav_open_format(avio, url, errbuf, sizeof(errbuf), ct,
+                                  4096, 0)) == NULL) {
     TRACE(TRACE_ERROR, "Radio", "Unable to open %s -- %s",
           ipc->ipc_url, errbuf);
     fa_libav_close(avio);
@@ -340,6 +396,7 @@ open_stream(icecast_play_context_t *ipc)
   }
 
   mp_become_primary(ipc->ipc_mp);
+  ipc->ipc_streaminfo_set = 0;
   return 0;
 }
 
@@ -424,11 +481,32 @@ stream_radio(icecast_play_context_t *ipc, char *errbuf, size_t errlen)
       if(r == AVERROR(EAGAIN))
 	continue;
 
+
       if(r != 0) {
-	char msg[100];
-	fa_ffmpeg_error_to_txt(r, msg, sizeof(msg));
-	TRACE(TRACE_ERROR, "Radio", "Playback error: %s", msg);
+        if(r != AVERROR_EOF) {
+          char msg[100];
+          fa_ffmpeg_error_to_txt(r, msg, sizeof(msg));
+          TRACE(TRACE_ERROR, "Radio", "Playback error: %s (%d)", msg, r);
+        }
         close_stream(ipc);
+
+	while((e = mp_wait_for_empty_queues(mp)) != NULL) {
+	  if(event_is_type(e, EVENT_PLAYQUEUE_JUMP) ||
+	     event_is_action(e, ACTION_SKIP_BACKWARD) ||
+	     event_is_action(e, ACTION_SKIP_FORWARD) ||
+	     event_is_action(e, ACTION_STOP)) {
+	    mp_flush(mp, 0);
+	    break;
+	  }
+	  event_release(e);
+	}
+
+	if(e == NULL || r == AVERROR_EOF) {
+	  e = event_create_type(EVENT_EOF);
+          break;
+        }
+        if(e != NULL)
+          break;
         continue;
       }
 
@@ -507,6 +585,7 @@ stream_radio(icecast_play_context_t *ipc, char *errbuf, size_t errlen)
     event_release(e);
   }
 
+  prop_set_void(ipc->ipc_radio_info);
   mp_set_cancellable(mp, NULL);
 
   if(mb != NULL && mb != MB_SPECIAL_EOF)
@@ -644,15 +723,26 @@ icymeta_fsize(fa_handle_t *handle)
 static void
 icymeta_parse(icecast_play_context_t *ipc, const char *buf)
 {
+  hexdump("icymeta", buf, strlen(buf));
+
   const char *title = mystrstr(buf, "StreamTitle='");
   if(title != NULL) {
     title += strlen("StreamTitle='");
-    const char *end = strchr(title, '\'');
+    const char *end = strstr(title, "';");
     if(end != NULL) {
+      char how[128];
       int tlen = end - title;
-      rstr_t *t = rstr_from_bytes_len(title, tlen);
-      mp_send_prop_set_string(ipc->ipc_mp, &ipc->ipc_mp->mp_audio,
-                              ipc->ipc_radio_info, rstr_get(t));
+      rstr_t *t = rstr_from_bytes_len(title, tlen, how, sizeof(how));
+
+      TRACE(TRACE_DEBUG, "Radio", "Title decoded as '%s' to '%s'",
+            how, rstr_get(t));
+      if(!ipc->ipc_streaminfo_set) {
+        prop_set_rstring(ipc->ipc_radio_info, t);
+        ipc->ipc_streaminfo_set = 1;
+      } else {
+        mp_send_prop_set_string(ipc->ipc_mp, &ipc->ipc_mp->mp_audio,
+                                ipc->ipc_radio_info, rstr_get(t));
+      }
       rstr_release(t);
     }
   }
