@@ -35,6 +35,9 @@
 #include "big5.h"
 #include "gb2312.h"
 
+const static charset_t charsets[];
+
+
 /**
  * Remove forbidden characters
  */
@@ -803,6 +806,11 @@ utf8_from_bytes(const char *str, int len, const charset_t *cs,
 	else
 	  TRACE(TRACE_ERROR, "STR", "Language %s not found internally",
 		name);
+      } else {
+        cs = &charsets[0];
+        snprintf(how, howlen,
+                 "Unable to determine character encoding, decoding as %s",
+                 cs->title);
       }
     } else {
       snprintf(how, howlen, "Decoded as %s (specified by user)",
@@ -831,12 +839,13 @@ utf8_from_bytes(const char *str, int len, const charset_t *cs,
  *
  */
 rstr_t *
-rstr_from_bytes(const char *str)
+rstr_from_bytes(const char *str, char *how, size_t howlen)
 {
-  if(utf8_verify(str))
+  if(utf8_verify(str)) {
+    snprintf(how, howlen, "Decoding as UTF-8");
     return rstr_alloc(str);
-
-  buf_t *b = utf8_from_bytes(str, strlen(str), NULL, NULL, 0);
+  }
+  buf_t *b = utf8_from_bytes(str, strlen(str), NULL, how, howlen);
   rstr_t *r = rstr_alloc(buf_cstr(b));
   buf_release(b);
   return r;
@@ -847,12 +856,12 @@ rstr_from_bytes(const char *str)
  *
  */
 struct rstr *
-rstr_from_bytes_len(const char *str, int len)
+rstr_from_bytes_len(const char *str, int len, char *how, size_t howlen)
 {
   char *zstr = malloc(len + 1);
   memcpy(zstr, str, len);
   zstr[len] = 0;
-  rstr_t *r = rstr_from_bytes(zstr);
+  rstr_t *r = rstr_from_bytes(zstr, how, howlen);
   free(zstr);
   return r;
 }
@@ -1045,6 +1054,8 @@ strvec_split(const char *str, char ch)
 void
 strvec_free(char **s)
 {
+  if(s == NULL)
+    return;
   void *m = s;
   for(;*s != NULL; s++)
     free(*s);

@@ -427,7 +427,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
   // Compute stop position (in percentage of video length)
 
-  int spp = mp->mp_seek_base * 100 / fctx->duration;
+  int spp = fctx->duration ? (mp->mp_seek_base * 100 / fctx->duration) : 0;
 
   if(spp >= video_settings.played_threshold || event_is_type(e, EVENT_EOF)) {
     metadb_set_video_restartpos(canonical_url, -1);
@@ -616,7 +616,7 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
     if(x)
       *x = 0;
 
-    title = rstr_from_bytes(tmp);
+    title = rstr_from_bytes(tmp, NULL, 0);
     va.title = rstr_get(title);
 
     prop_set(mp->mp_prop_metadata, "title", PROP_SET_RSTRING, title);
@@ -690,12 +690,12 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
       TRACE(TRACE_DEBUG, "Video", "Unable to compute opensub hash");
   }
 
-  AVIOContext *avio = fa_libav_reopen(fh);
+  AVIOContext *avio = fa_libav_reopen(fh, 0);
   va.filesize = avio_size(avio);
 
   AVFormatContext *fctx;
   if((fctx = fa_libav_open_format(avio, url, errbuf, errlen,
-				  va.mimetype)) == NULL) {
+				  va.mimetype, 0, -1)) == NULL) {
     fa_libav_close(avio);
     return NULL;
   }

@@ -210,8 +210,8 @@ fa_probe_spc(metadata_t *md, const uint8_t *pb, const char *filename)
 static void 
 fa_probe_psid(metadata_t *md, uint8_t *pb)
 {
-  md->md_title = rstr_from_bytes_len((char *)pb + 0x16, 32);
-  md->md_artist = rstr_from_bytes_len((char *)pb + 0x36, 32);
+  md->md_title = rstr_from_bytes_len((char *)pb + 0x16, 32, NULL, 0);
+  md->md_artist = rstr_from_bytes_len((char *)pb + 0x36, 32, NULL, 0);
 }
 
 
@@ -692,9 +692,10 @@ fa_probe_metadata(const char *url, char *errbuf, size_t errsize,
     return md;
   }
 
-  AVIOContext *avio = fa_libav_reopen(fh);
+  AVIOContext *avio = fa_libav_reopen(fh, 0);
  
-  if((fctx = fa_libav_open_format(avio, url, errbuf, errsize, NULL)) == NULL) {
+  if((fctx = fa_libav_open_format(avio, url, errbuf, errsize,
+                                  NULL, 0, -1)) == NULL) {
     fa_libav_close(avio);
     metadata_destroy(md);
     return NULL;
