@@ -34,6 +34,7 @@
 #include "misc/cancellable.h"
 #include "prop/prop_nodefilter.h"
 #include "event.h"
+#include "metadata/playinfo.h"
 #include "metadata/metadata.h"
 #include "htsmsg/htsmsg_json.h"
 
@@ -668,7 +669,7 @@ js_appendItem0(JSContext *cx, js_model_t *model, prop_t *parent,
   *rval = JSVAL_VOID;
 
   if(metabind != NULL)
-    metadb_bind_url_to_prop(NULL, metabind, item);
+    playinfo_bind_url_to_prop(metabind, item);
 
   if(type != NULL) {
     prop_set_string(prop_create(item, "type"), type);

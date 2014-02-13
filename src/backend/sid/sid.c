@@ -23,6 +23,7 @@
 #include "media.h"
 #include "showtime.h"
 #include "fileaccess/fileaccess.h"
+#include "metadata/playinfo.h"
 
 
 
@@ -104,9 +105,9 @@ be_sid2player_play(const char *url0, media_pipe_t *mp,
       mb->mb_pts = sample * 1000000LL / mb->mb_rate;
       mb->mb_drive_clock = 1;
 
-      if(!registered_play && mb->mb_pts > METADB_AUDIO_PLAY_THRESHOLD) {
+      if(!registered_play && mb->mb_pts > PLAYINFO_AUDIO_PLAY_THRESHOLD) {
 	registered_play = 1;
-	metadb_register_play(url0, 1, CONTENT_AUDIO);
+	playinfo_register_play(url0, 1);
       }
 
       sample += CHUNK_SIZE;
