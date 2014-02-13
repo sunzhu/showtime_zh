@@ -235,7 +235,7 @@ js_openURL(JSContext *cx, JSObject *obj, uintN argc,
   if (!JS_ConvertArguments(cx, argc, argv, "s/ss", &url, &view, &how))
     return JS_FALSE;
 
-  event_t *e = event_create_openurl(url, view, NULL, NULL, how);
+  event_t *e = event_create_openurl(url, view, NULL, NULL, how, NULL);
   prop_send_ext_event(JS_GetPrivate(cx, obj), e);
   event_release(e);
   return JS_TRUE;
@@ -339,7 +339,7 @@ js_wait_for_value(JSContext *cx, prop_t *root, const char *subname,
     jsrefcount s = JS_SuspendRequest(cx);
     prop_courier_wait(pc, &q, 0);
     JS_ResumeRequest(cx, s);
-    prop_notify_dispatch(&q);
+    prop_notify_dispatch(&q, 0);
   }
 
   prop_unsubscribe(s);
