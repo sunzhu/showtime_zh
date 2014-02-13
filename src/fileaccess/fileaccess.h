@@ -130,7 +130,6 @@ LIST_HEAD(fa_protocol_list, fa_protocol);
 #define FA_DISABLE_AUTH    0x40
 #define FA_COMPRESSION     0x80
 #define FA_NOFOLLOW        0x100
-#define FA_FAST_FAIL       0x200
 #define FA_WRITE           0x400  // Open for writing (always creates file)
 #define FA_APPEND          0x800  /* Only if FA_WRITE:
                                      Seek to EOF when opening
@@ -161,6 +160,7 @@ typedef struct fa_open_extra {
   struct http_header_list *foe_response_headers;
   struct prop *foe_stats;
   struct cancellable *foe_c;
+  int foe_open_timeout; // In ms
 } fa_open_extra_t;
 
 
@@ -378,6 +378,8 @@ enum {
   HTTP_TAG_METHOD,
   HTTP_TAG_PROGRESS_CALLBACK,
   HTTP_TAG_CANCELLABLE,
+  HTTP_TAG_CONNECT_TIMEOUT,
+  HTTP_TAG_READ_TIMEOUT,
 };
 
 
@@ -394,6 +396,8 @@ enum {
 #define HTTP_METHOD(a)                     HTTP_TAG_METHOD, a
 #define HTTP_PROGRESS_CALLBACK(a, b)       HTTP_TAG_PROGRESS_CALLBACK, a, b
 #define HTTP_CANCELLABLE(a)                HTTP_TAG_CANCELLABLE, a
+#define HTTP_CONNECT_TIMEOUT(a)            HTTP_TAG_CONNECT_TIMEOUT, a
+#define HTTP_READ_TIMEOUT(a)               HTTP_TAG_READ_TIMEOUT, a
 
 int http_req(const char *url, ...)  __attribute__((__sentinel__(0)));
 

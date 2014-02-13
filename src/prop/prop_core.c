@@ -797,12 +797,33 @@ prop_dispatch_one(prop_notify_t *n)
  *
  */
 void
-prop_notify_dispatch(struct prop_notify_queue *q)
+prop_notify_dispatch(struct prop_notify_queue *q, const char *trace_name)
 {
   prop_notify_t *n, *next;
 
-  TAILQ_FOREACH(n, q, hpn_link)
-    prop_dispatch_one(n);
+  if(trace_name) {
+    TAILQ_FOREACH(n, q, hpn_link) {
+      char info[128];
+#ifdef PROP_SUB_RECORD_SOURCE
+      snprintf(info, sizeof(info), "%p (%s:%d)", n->hpn_sub,
+               n->hpn_sub->hps_file, n->hpn_sub->hps_line);
+#else
+      snprintf(info, sizeof(info), "%p", n->hpn_sub);
+#endif
+      int64_t ts = showtime_get_ts();
+      prop_dispatch_one(n);
+      ts = showtime_get_ts() - ts;
+      if(ts > 10000) {
+        TRACE(ts > 100000 ? TRACE_INFO : TRACE_DEBUG,
+              "PROP", "%s: Dispatch of [%s] took %d us",
+              trace_name, info, (int)ts);
+      }
+    }
+
+  } else {
+    TAILQ_FOREACH(n, q, hpn_link)
+      prop_dispatch_one(n);
+  }
 
   hts_mutex_lock(&prop_mutex);
 
@@ -849,9 +870,11 @@ prop_courier(void *aux)
       TAILQ_INSERT_TAIL(&q_nor, n, hpn_link);
     }
 
+    const char *tt = pc->pc_flags & PROP_COURIER_TRACE_TIMES ?
+      pc->pc_name : NULL;
     hts_mutex_unlock(&prop_mutex);
-    prop_notify_dispatch(&q_exp);
-    prop_notify_dispatch(&q_nor);
+    prop_notify_dispatch(&q_exp, tt);
+    prop_notify_dispatch(&q_nor, tt);
     hts_mutex_lock(&prop_mutex);
   }
 
@@ -2369,8 +2392,13 @@ gen_add_flags(prop_t *c, prop_t *p)
 /**
  *
  */
+#ifdef PROP_SUB_RECORD_SOURCE
+prop_sub_t *
+prop_subscribe_ex(const char *file, int line, int flags, ...)
+#else
 prop_sub_t *
 prop_subscribe(int flags, ...)
+#endif
 {
   prop_t *p, *value, *canonical, *c;
   prop_sub_t *s, *t;
@@ -2588,6 +2616,11 @@ prop_subscribe(int flags, ...)
 
 
   s = pool_get(sub_pool);
+
+#ifdef PROP_SUB_RECORD_SOURCE
+  s->hps_file = file;
+  s->hps_line = line;
+#endif
 
 #ifdef PROP_SUB_STATS
   LIST_INSERT_HEAD(&all_subs, s, hps_all_sub_link);
@@ -2832,7 +2865,8 @@ prop_init(void)
   prop_global = prop_make("global", 1, NULL);
   hts_mutex_unlock(&prop_mutex);
 
-  global_courier = prop_courier_create_thread(NULL, "global");
+  global_courier = prop_courier_create_thread(NULL, "global", 
+                                              PROP_COURIER_TRACE_TIMES);
 }
 
 
@@ -3590,6 +3624,50 @@ relink_subscriptions(prop_t *src, prop_t *dst, prop_sub_t *skipme,
 }
 
 
+/**
+ *
+ */
+static int
+search_for_linkage(prop_t *src, prop_t *link)
+{
+  prop_sub_t *s;
+
+  LIST_FOREACH(s, &src->hp_value_subscriptions, hps_value_prop_link) {
+    if(s->hps_origin == NULL)
+      continue;
+
+    if(!s->hps_multiple_origins) {
+      if(s->hps_origin != link)
+	continue;
+    } else {
+      prop_originator_tracking_t *pot;
+
+      for(pot = s->hps_pots; pot != NULL; pot = pot->pot_next)
+        if(pot->pot_p == link)
+          break;
+
+      if(pot == NULL)
+        continue;
+    }
+    return 1;
+  }
+
+  if(src->hp_type != PROP_DIR)
+    return 0;
+
+  prop_t *c;
+  TAILQ_FOREACH(c, &src->hp_childs, hp_parent_link) {
+
+    if(c->hp_name == NULL)
+      continue;
+
+    if(search_for_linkage(c, link))
+      return 1;
+  }
+  return 0;
+}
+
+
 
 /**
  *
@@ -3603,6 +3681,9 @@ restore_and_descend(prop_t *dst, prop_t *src, prop_sub_t *skipme,
 
   while(src->hp_originator != NULL)
     src = src->hp_originator;
+
+  if(!search_for_linkage(src, broken_link))
+    return;
 
   for(s = LIST_FIRST(&src->hp_value_subscriptions); s != NULL; s = next) {
     next = LIST_NEXT(s, hps_value_prop_link);
@@ -3656,18 +3737,18 @@ restore_and_descend(prop_t *dst, prop_t *src, prop_sub_t *skipme,
     return;
 
   prop_t *c;
-  TAILQ_FOREACH(c, &dst->hp_childs, hp_parent_link) {
+  TAILQ_FOREACH(c, &src->hp_childs, hp_parent_link) {
 
     if(c->hp_name == NULL)
       continue;
 
-    prop_t *z = prop_create0(src, c->hp_name, NULL,
+    prop_t *z = prop_create0(dst, c->hp_name, NULL,
                              c->hp_flags & PROP_NAME_NOT_ALLOCATED);
 
     if(c->hp_type == PROP_DIR)
       prop_make_dir(z, skipme, origin);
 
-    restore_and_descend(c, z, skipme, origin, pnq, broken_link);
+    restore_and_descend(z, c, skipme, origin, pnq, broken_link);
   }
 }
 
@@ -3718,7 +3799,7 @@ prop_link0(prop_t *src, prop_t *dst, prop_sub_t *skipme, int hard, int debug)
 
     if(debug) {
       printf("--- Destination [%s] before unlink ---\n", prop_get_DN(dst, 1));
-      prop_print_tree0(dst, 0, 2);
+      prop_print_tree0(dst, 0, 3);
       printf("\n\n\n");
 
       printf("--- Previous origin [%s] before unlink ---\n",
@@ -4077,16 +4158,18 @@ prop_courier_create(void)
  *
  */
 prop_courier_t *
-prop_courier_create_thread(hts_mutex_t *entrymutex, const char *name)
+prop_courier_create_thread(hts_mutex_t *entrymutex, const char *name,
+                           int flags)
 {
   prop_courier_t *pc = prop_courier_create();
   char buf[URL_MAX];
   pc->pc_entry_lock = entrymutex;
   snprintf(buf, sizeof(buf), "PC:%s", name);
-
+  pc->pc_flags = flags;
   pc->pc_has_cond = 1;
   hts_cond_init(&pc->pc_cond, &prop_mutex);
 
+  pc->pc_name = strdup(name);
   pc->pc_run = 1;
   hts_thread_create_joinable(buf, &pc->pc_thread, prop_courier, pc,
 			     THREAD_PRIO_MODEL);
@@ -4206,7 +4289,7 @@ prop_courier_wait_and_dispatch(prop_courier_t *pc)
 {
   struct prop_notify_queue q;
   prop_courier_wait(pc, &q, 0);
-  prop_notify_dispatch(&q);
+  prop_notify_dispatch(&q, 0);
 }
 
 
@@ -4231,6 +4314,8 @@ prop_courier_destroy(prop_courier_t *pc)
 
   if(pc->pc_has_cond)
     hts_cond_destroy(&pc->pc_cond);
+
+  free(pc->pc_name);
 
   free(pc);
 }
@@ -4259,7 +4344,7 @@ prop_courier_poll(prop_courier_t *pc)
   TAILQ_MOVE(&q, &pc->pc_queue_exp, hpn_link);
   TAILQ_MERGE(&q, &pc->pc_queue_nor, hpn_link);
   hts_mutex_unlock(&prop_mutex);
-  prop_notify_dispatch(&q);
+  prop_notify_dispatch(&q, 0);
 }
 
 
@@ -4826,7 +4911,7 @@ prop_test(void)
 
   for(i = 0; i < TEST_COURIERS; i++) {
     hts_mutex_init(&mtx[i]);
-    couriers[i] = prop_courier_create_thread(&mtx[i], "test");
+    couriers[i] = prop_courier_create_thread(&mtx[i], "test", 0);
 
     prop_subscribe(0,
 		   PROP_TAG_CALLBACK, prop_test_subscriber, NULL,
