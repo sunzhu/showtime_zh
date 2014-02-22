@@ -124,8 +124,8 @@ glw_video_widget_event(event_t *e, glw_video_t *gv)
   }
 
   if((event_is_type(e, EVENT_UNICODE) && eu->val == 32) ||
-     (event_is_action(e, ACTION_ACTIVATE) && !gv->gv_spu_in_menu &&
-      gv->gv_flags & GLW_VIDEO_DPAD_SEEK)) {
+     ((event_is_action(e, ACTION_ACTIVATE) && !gv->gv_spu_in_menu &&
+       gv->gv_flags & GLW_VIDEO_DPAD_SEEK))) {
     // Convert event into playpause
     e = event_create_action(ACTION_PLAYPAUSE);
     mp_enqueue_event(mp, e);
@@ -136,7 +136,8 @@ glw_video_widget_event(event_t *e, glw_video_t *gv)
   if(event_is_action(e, ACTION_UP) ||
      event_is_action(e, ACTION_DOWN) ||
      event_is_action(e, ACTION_LEFT) ||
-     event_is_action(e, ACTION_RIGHT)) {
+     event_is_action(e, ACTION_RIGHT) ||
+     event_is_action(e, ACTION_ACTIVATE)) {
     if(gv->gv_spu_in_menu) {
       mp_enqueue_event(mp, e);
       return 1;
@@ -402,7 +403,7 @@ glw_video_newframe_blend(glw_video_t *gv, video_decoder_t *vd, int flags,
 	  return pts;
 	}
 
-	if(code == AVDIFF_CATCH_UP) {
+	if(code == AVDIFF_CATCH_UP && sb != NULL) {
 	  gv->gv_sa = NULL;
 	  release(gv, sa, &gv->gv_decoded_queue);
 	  kalman_init(&gv->gv_avfilter);
