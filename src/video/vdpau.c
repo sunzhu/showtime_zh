@@ -291,7 +291,7 @@ vdpau_get_buffer(struct AVCodecContext *ctx, AVFrame *pic)
   pic->opaque = vvs;
   pic->type = FF_BUFFER_TYPE_USER;
 
-  memcpy(&vvs->vvs_mbm, &mb->mb_meta, sizeof(media_buf_meta_t));
+  copy_mbm_from_mb(&vvs->vvs_mbm, mb);
   return 0;
 }
 
@@ -393,7 +393,8 @@ vdpau_decode(struct media_codec *mc, struct video_decoder *vd,
     return;
 
   vvs = frame->opaque;
-  video_deliver_frame_avctx(vd, vd->vd_mp, mq, ctx, frame, &vvs->vvs_mbm, 0);
+  video_deliver_frame_avctx(vd, vd->vd_mp, mq, ctx, frame, &vvs->vvs_mbm, 0,
+			    mc);
 }
 
 
@@ -508,31 +509,31 @@ vdpau_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
 
   switch(mc->codec_id) {
 
-  case CODEC_ID_MPEG1VIDEO:
+  case AV_CODEC_ID_MPEG1VIDEO:
     profile = VDP_DECODER_PROFILE_MPEG1; 
     codec = avcodec_find_decoder_by_name("mpegvideo_vdpau");
     refframes = 2;
     break;
 
-  case CODEC_ID_MPEG2VIDEO:
+  case AV_CODEC_ID_MPEG2VIDEO:
     profile = VDP_DECODER_PROFILE_MPEG2_MAIN; 
     codec = avcodec_find_decoder_by_name("mpegvideo_vdpau");
     refframes = 2;
     break;
 
-  case CODEC_ID_H264:
+  case AV_CODEC_ID_H264:
     profile = VDP_DECODER_PROFILE_H264_HIGH; 
     codec = avcodec_find_decoder_by_name("h264_vdpau");
     refframes = 16;
     break;
 #if 0 // Seems broken
-  case CODEC_ID_VC1:
+  case AV_CODEC_ID_VC1:
     profile = VDP_DECODER_PROFILE_VC1_ADVANCED; 
     mc->codec = avcodec_find_decoder_by_name("vc1_vdpau");
     refframes = 16;
     break;
 
-  case CODEC_ID_WMV3:
+  case AV_CODEC_ID_WMV3:
     profile = VDP_DECODER_PROFILE_VC1_MAIN;
     mc->codec = avcodec_find_decoder_by_name("wmv3_vdpau");
     refframes = 16;

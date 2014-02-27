@@ -39,6 +39,7 @@
 #include <libavutil/mathematics.h>
 #endif
 #include "misc/pixmap.h"
+#include "misc/callout.h"
 #include "misc/jpeg.h"
 #include "backend/backend.h"
 #include "blobcache.h"
@@ -54,6 +55,7 @@ static const uint8_t svgsig2[4] = {'<', 's', 'v', 'g'};
 static hts_mutex_t image_from_video_mutex[2];
 static AVCodecContext *thumbctx;
 static AVCodec *thumbcodec;
+static callout_t thumb_flush_callout;
 
 static pixmap_t *fa_image_from_video(const char *url, const image_meta_t *im,
 				     char *errbuf, size_t errlen,
@@ -69,7 +71,7 @@ fa_imageloader_init(void)
 #if ENABLE_LIBAV
   hts_mutex_init(&image_from_video_mutex[0]);
   hts_mutex_init(&image_from_video_mutex[1]);
-  thumbcodec = avcodec_find_encoder(CODEC_ID_MJPEG);
+  thumbcodec = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
 #endif
 }
 
@@ -307,6 +309,20 @@ ifv_close(void)
   }
 }
 
+/**
+ *
+ */
+static void
+ifv_autoclose(callout_t *c, void *aux)
+{
+  if(hts_mutex_trylock(&image_from_video_mutex[1])) {
+    callout_arm(&thumb_flush_callout, ifv_autoclose, NULL, 5);
+  } else {
+    TRACE(TRACE_DEBUG, "Thumb", "Closing movie for thumb sources"); 
+    ifv_close();
+    hts_mutex_unlock(&image_from_video_mutex[1]);
+  }
+}
 
 /**
  *
@@ -319,7 +335,6 @@ write_thumb(const AVCodecContext *src, const AVFrame *sframe,
     return;
 
   AVCodecContext *ctx = thumbctx;
-  static AVFrame *oframe;
 
   if(ctx == NULL || ctx->width  != width || ctx->height != height) {
     
@@ -343,12 +358,9 @@ write_thumb(const AVCodecContext *src, const AVFrame *sframe,
       return;
     }
     thumbctx = ctx;
-
-    if(oframe == NULL) {
-      oframe = avcodec_alloc_frame();
-      memset(oframe, 0, sizeof(AVFrame));
-    }
   }
+
+  AVFrame *oframe = av_frame_alloc();
 
   avpicture_alloc((AVPicture *)oframe, ctx->pix_fmt, width, height);
       
@@ -373,7 +385,7 @@ write_thumb(const AVCodecContext *src, const AVFrame *sframe,
   } else {
     assert(out.data == NULL);
   }
-  avpicture_free((AVPicture *)oframe);
+  av_frame_free(&oframe);
 }
 
 
@@ -446,7 +458,7 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
   }
 
   AVPacket pkt;
-  AVFrame *frame = avcodec_alloc_frame();
+  AVFrame *frame = av_frame_alloc();
   int got_pic;
 
 
@@ -554,10 +566,13 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
     break;
   }
 
-  av_free(frame);
+  av_frame_free(&frame);
   if(pm == NULL)
     snprintf(errbuf, errlen, "Frame not found (scanned %d)", 
 	     MAX_FRAME_SCAN - cnt);
+
+  avcodec_flush_buffers(ifv_ctx);
+  callout_arm(&thumb_flush_callout, ifv_autoclose, NULL, 5);
   return pm;
 }
 

@@ -348,6 +348,7 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
       }
 
       mb->mb_keyframe = !!(pkt.flags & AV_PKT_FLAG_KEY);
+      av_free_packet(&pkt);
     }
 
     /*
@@ -792,12 +793,14 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
       mcp.height = ctx->height;
       mcp.profile = ctx->profile;
       mcp.level = ctx->level;
+      mcp.sar_num = st->sample_aspect_ratio.num;
+      mcp.sar_den = st->sample_aspect_ratio.den;
       break;
 
     case AVMEDIA_TYPE_AUDIO:
       if(va.flags & BACKEND_VIDEO_NO_AUDIO)
 	continue;
-      if(ctx->codec_id == CODEC_ID_DTS)
+      if(ctx->codec_id == AV_CODEC_ID_DTS)
 	ctx->channels = 0;
       break;
 

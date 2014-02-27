@@ -123,15 +123,17 @@ media_init(void)
 
 }
 
+#if ENABLE_LIBAV
+
+
 
 /**
  *
  */
 static void
-media_buf_dtor_freedata(media_buf_t *mb)
+media_buf_dtor_avpacket(media_buf_t *mb)
 {
-  if(mb->mb_data != NULL)
-    free(mb->mb_data);
+  av_packet_unref(&mb->mb_pkt);
 }
 
 #define BUF_PAD 32
@@ -141,13 +143,8 @@ media_buf_alloc_locked(media_pipe_t *mp, size_t size)
 {
   hts_mutex_assert(&mp->mp_mutex);
   media_buf_t *mb = pool_get(mp->mp_mb_pool);
-  mb->mb_dtor = media_buf_dtor_freedata;
-  mb->mb_size = size;
-  if(size > 0) {
-    mb->mb_data = malloc(size + BUF_PAD);
-    memset(mb->mb_data + size, 0, BUF_PAD);
-  }
-
+  av_new_packet(&mb->mb_pkt, size);
+  mb->mb_dtor = media_buf_dtor_avpacket;
   return mb;
 }
 
@@ -163,7 +160,6 @@ media_buf_alloc_unlocked(media_pipe_t *mp, size_t size)
 }
 
 
-#if ENABLE_LIBAV
 /**
  *
  */
@@ -176,27 +172,27 @@ media_buf_from_avpkt_unlocked(media_pipe_t *mp, AVPacket *pkt)
   mb = pool_get(mp->mp_mb_pool);
   hts_mutex_unlock(&mp->mp_mutex);
 
-  mb->mb_dtor = media_buf_dtor_freedata;
+  mb->mb_dtor = media_buf_dtor_avpacket;
 
-  if(pkt->destruct == av_destruct_packet) {
-    /* Move the data pointers from libav's packet */
-    mb->mb_data = pkt->data;
-    pkt->data = NULL;
-    
-    mb->mb_size = pkt->size;
-    pkt->size = 0;
-    
-  } else {
-    
-    mb->mb_data = malloc(pkt->size +   FF_INPUT_BUFFER_PADDING_SIZE);
-    memset(mb->mb_data + pkt->size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
-    memcpy(mb->mb_data, pkt->data, pkt->size);
-    mb->mb_size = pkt->size;
-  }
-
-  av_free_packet(pkt);
+  av_packet_ref(&mb->mb_pkt, pkt);
   return mb;
 }
+
+
+/**
+ *
+ */
+void
+copy_mbm_from_mb(media_buf_meta_t *mbm, const media_buf_t *mb)
+{
+  mbm->mbm_delta     = mb->mb_delta;
+  mbm->mbm_pts       = mb->mb_pts;
+  mbm->mbm_dts       = mb->mb_dts;
+  mbm->mbm_epoch     = mb->mb_epoch;
+  mbm->mbm_duration  = mb->mb_duration;
+  mbm->mbm_flags.u32 = mb->mb_flags.u32;
+}
+
 #endif
 
 /**
@@ -1707,6 +1703,11 @@ media_codec_create(int codec_id, int parser,
   }
 #endif
 
+  if(mcp != NULL) {
+    mc->sar_num = mcp->sar_num;
+    mc->sar_den = mcp->sar_den;
+  }
+
   LIST_FOREACH(cd, &registeredcodecs, link)
     if(!cd->open(mc, mcp, mp))
       break;
@@ -2655,7 +2656,7 @@ static void
 ext_sub_dtor(media_buf_t *mb)
 {
   if(mb->mb_data != NULL)
-    subtitles_destroy(mb->mb_data);
+    subtitles_destroy((void *)mb->mb_data);
 }
 
 
@@ -2667,10 +2668,13 @@ mp_load_ext_sub(media_pipe_t *mp, const char *url, AVRational *framerate)
 {
   media_buf_t *mb = media_buf_alloc_unlocked(mp, 0);
   mb->mb_data_type = MB_CTRL_EXT_SUBTITLE;
-  
-  if(url != NULL)
-    mb->mb_data = subtitles_load(mp, url, framerate);
-  
+
+  if(url != NULL) {
+    mb->mb_data = (void *)subtitles_load(mp, url, framerate);
+  } else {
+    mb->mb_data = NULL;
+  }
+
   mb->mb_dtor = ext_sub_dtor;
   hts_mutex_lock(&mp->mp_mutex);
   mb_enq(mp, &mp->mp_video, mb);
