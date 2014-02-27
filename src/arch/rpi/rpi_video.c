@@ -82,7 +82,11 @@ rpi_codec_decode(struct media_codec *mc, struct video_decoder *vd,
   const void *data = mb->mb_data;
   size_t len       = mb->mb_size;
 
-  if(mc->codec_id == CODEC_ID_MPEG4) {
+  int is_bframe = 0;
+
+  switch(mc->codec_id) {
+
+  case AV_CODEC_ID_MPEG4:
 
     if(mb->mb_size <= 7)
       return;
@@ -93,18 +97,29 @@ rpi_codec_decode(struct media_codec *mc, struct video_decoder *vd,
       frame_type = d[4] >> 6;
 
     if(frame_type == 2)
-      rvc->rvc_b_frames = 100;
+      is_bframe = 1;
+    break;
 
-    if(rvc->rvc_b_frames)
-      rvc->rvc_b_frames--;
+  case AV_CODEC_ID_H264:
+    h264_parser_decode_data(&rvc->rvc_h264_parser, mb->mb_data, mb->mb_size);
+    if(rvc->rvc_h264_parser.slice_type_nos == SLICE_TYPE_B)
+      is_bframe = 1;
+    break;
 
-    if(mb->mb_pts == PTS_UNSET && mb->mb_dts != PTS_UNSET &&
-       (!rvc->rvc_b_frames || frame_type == 2)) // 2 == B frame
-      mb->mb_pts = mb->mb_dts;
   }
 
+  if(is_bframe)
+    rvc->rvc_b_frames = 100;
+
+  if(rvc->rvc_b_frames)
+    rvc->rvc_b_frames--;
+    
+  if(mb->mb_pts == PTS_UNSET && mb->mb_dts != PTS_UNSET &&
+     (!rvc->rvc_b_frames || is_bframe))
+    mb->mb_pts = mb->mb_dts;
+
   media_buf_meta_t *mbm = &vd->vd_reorder[vd->vd_reorder_ptr];
-  *mbm = mb->mb_meta;
+  copy_mbm_from_mb(mbm, mb);
   vd->vd_reorder_ptr = (vd->vd_reorder_ptr + 1) & VIDEO_DECODER_REORDER_MASK;
 
   while(len > 0) {
@@ -180,6 +195,8 @@ rpi_codec_close(struct media_codec *mc)
 
   omx_component_destroy(rvc->rvc_decoder);
   hts_cond_destroy(&rvc->rvc_avail_cond);
+
+  h264_parser_fini(&rvc->rvc_h264_parser);
   free(rvc);
 }
 
@@ -207,45 +224,45 @@ rpi_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
 
   switch(mc->codec_id) {
 
-  case CODEC_ID_H263:
+  case AV_CODEC_ID_H263:
     fmt = OMX_VIDEO_CodingH263;
     name = "h263";
     break;
 
-  case CODEC_ID_MPEG4:
+  case AV_CODEC_ID_MPEG4:
     fmt = OMX_VIDEO_CodingMPEG4;
     name = "MPEG-4";
     break;
 
-  case CODEC_ID_H264:
+  case AV_CODEC_ID_H264:
     fmt = OMX_VIDEO_CodingAVC;
     name = "h264";
     break;
 
-  case CODEC_ID_MPEG2VIDEO:
+  case AV_CODEC_ID_MPEG2VIDEO:
     if(!omx_enable_mpg2)
       return 1;
     fmt = OMX_VIDEO_CodingMPEG2;
     name = "MPEG2";
     break;
 
-  case CODEC_ID_VP8:
+  case AV_CODEC_ID_VP8:
     if(!omx_enable_vp8)
       return 1;
     fmt = OMX_VIDEO_CodingVP8;
     name = "VP8";
     break;
 
-  case CODEC_ID_VP6F:
-  case CODEC_ID_VP6A:
+  case AV_CODEC_ID_VP6F:
+  case AV_CODEC_ID_VP6A:
     if(!omx_enable_vp6)
       return 1;
     fmt = OMX_VIDEO_CodingVP6;
     name = "VP6";
     break;
 
-  case CODEC_ID_MJPEG:
-  case CODEC_ID_MJPEGB:
+  case AV_CODEC_ID_MJPEG:
+  case AV_CODEC_ID_MJPEGB:
     if(!omx_enable_mjpeg)
       return 1;
     fmt = OMX_VIDEO_CodingMJPEG;
@@ -253,8 +270,8 @@ rpi_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
     break;
 
 #if 0
-  case CODEC_ID_VC1:
-  case CODEC_ID_WMV3:
+  case AV_CODEC_ID_VC1:
+  case AV_CODEC_ID_WMV3:
     if(mcp->extradata_size == 0)
       return 1;
 
@@ -320,6 +337,13 @@ rpi_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
     buf->nFlags = OMX_BUFFERFLAG_CODECCONFIG | OMX_BUFFERFLAG_ENDOFFRAME;
     omxchk(OMX_EmptyThisBuffer(rvc->rvc_decoder->oc_handle, buf));
   }
+
+  if(mc->codec_id == AV_CODEC_ID_H264) {
+    h264_parser_init(&rvc->rvc_h264_parser,
+		     mcp ? mcp->extradata : NULL,
+		     mcp ? mcp->extradata_size : 0);
+  }
+
 
   omx_enable_buffer_marks(d);
 

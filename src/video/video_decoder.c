@@ -72,7 +72,8 @@ void
 video_deliver_frame_avctx(video_decoder_t *vd,
 			  media_pipe_t *mp, media_queue_t *mq,
 			  AVCodecContext *ctx, AVFrame *frame,
-			  const media_buf_meta_t *mbm, int decode_time)
+			  const media_buf_meta_t *mbm, int decode_time,
+                          const media_codec_t *mc)
 {
   frame_info_t fi;
 #if 0
@@ -83,19 +84,17 @@ video_deliver_frame_avctx(video_decoder_t *vd,
   switch(mbm->mbm_aspect_override) {
   case 0:
 
-    if(frame->pan_scan != NULL && frame->pan_scan->width != 0) {
-      fi.fi_dar_num = frame->pan_scan->width;
-      fi.fi_dar_den = frame->pan_scan->height;
-    } else {
-      fi.fi_dar_num = frame->width;
-      fi.fi_dar_den = frame->height;
-    }
+    fi.fi_dar_num = frame->width;
+    fi.fi_dar_den = frame->height;
 
     if(frame->sample_aspect_ratio.num) {
       fi.fi_dar_num *= frame->sample_aspect_ratio.num;
       fi.fi_dar_den *= frame->sample_aspect_ratio.den;
+    } else if(mc->sar_num) {
+      fi.fi_dar_num *= mc->sar_num;
+      fi.fi_dar_den *= mc->sar_den;
     }
-      
+
     break;
   case 1:
     fi.fi_dar_num = 4;
@@ -279,7 +278,7 @@ vd_thread(void *aux)
 
   const media_buf_meta_t *mbm = NULL;
 
-  vd->vd_frame = avcodec_alloc_frame();
+  vd->vd_frame = av_frame_alloc();
 
   hts_mutex_lock(&mp->mp_mutex);
 
@@ -431,7 +430,7 @@ vd_thread(void *aux)
       break;
 
     case MB_DVD_CLUT:
-      dvdspu_decode_clut(vd->vd_dvd_clut, mb->mb_data);
+      dvdspu_decode_clut(vd->vd_dvd_clut, (void *)mb->mb_data);
       break;
 
     case MB_DVD_SPU:
@@ -442,7 +441,7 @@ vd_thread(void *aux)
 
     case MB_CTRL_DVD_SPU2:
       dvdspu_enqueue(mp, mb->mb_data+72, mb->mb_size-72,
-		     mb->mb_data,
+		     (void *)mb->mb_data,
 		     ((const uint32_t *)mb->mb_data)[16],
 		     ((const uint32_t *)mb->mb_data)[17],
 		     mb->mb_pts);
@@ -466,8 +465,8 @@ vd_thread(void *aux)
          subtitles_destroy(vd->vd_ext_subtitles);
 
       // Steal subtitle from the media_buf
-      vd->vd_ext_subtitles = mb->mb_data;
-      mb->mb_data = NULL; 
+      vd->vd_ext_subtitles = (void *)mb->mb_data;
+      mb->mb_data = NULL;
       hts_mutex_lock(&mp->mp_overlay_mutex);
       video_overlay_flush_locked(mp, 1);
       hts_mutex_unlock(&mp->mp_overlay_mutex);
@@ -489,8 +488,7 @@ vd_thread(void *aux)
   if(vd->vd_ext_subtitles != NULL)
     subtitles_destroy(vd->vd_ext_subtitles);
 
-  /* Free ffmpeg frame */
-  av_free(vd->vd_frame);
+  av_frame_free(&vd->vd_frame);
   return NULL;
 }
 

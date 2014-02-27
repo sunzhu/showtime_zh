@@ -1398,7 +1398,6 @@ pixmap_decode(pixmap_t *pm, const image_meta_t *im,
   int got_pic, w, h;
   int orientation = pm->pm_orientation;
   jpeg_meminfo_t mi;
-  int lowres = 0;
   jpeginfo_t ji = {0};
 
   if(!pixmap_is_coded(pm)) {
@@ -1416,7 +1415,7 @@ pixmap_decode(pixmap_t *pm, const image_meta_t *im,
   case PIXMAP_SVG:
     return svg_decode(pm, im, errbuf, errlen);
   case PIXMAP_PNG:
-    codec = avcodec_find_decoder(CODEC_ID_PNG);
+    codec = avcodec_find_decoder(AV_CODEC_ID_PNG);
     break;
   case PIXMAP_JPEG:
 
@@ -1429,20 +1428,10 @@ pixmap_decode(pixmap_t *pm, const image_meta_t *im,
       pixmap_release(pm);
       return NULL;
     }
-
-    if((im->im_req_width > 0  && ji.ji_width  > im->im_req_width * 16) ||
-       (im->im_req_height > 0 && ji.ji_height > im->im_req_height * 16))
-      lowres = 2;
-    else if((im->im_req_width  > 0 && ji.ji_width  > im->im_req_width * 8) ||
-	    (im->im_req_height > 0 && ji.ji_height > im->im_req_height * 8))
-      lowres = 1;
-    else if(ji.ji_width > 4096 || ji.ji_height > 4096)
-      lowres = 1; // swscale have problems with dimensions > 4096
-
-    codec = avcodec_find_decoder(CODEC_ID_MJPEG);
+    codec = avcodec_find_decoder(AV_CODEC_ID_MJPEG);
     break;
   case PIXMAP_GIF:
-    codec = avcodec_find_decoder(CODEC_ID_GIF);
+    codec = avcodec_find_decoder(AV_CODEC_ID_GIF);
     break;
   default:
     codec = NULL;
@@ -1456,7 +1445,6 @@ pixmap_decode(pixmap_t *pm, const image_meta_t *im,
   }
 
   ctx = avcodec_alloc_context3(codec);
-  ctx->lowres = lowres;
 
   if(avcodec_open2(ctx, codec, NULL) < 0) {
     av_free(ctx);
@@ -1465,7 +1453,7 @@ pixmap_decode(pixmap_t *pm, const image_meta_t *im,
     return NULL;
   }
   
-  frame = avcodec_alloc_frame();
+  frame = av_frame_alloc();
 
   AVPacket avpkt;
   av_init_packet(&avpkt);
@@ -1477,7 +1465,7 @@ pixmap_decode(pixmap_t *pm, const image_meta_t *im,
     pixmap_release(pm);
     avcodec_close(ctx);
     av_free(ctx);
-    av_free(frame);
+    av_frame_free(&frame);
     snprintf(errbuf, errlen, "Unable to decode image of size (%d x %d)",
              ctx->width, ctx->height);
     return NULL;
@@ -1510,7 +1498,7 @@ pixmap_decode(pixmap_t *pm, const image_meta_t *im,
   } else {
     snprintf(errbuf, errlen, "Out of memory");
   }
-  av_free(frame);
+  av_frame_free(&frame);
 
   avcodec_close(ctx);
   av_free(ctx);

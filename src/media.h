@@ -39,15 +39,15 @@
 #else
 
 enum codec_id {
-  CODEC_ID_AC3 = 1,
-  CODEC_ID_EAC3, 
-  CODEC_ID_AAC,
-  CODEC_ID_MP2,
-  CODEC_ID_MPEG2VIDEO,
-  CODEC_ID_H264,
-  CODEC_ID_DVB_SUBTITLE,
-  CODEC_ID_MOV_TEXT,
-  CODEC_ID_DVD_SUBTITLE,
+  AV_CODEC_ID_AC3 = 1,
+  AV_CODEC_ID_EAC3, 
+  AV_CODEC_ID_AAC,
+  AV_CODEC_ID_MP2,
+  AV_CODEC_ID_MPEG2VIDEO,
+  AV_CODEC_ID_H264,
+  AV_CODEC_ID_DVB_SUBTITLE,
+  AV_CODEC_ID_MOV_TEXT,
+  AV_CODEC_ID_DVD_SUBTITLE,
 };
 
 #define MEDIA_TYPE_VIDEO      0
@@ -160,6 +160,9 @@ typedef struct media_codec {
   void (*reinit)(struct media_codec *mc);
   void (*reconfigure)(struct media_codec *mc);
 
+  unsigned int sar_num;
+  unsigned int sar_den;
+
 } media_codec_t;
 
 /**
@@ -170,8 +173,32 @@ typedef int (set_video_codec_t)(uint32_t type, struct media_codec *mc,
 				void *opaque);
 
 
+
+
 /**
- * 
+ *
+ */
+typedef union media_buf_flags {
+
+  struct {
+    uint32_t aspect_override      : 2;
+    uint32_t skip                 : 2;
+    uint32_t keyframe             : 1;
+    uint32_t flush                : 1;
+    uint32_t nopts                : 1;
+    uint32_t nodts                : 1;
+    uint32_t drive_clock          : 1;
+    uint32_t disable_deinterlacer : 1;
+  };
+
+  uint32_t u32;
+
+} media_buf_flags_t;
+
+
+
+/**
+ *
  */
 typedef struct media_buf_meta {
   int64_t mbm_delta;
@@ -179,14 +206,17 @@ typedef struct media_buf_meta {
   int64_t mbm_dts;
   int mbm_epoch;
   uint32_t mbm_duration;
-  uint32_t mbm_aspect_override      : 2;
-  uint32_t mbm_skip                 : 2;
-  uint32_t mbm_keyframe             : 1;
-  uint32_t mbm_flush                : 1; 
-  uint32_t mbm_nopts                : 1;
-  uint32_t mbm_nodts                : 1;
-  uint32_t mbm_drive_clock          : 1;
-  uint32_t mbm_disable_deinterlacer : 1;
+
+  media_buf_flags_t mbm_flags;
+
+#define mbm_aspect_override          mbm_flags.aspect_override
+#define mbm_skip                     mbm_flags.skip
+#define mbm_keyframe                 mbm_flags.keyframe
+#define mbm_flush                    mbm_flags.flush
+#define mbm_nopts                    mbm_flags.nopts
+#define mbm_nodts                    mbm_flags.nodts
+#define mbm_drive_clock              mbm_flags.drive_clock
+#define mbm_disable_deinterlacer     mbm_flags.disable_deinterlacer
 } media_buf_meta_t;
 
 
@@ -196,18 +226,24 @@ typedef struct media_buf_meta {
 typedef struct media_buf {
   TAILQ_ENTRY(media_buf) mb_link;
 
-  media_buf_meta_t mb_meta;
+  AVPacket mb_pkt;
+#define mb_pts        mb_pkt.pts
+#define mb_dts        mb_pkt.dts
+#define mb_duration   mb_pkt.duration
+#define mb_data       mb_pkt.data
+#define mb_size       mb_pkt.size
 
-#define mb_delta                mb_meta.mbm_delta
-#define mb_pts                  mb_meta.mbm_pts
-#define mb_dts                  mb_meta.mbm_dts
-#define mb_duration             mb_meta.mbm_duration
-#define mb_epoch                mb_meta.mbm_epoch
-#define mb_aspect_override      mb_meta.mbm_aspect_override
-#define mb_skip                 mb_meta.mbm_skip
-#define mb_disable_deinterlacer mb_meta.mbm_disable_deinterlacer
-#define mb_keyframe             mb_meta.mbm_keyframe
-#define mb_drive_clock          mb_meta.mbm_drive_clock
+  int64_t mb_delta;
+
+  media_buf_flags_t mb_flags;
+
+  int mb_epoch;
+
+#define mb_aspect_override      mb_flags.aspect_override
+#define mb_skip                 mb_flags.skip
+#define mb_disable_deinterlacer mb_flags.disable_deinterlacer
+#define mb_keyframe             mb_flags.keyframe
+#define mb_drive_clock          mb_flags.drive_clock
 
   enum {
     MB_VIDEO,
@@ -237,34 +273,34 @@ typedef struct media_buf {
 
     MB_CTRL_REQ_OUTPUT_SIZE,
     MB_CTRL_DVD_SPU2,
-    
+
     MB_CTRL_UNBLOCK,
 
     MB_CTRL_SET_VOLUME_MULTIPLIER,
 
   } mb_data_type;
 
-  void *mb_data;
   media_codec_t *mb_cw;
   void (*mb_dtor)(struct media_buf *mb);
 
-  int mb_size;
 
   union {
     int32_t mb_data32;
     int mb_rate;
-    int mb_codecid;
     float mb_float;
     prop_t *mb_prop;
+    uint16_t mb_font_context;
   };
 
-
   uint8_t mb_stream;
-
   uint8_t mb_channels;
-  uint16_t mb_font_context;
+
+  int mb_codecid;
 
 } media_buf_t;
+
+
+void copy_mbm_from_mb(media_buf_meta_t *mbm, const media_buf_t *mb);
 
 /*
  * Media queue
@@ -507,6 +543,8 @@ typedef struct media_codec_params {
   int cheat_for_speed;
   const void *extradata;
   size_t extradata_size;
+  unsigned int sar_num;
+  unsigned int sar_den;
 } media_codec_params_t;
 
 
