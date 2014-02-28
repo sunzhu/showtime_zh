@@ -65,6 +65,8 @@ rpi_video_port_settings_changed(omx_component_t *oc)
   hts_mutex_lock(&mp->mp_mutex);
   media_buf_t *mb = media_buf_alloc_locked(mp, 0);
   mb->mb_data_type = MB_CTRL_RECONFIGURE;
+  mb->mb_width  = port_image.format.video.nFrameWidth;
+  mb->mb_height = port_image.format.video.nFrameHeight;
   mb->mb_cw = media_codec_ref(mc);
   mb_enq(mp, &mp->mp_video, mb);
   hts_mutex_unlock(&mp->mp_mutex);
@@ -105,22 +107,15 @@ rpi_codec_decode(struct media_codec *mc, struct video_decoder *vd,
     if(rvc->rvc_h264_parser.slice_type_nos == SLICE_TYPE_B)
       is_bframe = 1;
     break;
-
   }
-
-  if(is_bframe)
-    rvc->rvc_b_frames = 100;
-
-  if(rvc->rvc_b_frames)
-    rvc->rvc_b_frames--;
-    
-  if(mb->mb_pts == PTS_UNSET && mb->mb_dts != PTS_UNSET &&
-     (!rvc->rvc_b_frames || is_bframe))
-    mb->mb_pts = mb->mb_dts;
 
   media_buf_meta_t *mbm = &vd->vd_reorder[vd->vd_reorder_ptr];
   copy_mbm_from_mb(mbm, mb);
+  mbm->mbm_pts = video_decoder_infer_pts(mbm, vd, is_bframe);
+
   vd->vd_reorder_ptr = (vd->vd_reorder_ptr + 1) & VIDEO_DECODER_REORDER_MASK;
+
+  int domark = 1;
 
   while(len > 0) {
     OMX_BUFFERHEADERTYPE *buf = omx_get_buffer(rvc->rvc_decoder);
@@ -131,15 +126,15 @@ rpi_codec_decode(struct media_codec *mc, struct video_decoder *vd,
     memcpy(buf->pBuffer, data, buf->nFilledLen);
     buf->nFlags = 0;
 
-    if(vd->vd_render_component) {
+    if(vd->vd_render_component && domark) {
       buf->hMarkTargetComponent = vd->vd_render_component;
       buf->pMarkData = mbm;
-      mbm = NULL;
+      domark = 0;
     }
 
-    if(rvc->rvc_last_epoch != mb->mb_epoch) {
+    if(rvc->rvc_last_epoch != mbm->mbm_epoch) {
       buf->nFlags |= OMX_BUFFERFLAG_DISCONTINUITY;
-      rvc->rvc_last_epoch = mb->mb_epoch;
+      rvc->rvc_last_epoch = mbm->mbm_epoch;
     }
 
     if(len <= buf->nAllocLen)
@@ -148,14 +143,14 @@ rpi_codec_decode(struct media_codec *mc, struct video_decoder *vd,
     data += buf->nFilledLen;
     len  -= buf->nFilledLen;
 
-    if(mb->mb_pts != PTS_UNSET)
-      buf->nTimeStamp = omx_ticks_from_s64(mb->mb_pts);
+    if(mbm->mbm_pts != PTS_UNSET)
+      buf->nTimeStamp = omx_ticks_from_s64(mbm->mbm_pts);
     else {
       buf->nFlags |= OMX_BUFFERFLAG_TIME_UNKNOWN;
       buf->nTimeStamp = omx_ticks_from_s64(0);
     }
 
-    if(mb->mb_skip)
+    if(mbm->mbm_skip)
       buf->nFlags |= OMX_BUFFERFLAG_DECODEONLY;
 
     omxchk(OMX_EmptyThisBuffer(rvc->rvc_decoder->oc_handle, buf));
@@ -205,10 +200,14 @@ rpi_codec_close(struct media_codec *mc)
  *
  */
 static void
-rpi_codec_reconfigure(struct media_codec *mc)
+rpi_codec_reconfigure(struct media_codec *mc, int width, int height)
 {
   media_pipe_t *mp = mc->mp;
-  mp->mp_set_video_codec('omx', mc, mp->mp_video_frame_opaque);
+  frame_info_t fi;
+  memset(&fi, 0, sizeof(fi));
+  fi.fi_width  = width;
+  fi.fi_height = height;
+  mp->mp_set_video_codec('omx', mc, mp->mp_video_frame_opaque, &fi);
 }
 
 
