@@ -613,6 +613,54 @@ rpi_mainloop(void)
   }
 }
 
+
+/**
+ * Stop STOS splash screen
+ */
+static void
+stos_stop_splash(void)
+{
+  const char *runfile = "/var/run/stos-splash.pid";
+  int val;
+  FILE *fp = fopen(runfile, "r");
+  if(fp == NULL)
+    return;
+  int r = fscanf(fp, "%d", &val);
+  fclose(fp);
+  if(r != 1)
+    return;
+  TRACE(TRACE_DEBUG, "STOS", "Asking stos-splash (pid: %d) to stop", val);
+  kill(val, SIGINT);
+
+  for(int i = 0; i < 100; i++) {
+    struct stat st;
+    if(stat(runfile, &st)) {
+      TRACE(TRACE_DEBUG, "STOS", "stos-splash is gone");
+      return;
+    }
+    usleep(10000);
+  }
+  TRACE(TRACE_ERROR, "STOS", "stos-splash fails to terminate");
+}
+
+
+/**
+ *
+ */
+static void
+kill_framebuffer(void)
+{
+  struct stat st;
+  if(stat("/dev/fb0", &st))
+    return; // No frame buffer
+
+  // Turning off TV output seems to kill framebuffer
+  vc_tv_power_off();
+  vc_tv_hdmi_power_on_preferred();
+}
+
+
+
 /**
  * Linux main
  */
@@ -632,9 +680,7 @@ main(int argc, char **argv)
 
   bcm_host_init();
 
-  vc_tv_power_off();
-  vc_tv_hdmi_power_on_preferred();
-
+  kill_framebuffer();
 
   omx_init();
 
@@ -672,6 +718,8 @@ main(int argc, char **argv)
   g_type_init();
   connman_init();
 #endif
+
+  stos_stop_splash();
 
   rpi_mainloop();
   shutdown_hook_run(1);
