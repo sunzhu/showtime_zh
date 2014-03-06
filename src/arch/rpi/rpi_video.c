@@ -33,6 +33,7 @@ static char omx_enable_mpg2;
 static char omx_enable_vp8;
 static char omx_enable_vp6;
 static char omx_enable_mjpeg;
+static char omx_enable_wvc1;
 
 
 
@@ -133,7 +134,7 @@ rpi_codec_decode(struct media_codec *mc, struct video_decoder *vd,
     }
 
     if(rvc->rvc_last_epoch != mbm->mbm_epoch) {
-      buf->nFlags |= OMX_BUFFERFLAG_DISCONTINUITY;
+      buf->nFlags |= OMX_BUFFERFLAG_STARTTIME | OMX_BUFFERFLAG_DISCONTINUITY;
       rvc->rvc_last_epoch = mbm->mbm_epoch;
     }
 
@@ -268,15 +269,17 @@ rpi_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
     name = "MJPEG";
     break;
 
-#if 0
   case AV_CODEC_ID_VC1:
   case AV_CODEC_ID_WMV3:
-    if(mcp->extradata_size == 0)
+    if(!omx_enable_wvc1)
       return 1;
 
-    mc->decode = vc1_pt_decode;
-    return 0;
-#endif
+    if(mcp == NULL || mcp->extradata_size == 0)
+      return 1;
+
+    fmt = OMX_VIDEO_CodingWMV;
+    name = "VC1";
+    break;
 
   default:
     return 1;
@@ -306,8 +309,34 @@ rpi_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
   OMX_INIT_STRUCTURE(format);
   format.nPortIndex = 130; 
   format.eCompressionFormat = fmt;
+
+  format.xFramerate = 25 * (1<<16);
+  if(mcp != NULL && mcp->frame_rate_num && mcp->frame_rate_den)
+    format.xFramerate =(65536ULL * mcp->frame_rate_num) / mcp->frame_rate_den;
+
+  TRACE(TRACE_DEBUG, "OMX", "Frame rate set to %2.3f",
+	format.xFramerate / 65536.0f);
+
   omxchk(OMX_SetParameter(d->oc_handle,
 			  OMX_IndexParamVideoPortFormat, &format));
+
+
+  OMX_PARAM_PORTDEFINITIONTYPE portParam;
+  OMX_INIT_STRUCTURE(portParam);
+  portParam.nPortIndex = 130;
+
+  if(OMX_GetParameter(d->oc_handle, OMX_IndexParamPortDefinition,
+		      &portParam) == OMX_ErrorNone) {
+
+    if(mcp != NULL) {
+      portParam.format.video.nFrameWidth  = mcp->width;
+      portParam.format.video.nFrameHeight = mcp->height;
+    }
+
+    OMX_SetParameter(d->oc_handle, OMX_IndexParamPortDefinition, &portParam);
+  }
+
+
 
   OMX_PARAM_BRCMVIDEODECODEERRORCONCEALMENTTYPE ec;
   OMX_INIT_STRUCTURE(ec);
@@ -378,6 +407,10 @@ rpi_codec_init(void)
   vc_gencmd(buf, sizeof(buf), "codec_enabled MJPG");
   TRACE(TRACE_INFO, "VideoCore", "%s", buf);
   omx_enable_mjpeg = !strcmp(buf, "MJPG=enabled");
+
+  vc_gencmd(buf, sizeof(buf), "codec_enabled WVC1");
+  TRACE(TRACE_INFO, "VideoCore", "%s", buf);
+  omx_enable_wvc1 = !strcmp(buf, "WVC1=enabled");
 
 
 }
