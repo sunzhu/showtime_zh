@@ -662,6 +662,73 @@ kill_framebuffer(void)
 
 
 /**
+ *
+ */
+static void
+tv_update_state(void)
+{
+  TV_DISPLAY_STATE_T state = {};
+  if(vc_tv_get_display_state(&state)) {
+    printf("failed to get state\n");
+    return;
+  }
+  printf("state.state=0x%x\n", state.state);
+
+}
+
+
+/**
+ *
+ */
+static void
+tv_service_callback(void *callback_data, uint32_t reason,
+		    uint32_t param1, uint32_t param2)
+{
+  TRACE(TRACE_DEBUG, "TV", "State change 0x%08x 0x%08x 0x%08x",
+	reason, param1, param2);
+#if 0
+  if(reason & 1) {
+    display_status = DISPLAY_STATUS_OFF;
+    TRACE(TRACE_INFO, "TV", "Display status = off");
+  } else {
+    display_status = DISPLAY_STATUS_ON;
+    TRACE(TRACE_INFO, "TV", "Display status = on");
+  }
+#endif
+  tv_update_state();
+}
+
+
+/**
+ *
+ */
+static void
+tv_init(void)
+{
+  vc_tv_register_callback(tv_service_callback, NULL);
+  tv_update_state();
+#if 0
+  int x;
+
+  x = vc_tv_hdmi_audio_supported(EDID_AudioFormat_ePCM, 8,
+				 EDID_AudioSampleRate_e48KHz,
+				 EDID_AudioSampleSize_16bit);
+  printf("8ch 48khz=0x%x\n", x);
+
+  x = vc_tv_hdmi_audio_supported(EDID_AudioFormat_ePCM, 2,
+				 EDID_AudioSampleRate_e48KHz,
+				 EDID_AudioSampleSize_16bit);
+  printf("2ch 44khz=0x%x\n", x);
+
+  x = vc_tv_hdmi_audio_supported(EDID_AudioFormat_eDTS, 2,
+				 EDID_AudioSampleRate_e48KHz,
+				 EDID_AudioSampleSize_16bit);
+  printf("DTS 48khz=0x%x\n", x);
+#endif
+}
+
+
+/**
  * Linux main
  */
 int
@@ -695,6 +762,8 @@ main(int argc, char **argv)
   trap_init();
 
   showtime_init();
+
+  tv_init();
 
   rpi_cec_init();
 
@@ -748,3 +817,17 @@ arch_stop_req(void)
   return 0;
 }
 
+
+/**
+ *
+ */
+int
+rpi_is_codec_enabled(const char *id)
+{
+  char query[64];
+  char buf[64];
+  snprintf(query, sizeof(query), "codec_enabled %s", id);
+  vc_gencmd(buf, sizeof(buf), query);
+  TRACE(TRACE_INFO, "VideoCore", "%s", buf);
+  return !!strstr(buf, "=enabled");
+}
