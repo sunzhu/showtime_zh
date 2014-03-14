@@ -279,8 +279,9 @@ glw_video_compute_avdiff(glw_root_t *gr, media_pipe_t *mp,
   if(gconf.enable_detailed_avdiff) {
     static int64_t lastpts, lastaclock, lastclock;
 
-    TRACE(TRACE_DEBUG, "AVDIFF", "E:%3d %10f %10d %15"PRId64":a:%-8"PRId64" %15"PRId64":v:%-8"PRId64" %15"PRId64" %15"PRId64" %s %lld", 
+    TRACE(TRACE_DEBUG, "AVDIFF", "VE:%d AE:%d %10f %10d %15"PRId64":a:%-8"PRId64" %15"PRId64":v:%-8"PRId64" %15"PRId64" %15"PRId64" %s %lld", 
 	  epoch,
+	  mp->mp_audio_clock_epoch,
 	  gv->gv_avdiff_x,
 	  gv->gv_avdiff,
 	  aclock,
@@ -935,7 +936,15 @@ glw_video_configure(glw_video_t *gv, const glw_video_engine_t *engine)
     if(gv->gv_engine != NULL)
       gv->gv_engine->gve_reset(gv);
     
+    TAILQ_INIT(&gv->gv_avail_queue);
+    TAILQ_INIT(&gv->gv_parked_queue);
+    TAILQ_INIT(&gv->gv_displaying_queue);
+    TAILQ_INIT(&gv->gv_decoded_queue);
+
     gv->gv_engine = engine;
+
+    if(engine == NULL)
+      return 0;
 
     if(engine->gve_init_on_ui_thread) {
       gv->gv_need_init = 1;

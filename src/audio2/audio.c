@@ -102,7 +102,11 @@ audio_init(void)
                      _p("Setup audio output"),
                      "settings:audio");
 
-  settings_create_separator(asettings, _p("Audio during for video playback"));
+  audio_mastervol_init();
+  audio_class = audio_driver_init(asettings, store);
+
+  settings_create_separator(asettings,
+			    _p("Audio settings during video playback"));
 
   gconf.setting_av_volume =
     setting_create(SETTING_INT, asettings,
@@ -125,8 +129,6 @@ audio_init(void)
                    SETTING_VALUE_ORIGIN("global"),
                    NULL);
 
-  audio_mastervol_init();
-  audio_class = audio_driver_init();
 
 #if CONFIG_AUDIOTEST
   audio_test_init(asettings);
@@ -463,8 +465,10 @@ audio_process_audio(audio_decoder_t *ad, media_buf_t *mb)
 
       if(frame->sample_rate    != ad->ad_in_sample_rate ||
 	 frame->format         != ad->ad_in_sample_format ||
-	 frame->channel_layout != ad->ad_in_channel_layout) {
+	 frame->channel_layout != ad->ad_in_channel_layout ||
+	 ad->ad_want_reconfig) {
 
+	ad->ad_want_reconfig = 0;
 	ad->ad_in_sample_rate    = frame->sample_rate;
 	ad->ad_in_sample_format  = frame->format;
 	ad->ad_in_channel_layout = frame->channel_layout;
