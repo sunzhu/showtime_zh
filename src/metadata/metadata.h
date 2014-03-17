@@ -265,37 +265,6 @@ typedef enum {
   METADATA_PROP_ALBUM_ART,
 } metadata_prop_t;
 
-/**
- *
- */
-typedef struct metadata_source {
-  TAILQ_ENTRY(metadata_source) ms_link;
-  char *ms_name;
-  char *ms_description;
-  int ms_prio;
-  int ms_id;
-  int ms_enabled;
-  int ms_type;
-
-  const metadata_source_funcs_t *ms_funcs;
-  struct prop *ms_settings;
-
-  int ms_mark;
-  int ms_qtype;
-  int ms_status;
-  int64_t ms_cfgid;
-
-  uint64_t ms_partial_props;
-  uint64_t ms_complete_props;
-} metadata_source_t;
-
-
-metadata_source_t *metadata_add_source(const char *name,
-				       const char *description,
-				       int default_prio, metadata_type_t type,
-				       const metadata_source_funcs_t *funcs,
-				       uint64_t partials,
-				       uint64_t complete);
 
 metadata_t *metadata_create(void);
 
@@ -317,6 +286,16 @@ metadata_t *metadata_get_video_data(const char *url);
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
+
+
+typedef struct metadata_source_query_info {
+  const struct metadata_source *msqi_ms;
+
+  int msqi_mark;
+  int msqi_qtype;
+  int msqi_status;
+} metadata_source_query_info_t;
+
 
 void metadb_init(void);
 
@@ -403,7 +382,7 @@ int64_t metadb_insert_videoitem(void *db, const char *url, int ds_id,
 				int64_t cfgid);
 
 int metadb_get_videoinfo(void *db, const char *url,
-			 struct metadata_source_queue *sources,
+                         metadata_source_query_info_t *msqi, int num_msqi,
 			 int *fixed_ds, metadata_t **mdp,
                          int only_preferred);
 
@@ -430,6 +409,8 @@ deco_browse_t *decorated_browse_create(struct prop *model, struct prop_nf *pnf,
 
 // Use if DECO_FLAGS_NO_AUTO_DESTROY
 void decorated_browse_destroy(deco_browse_t *db);
+
+void mlp_init(void);
 
 void metadata_init(void);
 
@@ -458,11 +439,6 @@ void mlv_set_lonely(metadata_lazy_video_t *mlv, int lonely);
 int mlv_direct_query(void *db, rstr_t *url, rstr_t *filename,
                      const char *imdb_id, float duration, const char *folder,
                      int lonely);
-
-rstr_t *metadata_remove_postfix_rstr(rstr_t *in);
-
-rstr_t *metadata_remove_postfix(const char *in);
-
 
 /**
  * Browse library
