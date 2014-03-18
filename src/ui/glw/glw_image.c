@@ -355,8 +355,8 @@ glw_image_render(glw_t *w, const glw_rctx_t *rc)
  *
  */
 static void
-glw_image_layout_tesselated(glw_root_t *gr, glw_rctx_t *rc, glw_image_t *gi, 
-			    glw_loadable_texture_t *glt)
+glw_image_layout_tesselated(glw_root_t *gr, const glw_rctx_t *rc,
+                            glw_image_t *gi, glw_loadable_texture_t *glt)
 {
   float tex[4][2];
   float vex[4][2];
@@ -527,9 +527,9 @@ settexcoord(glw_renderer_t *gr, int c, float s0, float t0,
  *
  */
 static void
-glw_image_layout_alpha_edges(glw_root_t *gr, glw_rctx_t *rc, 
-			     glw_image_t *gi, 
-			     const glw_loadable_texture_t *glt)
+glw_image_layout_alpha_edges(glw_root_t *gr, const glw_rctx_t *rc,
+			     glw_image_t *gi,
+                             const glw_loadable_texture_t *glt)
 {
   float tex[4][2];
   float vex[4][2];
@@ -571,7 +571,7 @@ glw_image_layout_alpha_edges(glw_root_t *gr, glw_rctx_t *rc,
  *
  */
 static void
-glw_image_layout_normal(glw_root_t *gr, glw_rctx_t *rc, glw_image_t *gi, 
+glw_image_layout_normal(glw_root_t *gr, const glw_rctx_t *rc, glw_image_t *gi,
 			glw_loadable_texture_t *glt)
 {
   int m = glt->glt_margin;
@@ -599,8 +599,8 @@ glw_image_layout_normal(glw_root_t *gr, glw_rctx_t *rc, glw_image_t *gi,
  *
  */
 static void
-glw_image_layout_repeated(glw_root_t *gr, glw_rctx_t *rc, glw_image_t *gi, 
-			  glw_loadable_texture_t *glt)
+glw_image_layout_repeated(glw_root_t *gr, const glw_rctx_t *rc,
+                          glw_image_t *gi, glw_loadable_texture_t *glt)
 {
   float xs = gr->gr_normalized_texture_coords ? glt->glt_s : glt->glt_xs;
   float ys = gr->gr_normalized_texture_coords ? glt->glt_t : glt->glt_ys;
@@ -760,8 +760,8 @@ glw_image_tex_load(glw_image_t *gi, rstr_t *url, int width, int height)
 /**
  *
  */
-static void 
-glw_image_layout(glw_t *w, glw_rctx_t *rc)
+static void
+glw_image_layout(glw_t *w, const glw_rctx_t *rc)
 {
   glw_image_t *gi = (void *)w;
   glw_root_t *gr = w->glw_root;
@@ -1023,9 +1023,6 @@ glw_image_callback(glw_t *w, void *opaque, glw_signal_t signal,
   switch(signal) {
   default:
     break;
-  case GLW_SIGNAL_LAYOUT:
-    glw_image_layout(w, extra);
-    break;
   case GLW_SIGNAL_EVENT:
     TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link)
       if(glw_signal0(c, GLW_SIGNAL_EVENT, extra))
@@ -1111,14 +1108,21 @@ glw_icon_ctor(glw_t *w)
 /**
  *
  */
-static void
-glw_image_set_rgb(glw_t *w, const float *rgb)
+static int
+glw_image_set_float3(glw_t *w, glw_attribute_t attrib, const float *rgb)
 {
   glw_image_t *gi = (void *)w;
-  gi->gi_color.r = rgb[0];
-  gi->gi_color.g = rgb[1];
-  gi->gi_color.b = rgb[2];
-  compute_colors(gi);
+
+  switch(attrib) {
+  case GLW_ATTRIB_RGB:
+    if(!glw_attrib_set_rgb(&gi->gi_color, rgb))
+      return 0;
+    compute_colors(gi);
+    return 1;
+
+  default:
+    return -1;
+  }
 }
 
 
@@ -1344,92 +1348,106 @@ set_sources(glw_t *w, rstr_t **filenames)
 /**
  *
  */
-static void
-set_alpha_self(glw_t *w, float f)
+static int
+glw_image_set_float(glw_t *w, glw_attribute_t attrib, float value)
 {
   glw_image_t *gi = (glw_image_t *)w;
-  gi->gi_alpha_self = f;
+
+  switch(attrib) {
+  case GLW_ATTRIB_ANGLE:
+    if(gi->gi_angle == value)
+      return 0;
+    gi->gi_angle = value;
+    break;
+
+  case GLW_ATTRIB_SATURATION:
+    if(gi->gi_saturation == value)
+      return 0;
+    compute_colors(gi);
+    break;
+
+  case GLW_ATTRIB_ASPECT:
+    if(gi->gi_aspect == value)
+      return 0;
+    gi->gi_aspect = value;
+    gi->gi_update = 1;
+    break;
+
+  case GLW_ATTRIB_CHILD_ASPECT:
+    if(gi->gi_child_aspect == value)
+      return 0;
+    gi->gi_child_aspect = value;
+    break;
+
+  case GLW_ATTRIB_ALPHA_SELF:
+    if(gi->gi_alpha_self == value)
+      return 0;
+
+    gi->gi_alpha_self = value;
+    break;
+
+  case GLW_ATTRIB_SIZE_SCALE:
+    if(w->glw_class != &glw_icon)
+      return -1;
+
+    if(gi->gi_size_scale == value)
+      return 0;
+
+    gi->gi_size_scale = value;
+
+    float siz = gi->gi_size_scale * w->glw_root->gr_current_size;
+    glw_set_constraints(w, siz, siz, 0, GLW_CONSTRAINT_X | GLW_CONSTRAINT_Y);
+    break;
+
+  default:
+    return -1;
+  }
+  return 1;
 }
 
-
-/**
- * Only for icon class
- */
-static void
-set_size_scale(glw_t *w, float f)
-{
-  glw_image_t *gi = (glw_image_t *)w;
-  gi->gi_size_scale = f;
-
-  float siz = gi->gi_size_scale * w->glw_root->gr_current_size;
-  glw_set_constraints(w, siz, siz, 0, GLW_CONSTRAINT_X | GLW_CONSTRAINT_Y);
-}
-
-
-/**
- * Only for icon class
- */
-static void
-set_default_size(glw_t *w, int px)
-{
-  glw_image_t *gi = (glw_image_t *)w;
-  gi->gi_fixed_size = px;
-  glw_set_constraints(w, px, px, 0, GLW_CONSTRAINT_X | GLW_CONSTRAINT_Y);
-}
 
 /**
  *
  */
-static void 
-glw_image_set(glw_t *w, va_list ap)
+static int
+glw_image_set_int(glw_t *w, glw_attribute_t attrib, int value)
 {
   glw_image_t *gi = (glw_image_t *)w;
-  glw_attribute_t attrib;
-  int r;
-  float f;
-  do {
-    attrib = va_arg(ap, int);
-    switch(attrib) {
-    case GLW_ATTRIB_ANGLE:
-      gi->gi_angle = va_arg(ap, double);
-      break;
 
-    case GLW_ATTRIB_SATURATION:
-      gi->gi_saturation = va_arg(ap, double);
-      compute_colors(gi);
-      break;
-      
-    case GLW_ATTRIB_ALPHA_EDGES:
-      gi->gi_alpha_edge = va_arg(ap, int);
-      gi->gi_mode = GI_MODE_ALPHA_EDGES;
-      break;
+  switch(attrib) {
 
-    case GLW_ATTRIB_ASPECT:
-      f = va_arg(ap, double);
-      if(gi->gi_aspect != f) {
-        gi->gi_aspect = f;
-        gi->gi_update = 1;
-      }
-      break;
+  case GLW_ATTRIB_ALPHA_EDGES:
+    if(gi->gi_alpha_edge == value)
+      return 0;
 
-    case GLW_ATTRIB_CHILD_ASPECT:
-      gi->gi_child_aspect = va_arg(ap, double);
-      break;
+    gi->gi_alpha_edge = value;
+    gi->gi_mode = GI_MODE_ALPHA_EDGES;
+    break;
 
-    case GLW_ATTRIB_RADIUS:
-      r = va_arg(ap, int);
-      if(gi->gi_radius != r) {
-	gi->gi_radius = r;
-	gi->gi_update = 1;
-      }
-      break;
+  case GLW_ATTRIB_RADIUS:
+    if(gi->gi_radius == value)
+      return 0;
 
-    default:
-      GLW_ATTRIB_CHEW(attrib, ap);
-      break;
-    }
-  } while(attrib);
+    gi->gi_radius = value;
+    gi->gi_update = 1;
+    break;
 
+  case GLW_ATTRIB_DEFAULT_SIZE:
+    if(w->glw_class != &glw_icon)
+      return -1;
+
+    if(gi->gi_fixed_size == value)
+      return 0;
+
+    gi->gi_fixed_size = value;
+    glw_set_constraints(w, value, value, 0,
+                        GLW_CONSTRAINT_X | GLW_CONSTRAINT_Y);
+    break;
+
+  default:
+    return -1;
+  }
+  return 1;
 }
 
 
@@ -1501,19 +1519,20 @@ glw_image_get_details(glw_t *w, char *path, size_t pathlen, float *alpha)
 static glw_class_t glw_image = {
   .gc_name = "image",
   .gc_instance_size = sizeof(glw_image_t),
+  .gc_layout = glw_image_layout,
   .gc_render = glw_image_render,
   .gc_dtor = glw_image_dtor,
   .gc_ctor = glw_image_ctor,
-  .gc_set = glw_image_set,
+  .gc_set_float = glw_image_set_float,
+  .gc_set_int = glw_image_set_int,
   .gc_signal_handler = glw_image_callback,
   .gc_default_alignment = LAYOUT_ALIGN_CENTER,
   .gc_ready = glw_image_ready,
-  .gc_set_rgb = glw_image_set_rgb,
+  .gc_set_float3 = glw_image_set_float3,
   .gc_set_padding = set_padding,
   .gc_mod_image_flags = mod_image_flags,
   .gc_set_source = set_source,
   .gc_set_sources = set_sources,
-  .gc_set_alpha_self = set_alpha_self,
   .gc_get_identity = get_identity,
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
@@ -1528,20 +1547,19 @@ GLW_REGISTER_CLASS(glw_image);
 static glw_class_t glw_icon = {
   .gc_name = "icon",
   .gc_instance_size = sizeof(glw_image_t),
+  .gc_layout = glw_image_layout,
   .gc_render = glw_image_render,
   .gc_ctor = glw_icon_ctor,
   .gc_dtor = glw_icon_dtor,
-  .gc_set = glw_image_set,
+  .gc_set_float = glw_image_set_float,
+  .gc_set_int = glw_image_set_int,
   .gc_signal_handler = glw_image_callback,
   .gc_default_alignment = LAYOUT_ALIGN_CENTER,
-  .gc_set_rgb = glw_image_set_rgb,
+  .gc_set_float3 = glw_image_set_float3,
   .gc_set_padding = set_padding,
   .gc_mod_image_flags = mod_image_flags,
   .gc_set_source = set_source,
   .gc_set_sources = set_sources,
-  .gc_set_alpha_self = set_alpha_self,
-  .gc_set_size_scale = set_size_scale,
-  .gc_set_default_size = set_default_size,
   .gc_get_identity = get_identity,
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
@@ -1556,20 +1574,21 @@ GLW_REGISTER_CLASS(glw_icon);
 static glw_class_t glw_backdrop = {
   .gc_name = "backdrop",
   .gc_instance_size = sizeof(glw_image_t),
+  .gc_layout = glw_image_layout,
   .gc_render = glw_image_render,
   .gc_ctor = glw_image_ctor,
   .gc_dtor = glw_image_dtor,
-  .gc_set = glw_image_set,
+  .gc_set_float = glw_image_set_float,
+  .gc_set_int = glw_image_set_int,
   .gc_signal_handler = glw_image_callback,
   .gc_default_alignment = LAYOUT_ALIGN_CENTER,
-  .gc_set_rgb = glw_image_set_rgb,
+  .gc_set_float3 = glw_image_set_float3,
   .gc_set_padding = set_padding,
   .gc_set_border = set_border,
   .gc_set_margin = set_margin,
   .gc_mod_image_flags = mod_image_flags,
   .gc_set_source = set_source,
   .gc_set_sources = set_sources,
-  .gc_set_alpha_self = set_alpha_self,
   .gc_get_identity = get_identity,
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
@@ -1585,20 +1604,21 @@ GLW_REGISTER_CLASS(glw_backdrop);
 static glw_class_t glw_frontdrop = {
   .gc_name = "frontdrop",
   .gc_instance_size = sizeof(glw_image_t),
+  .gc_layout = glw_image_layout,
   .gc_render = glw_image_render,
   .gc_ctor = glw_image_ctor,
   .gc_dtor = glw_image_dtor,
-  .gc_set = glw_image_set,
+  .gc_set_float = glw_image_set_float,
+  .gc_set_int = glw_image_set_int,
   .gc_signal_handler = glw_image_callback,
   .gc_default_alignment = LAYOUT_ALIGN_CENTER,
-  .gc_set_rgb = glw_image_set_rgb,
+  .gc_set_float3 = glw_image_set_float3,
   .gc_set_padding = set_padding,
   .gc_set_border = set_border,
   .gc_set_margin = set_margin,
   .gc_mod_image_flags = mod_image_flags,
   .gc_set_source = set_source,
   .gc_set_sources = set_sources,
-  .gc_set_alpha_self = set_alpha_self,
   .gc_get_identity = get_identity,
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
@@ -1614,17 +1634,18 @@ GLW_REGISTER_CLASS(glw_frontdrop);
 static glw_class_t glw_repeatedimage = {
   .gc_name = "repeatedimage",
   .gc_instance_size = sizeof(glw_image_t),
+  .gc_layout = glw_image_layout,
   .gc_render = glw_image_render,
   .gc_ctor = glw_image_ctor,
   .gc_dtor = glw_image_dtor,
-  .gc_set = glw_image_set,
+  .gc_set_float = glw_image_set_float,
+  .gc_set_int = glw_image_set_int,
   .gc_signal_handler = glw_image_callback,
   .gc_default_alignment = LAYOUT_ALIGN_CENTER,
-  .gc_set_rgb = glw_image_set_rgb,
+  .gc_set_float3 = glw_image_set_float3,
   .gc_set_padding = set_padding,
   .gc_mod_image_flags = mod_image_flags,
   .gc_set_source = set_source,
-  .gc_set_alpha_self = set_alpha_self,
   .gc_get_identity = get_identity,
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,

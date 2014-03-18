@@ -46,40 +46,55 @@ typedef struct glw_view_loader {
 #define glw_parent_vl_cur glw_parent_val[0].f
 #define glw_parent_vl_tgt glw_parent_val[1].f
 
+
+/**
+ *
+ */
+static void
+glw_loader_layout(glw_t *w, const glw_rctx_t *rc)
+{
+  glw_view_loader_t *a = (void *)w;
+  glw_root_t *gr = w->glw_root;
+  glw_t *c, *n;
+
+  a->delta = 1 / (a->time * (1000000 / w->glw_root->gr_frameduration));
+
+  for(c = TAILQ_FIRST(&w->glw_childs); c != NULL; c = n) {
+    n = TAILQ_NEXT(c, glw_parent_link);
+
+    float n =
+      GLW_MIN(c->glw_parent_vl_cur + a->delta, c->glw_parent_vl_tgt);
+
+    if(n != c->glw_parent_vl_cur)
+      gr_schedule_refresh(gr, 0);
+
+    c->glw_parent_vl_cur = n;
+
+    if(c->glw_parent_vl_cur == 1) {
+      glw_destroy(c);
+
+      if((c = TAILQ_FIRST(&w->glw_childs)) != NULL) {
+        glw_copy_constraints(w, c);
+      }
+    } else {
+      glw_layout0(c, rc);
+    }
+  }
+}
+
+
 /**
  *
  */
 static int
-glw_view_loader_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
+glw_loader_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 {
   glw_t *c, *n;
   glw_view_loader_t *a = (void *)w;
-  glw_rctx_t *rc = extra;
 
   switch(signal) {
   default:
     break;
-
-  case GLW_SIGNAL_LAYOUT:
-    a->delta = 1 / (a->time * (1000000 / w->glw_root->gr_frameduration));
-
-    for(c = TAILQ_FIRST(&w->glw_childs); c != NULL; c = n) {
-      n = TAILQ_NEXT(c, glw_parent_link);
-
-      c->glw_parent_vl_cur = 
-	GLW_MIN(c->glw_parent_vl_cur + a->delta, c->glw_parent_vl_tgt);
-      
-      if(c->glw_parent_vl_cur == 1) {
-	glw_destroy(c);
-
-	if((c = TAILQ_FIRST(&w->glw_childs)) != NULL) {
-	  glw_copy_constraints(w, c);
-	}
-      } else {
-	glw_layout0(c, rc);
-      }
-    }
-    return 0;
 
   case GLW_SIGNAL_CHILD_CREATED:
     c = extra;
@@ -248,55 +263,92 @@ set_alt(glw_t *w, rstr_t *url)
 /**
  *
  */
-static void 
-glw_view_loader_set(glw_t *w, va_list ap)
+static int
+glw_view_loader_set_int(glw_t *w, glw_attribute_t attrib, int value)
 {
-  glw_view_loader_t *a = (void *)w;
+  glw_view_loader_t *vl = (void *)w;
 
-  glw_attribute_t attrib;
+  switch(attrib) {
+  case GLW_ATTRIB_TRANSITION_EFFECT:
+    if(vl->efx_conf == value)
+      return 0;
+    vl->efx_conf = value;
+    break;
 
-  do {
-    attrib = va_arg(ap, int);
-    switch(attrib) {
-    case GLW_ATTRIB_TRANSITION_EFFECT:
-      a->efx_conf = va_arg(ap, int);
-      break;
-
-    case GLW_ATTRIB_TIME:
-      a->time = va_arg(ap, double);
-      a->time = GLW_MAX(a->time, 0.00001);
-      break;
-
-    case GLW_ATTRIB_PROPROOTS3:
-      a->prop = va_arg(ap, void *);
-      a->prop_parent = va_arg(ap, void *);
-      a->prop_clone = va_arg(ap, void *);
-      /* REFcount ?? */
-      break;
-
-    case GLW_ATTRIB_ARGS:
-      prop_link_ex(va_arg(ap, prop_t *), a->args, NULL,
-		   PROP_LINK_XREFED_IF_ORPHANED, 0);
-      break;
-
-    case GLW_ATTRIB_PROP_PARENT:
-      prop_ref_dec(a->prop_parent_override);
-
-      a->prop_parent_override = prop_ref_inc(va_arg(ap, prop_t *));
-      break;
-
-    case GLW_ATTRIB_PROP_SELF:
-      prop_ref_dec(a->prop_self_override);
-
-      a->prop_self_override = prop_ref_inc(va_arg(ap, prop_t *));
-      break;
-
-    default:
-      GLW_ATTRIB_CHEW(attrib, ap);
-      break;
-    }
-  } while(attrib);
+  default:
+    return -1;
+  }
+  return 1;
 }
+
+
+/**
+ *
+ */
+static int
+glw_view_loader_set_float(glw_t *w, glw_attribute_t attrib, float value)
+{
+  glw_view_loader_t *vl = (void *)w;
+
+  switch(attrib) {
+  case GLW_ATTRIB_TIME:
+    value = GLW_MAX(value, 0.00001);
+    if(vl->time == value)
+      return 0;
+    vl->time = value;
+    break;
+
+  default:
+    return -1;
+  }
+  return 1;
+}
+
+
+/**
+ *
+ */
+static void
+glw_view_loader_set_roots(glw_t *w, prop_t *self, prop_t *parent, prop_t *clone)
+{
+  glw_view_loader_t *vl = (void *)w;
+
+  vl->prop        = self;
+  vl->prop_parent = parent;
+  vl->prop_clone  = clone;
+}
+
+
+
+/**
+ *
+ */
+static int
+glw_view_loader_set_prop(glw_t *w, glw_attribute_t attrib, prop_t *p)
+{
+  glw_view_loader_t *vl = (void *)w;
+
+  switch(attrib) {
+  case GLW_ATTRIB_ARGS:
+    prop_link_ex(p, vl->args, NULL, PROP_LINK_XREFED_IF_ORPHANED, 0);
+    return 0;
+
+  case GLW_ATTRIB_PROP_PARENT:
+    prop_ref_dec(vl->prop_parent_override);
+    vl->prop_parent_override = prop_ref_inc(p);
+    return 0;
+
+  case GLW_ATTRIB_PROP_SELF:
+    prop_ref_dec(vl->prop_self_override);
+    vl->prop_self_override = prop_ref_inc(p);
+    return 0;
+
+  default:
+    return -1;
+  }
+  return 1;
+}
+
 
 /**
  *
@@ -318,10 +370,14 @@ static glw_class_t glw_view_loader = {
   .gc_instance_size = sizeof(glw_view_loader_t),
   .gc_ctor = glw_view_loader_ctor,
   .gc_dtor = glw_view_loader_dtor,
-  .gc_set = glw_view_loader_set,
+  .gc_set_int = glw_view_loader_set_int,
+  .gc_set_float = glw_view_loader_set_float,
+  .gc_set_prop = glw_view_loader_set_prop,
+  .gc_set_roots = glw_view_loader_set_roots,
+  .gc_layout = glw_loader_layout,
   .gc_render = glw_view_loader_render,
   .gc_retire_child = glw_view_loader_retire_child,
-  .gc_signal_handler = glw_view_loader_callback,
+  .gc_signal_handler = glw_loader_callback,
   .gc_set_source = set_source,
   .gc_get_identity = get_identity,
   .gc_set_alt = set_alt,

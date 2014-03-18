@@ -98,7 +98,7 @@ update_value(glw_slider_t *s, float v, int how)
  *
  */
 static void
-glw_slider_layout(glw_t *w, glw_rctx_t *rc)
+glw_slider_layout(glw_t *w, const glw_rctx_t *rc)
 {
   glw_slider_t *s = (glw_slider_t *)w;
   glw_t *c;
@@ -379,10 +379,6 @@ glw_slider_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
   glw_t *c;
 
   switch(signal) {
-  case GLW_SIGNAL_LAYOUT:
-    glw_slider_layout(w, extra);
-    break;
-
   case GLW_SIGNAL_EVENT:
     if(w->glw_class == &glw_slider_x)
       return glw_slider_event_x(w, extra);
@@ -537,44 +533,55 @@ bind_to_property(glw_t *w, prop_t *p, const char **pname,
 /**
  *
  */
-static void
-glw_slider_set(glw_t *w, va_list ap)
+static int
+glw_slider_set_float(glw_t *w, glw_attribute_t attrib, float value)
 {
   glw_slider_t *s = (glw_slider_t *)w;
-  glw_attribute_t attrib;
-  const char *n;
 
-  do {
-    attrib = va_arg(ap, int);
+  switch(attrib) {
 
-    switch(attrib) {
-    case GLW_ATTRIB_BIND_TO_ID:
-      slider_unbind(s);
-      n = va_arg(ap, const char *);
+  case GLW_ATTRIB_INT_MIN:
+    if(s->min == value)
+      return 0;
 
-      slider_bind_by_id(s, n);
-      break;
+    s->min = value;
+    s->step_i = s->step / (s->max - s->min);
+    break;
 
-    case GLW_ATTRIB_INT_MIN:
-      s->min = va_arg(ap, double);
-      s->step_i = s->step / (s->max - s->min);
-      break;
+  case GLW_ATTRIB_INT_MAX:
+    if(s->max == value)
+      return 0;
 
-    case GLW_ATTRIB_INT_MAX:
-      s->max = va_arg(ap, double);
-      s->step_i = s->step / (s->max - s->min);
-      break;
+    s->max = value;
+    s->step_i = s->step / (s->max - s->min);
+    break;
 
-    case GLW_ATTRIB_INT_STEP:
-      s->step = va_arg(ap, double);
-      s->step_i = s->step / (s->max - s->min);
-      break;
+  case GLW_ATTRIB_INT_STEP:
+    if(s->step == value)
+      return 0;
 
-    default:
-      GLW_ATTRIB_CHEW(attrib, ap);
-      break;
-    }
-  } while(attrib);
+    s->step = value;
+    s->step_i = s->step / (s->max - s->min);
+    break;
+
+  default:
+    return -1;
+  }
+  return 1;
+}
+
+
+/**
+ *
+ */
+static int
+glw_slider_bind_id(glw_t *w, const char *id)
+{
+  glw_slider_t *s = (glw_slider_t *)w;
+
+  slider_unbind(s);
+  slider_bind_by_id(s, id);
+  return 1;
 }
 
 
@@ -583,8 +590,10 @@ glw_slider_set(glw_t *w, va_list ap)
 static glw_class_t glw_slider_x = {
   .gc_name = "slider_x",
   .gc_instance_size = sizeof(glw_slider_t),
+  .gc_layout = glw_slider_layout,
   .gc_render = glw_slider_render_x,
-  .gc_set = glw_slider_set,
+  .gc_set_float = glw_slider_set_float,
+  .gc_bind_to_id = glw_slider_bind_id,
   .gc_ctor = glw_slider_ctor,
   .gc_signal_handler = glw_slider_callback,
   .gc_bind_to_property = bind_to_property,
@@ -593,8 +602,10 @@ static glw_class_t glw_slider_x = {
 static glw_class_t glw_slider_y = {
   .gc_name = "slider_y",
   .gc_instance_size = sizeof(glw_slider_t),
+  .gc_layout = glw_slider_layout,
   .gc_render = glw_slider_render_y,
-  .gc_set = glw_slider_set,
+  .gc_set_float = glw_slider_set_float,
+  .gc_bind_to_id = glw_slider_bind_id,
   .gc_ctor = glw_slider_ctor,
   .gc_signal_handler = glw_slider_callback,
   .gc_bind_to_property = bind_to_property,

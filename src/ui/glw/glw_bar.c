@@ -32,7 +32,8 @@ typedef struct glw_bar {
 
   float gb_fill;
 
-  int gb_update;
+  char gb_update;
+  char gb_is_active;
 
 } glw_bar_t;
 
@@ -74,11 +75,14 @@ glw_bar_render(glw_t *w, const glw_rctx_t *rc)
 /**
  *
  */
-static void 
-glw_bar_layout(glw_t *W, glw_rctx_t *rc)
+static void
+glw_bar_layout(glw_t *w, const glw_rctx_t *rc)
 {
-  glw_bar_t *gb = (void *)W;
+  glw_bar_t *gb = (void *)w;
   float r, g, b, x;
+
+  if(w->glw_alpha < 0.01)
+    return;
 
   if(!glw_renderer_initialized(&gb->gb_gr)) {
     glw_renderer_init_quad(&gb->gb_gr);
@@ -115,6 +119,7 @@ glw_bar_layout(glw_t *W, glw_rctx_t *rc)
 			 gb->gb_col1[2],
 			 1.0);
 
+    gr_schedule_refresh(w->glw_root, 0);
   }
 }
 
@@ -123,73 +128,50 @@ glw_bar_layout(glw_t *W, glw_rctx_t *rc)
  *
  */
 static int
-glw_bar_callback(glw_t *w, void *opaque, glw_signal_t signal,
-		      void *extra)
+glw_bar_set_float(glw_t *w, glw_attribute_t attrib, float value)
 {
-  switch(signal) {
+  glw_bar_t *gb = (glw_bar_t *)w;
+
+  switch(attrib) {
+  case GLW_ATTRIB_FILL:
+    value = MIN(value, 1.0f);
+    if(gb->gb_fill == value)
+      return 0;
+
+    gb->gb_fill = value;
+    gb->gb_update = 1;
+    return w->glw_flags & GLW_ACTIVE ? GLW_REFRESH_LAYOUT_ONLY : 0;
+
   default:
-    break;
-  case GLW_SIGNAL_LAYOUT:
-    glw_bar_layout(w, extra);
-    break;
+    return -1;
   }
-  return 0;
+  return 1;
 }
 
 /**
  *
  */
-static void 
-glw_bar_set(glw_t *w, va_list ap)
+static int
+glw_bar_set_float3(glw_t *w, glw_attribute_t attrib, const float *vector)
 {
   glw_bar_t *gb = (glw_bar_t *)w;
-  glw_attribute_t attrib;
 
-  do {
-    attrib = va_arg(ap, int);
-    switch(attrib) {
-    case GLW_ATTRIB_FILL:
-      gb->gb_fill = va_arg(ap, double);
-      if(gb->gb_fill > 1)
-	gb->gb_fill = 1;
-      gb->gb_update = 1;
-      break;
+  switch(attrib) {
+  case GLW_ATTRIB_COLOR1:
+    if(!glw_attrib_set_float3_clamped(gb->gb_col1, vector))
+      return 0;
+    break;
 
-    default:
-      GLW_ATTRIB_CHEW(attrib, ap);
-      break;
-    }
-  } while(attrib);
-}
-
-
-/**
- *
- */
-static void
-set_color1(glw_t *w, const float *rgb)
-{
-  glw_bar_t *gb = (glw_bar_t *)w;
-  gb->gb_col1[0] = GLW_CLAMP(rgb[0], 0, 1);
-  gb->gb_col1[1] = GLW_CLAMP(rgb[1], 0, 1);
-  gb->gb_col1[2] = GLW_CLAMP(rgb[2], 0, 1);
+  case GLW_ATTRIB_COLOR2:
+    if(!glw_attrib_set_float3_clamped(gb->gb_col2, vector))
+      return 0;
+    break;
+  default:
+    return -1;
+  }
   gb->gb_update = 1;
+  return 1;
 }
-
-
-/**
- *
- */
-static void
-set_color2(glw_t *w, const float *rgb)
-{
-  glw_bar_t *gb = (glw_bar_t *)w;
-  gb->gb_col2[0] = GLW_CLAMP(rgb[0], 0, 1);
-  gb->gb_col2[1] = GLW_CLAMP(rgb[1], 0, 1);
-  gb->gb_col2[2] = GLW_CLAMP(rgb[2], 0, 1);
-  gb->gb_update = 1;
-}
-
 
 
 /**
@@ -199,11 +181,10 @@ static glw_class_t glw_bar = {
   .gc_name = "bar",
   .gc_instance_size = sizeof(glw_bar_t),
   .gc_render = glw_bar_render,
-  .gc_set = glw_bar_set,
+  .gc_set_float = glw_bar_set_float,
   .gc_dtor = glw_bar_dtor,
-  .gc_signal_handler = glw_bar_callback,
-  .gc_set_color1 = set_color1,
-  .gc_set_color2 = set_color2,
+  .gc_set_float3 = glw_bar_set_float3,
+  .gc_layout = glw_bar_layout,
 };
 
 GLW_REGISTER_CLASS(glw_bar);

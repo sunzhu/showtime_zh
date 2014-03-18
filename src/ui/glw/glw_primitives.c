@@ -36,6 +36,9 @@ typedef struct glw_quad {
 
 
 
+/**
+ *
+ */
 static void
 glw_quad_render(glw_t *w, const glw_rctx_t *rc)
 {
@@ -66,6 +69,15 @@ glw_quad_render(glw_t *w, const glw_rctx_t *rc)
 /**
  *
  */
+static void
+glw_quad_layout(glw_t *w, const glw_rctx_t *rc)
+{
+}
+
+
+/**
+ *
+ */
 static int
 glw_quad_callback(glw_t *w, void *opaque, glw_signal_t signal,
 		  void *extra)
@@ -90,13 +102,16 @@ glw_quad_init(glw_t *w)
 /**
  *
  */
-static void 
-glw_quad_set_rgb(glw_t *w, const float *rgb)
+static int
+glw_quad_set_float3(glw_t *w, glw_attribute_t attrib, const float *vector)
 {
-  glw_quad_t *q = (void *)w;
-  q->color.r = rgb[0];
-  q->color.g = rgb[1];
-  q->color.b = rgb[2];
+  glw_quad_t *q = (glw_quad_t *)w;
+  switch(attrib) {
+  case GLW_ATTRIB_RGB:
+    return glw_attrib_set_rgb(&q->color, vector);
+  default:
+    return -1;
+  }
 }
 
 
@@ -130,9 +145,10 @@ static glw_class_t glw_quad = {
   .gc_name = "quad",
   .gc_instance_size = sizeof(glw_quad_t),
   .gc_ctor = glw_quad_init,
+  .gc_layout = glw_quad_layout,
   .gc_render = glw_quad_render,
   .gc_signal_handler = glw_quad_callback,
-  .gc_set_rgb = glw_quad_set_rgb,
+  .gc_set_float3 = glw_quad_set_float3,
   .gc_dtor = glw_quad_dtor,
   .gc_set_fs = glw_quad_set_fs,
 };
