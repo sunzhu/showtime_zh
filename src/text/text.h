@@ -83,7 +83,7 @@ struct prop;
 #define TR_ALIGN_RIGHT     3
 #define TR_ALIGN_JUSTIFIED 4
 
-struct pixmap *
+struct image *
 text_render(const uint32_t *uc, int len, int flags, int default_size,
 	    float scale, int alignment,
 	    int max_width, int max_lines, const char *font_family,
@@ -93,8 +93,6 @@ text_render(const uint32_t *uc, int len, int flags, int default_size,
 #if ENABLE_LIBFREETYPE
 
 struct fa_handle;
-
-int freetype_init(void);
 
 void * freetype_load_font_from_fh(struct fa_handle *fh, int font_domain,
 				  char *errbuf, size_t errlen);
@@ -112,8 +110,6 @@ struct rstr *freetype_get_family(void *handle);
 struct rstr *freetype_get_identifier(void *handle);
 
 #endif
-
-void fontstash_init(void);
 
 void fontstash_props_from_title(struct prop *p, const char *url,
 				const char *title);

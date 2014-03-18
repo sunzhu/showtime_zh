@@ -30,9 +30,9 @@
  *
  */
 static void
-glw_grid_layout(glw_grid_t *gg, glw_rctx_t *rc)
+glw_grid_layout(glw_t *w, const glw_rctx_t *rc)
 {
-  glw_t *w = &gg->w;
+  glw_grid_t *gg = (glw_grid_t *)w;
   glw_t *c;
   glw_rctx_t rc0 = *rc;
   const float scale = gg->child_scale;
@@ -105,7 +105,6 @@ scroll_to_me(glw_grid_t *gg, glw_t *c)
 static int
 glw_grid_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 {
-  glw_rctx_t *rc = extra;
   glw_grid_t *gg = (glw_grid_t *)w;
   glw_t *c;
 
@@ -118,10 +117,6 @@ glw_grid_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
     c = extra;
     if(c == TAILQ_FIRST(&w->glw_childs) && !TAILQ_NEXT(c, glw_parent_link))
       gg->scroll_to_me = c;
-    break;
-
-  case GLW_SIGNAL_LAYOUT:
-    glw_grid_layout(gg, rc);
     break;
 
   case GLW_SIGNAL_FOCUS_CHILD_INTERACTIVE:
@@ -140,24 +135,22 @@ glw_grid_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 /**
  *
  */
-static void
-glw_grid_set(glw_t *w, va_list ap)
+static int
+glw_grid_set_float(glw_t *w, glw_attribute_t attrib, float value)
 {
   glw_grid_t *gg = (glw_grid_t *)w;
-  glw_attribute_t attrib;
 
-  do {
-    attrib = va_arg(ap, int);
-    switch(attrib) {
-    case GLW_ATTRIB_CHILD_SCALE:
-      gg->child_scale = va_arg(ap, double);
-      break;
+  switch(attrib) {
+  case GLW_ATTRIB_CHILD_SCALE:
+    if(gg->child_scale == value)
+      return 0;
+    gg->child_scale = value;
+    break;
 
-    default:
-      GLW_ATTRIB_CHEW(attrib, ap);
-      break;
-    }
-  } while(attrib);
+  default:
+    return -1;
+  }
+  return 1;
 }
 
 
@@ -178,8 +171,9 @@ glw_class_t glw_grid = {
   .gc_name = "grid",
   .gc_instance_size = sizeof(glw_grid_t),
   .gc_nav_descend_mode = GLW_NAV_DESCEND_FOCUSED,
+  .gc_layout = glw_grid_layout,
   .gc_render = glw_grid_render,
-  .gc_set = glw_grid_set,
+  .gc_set_float = glw_grid_set_float,
   .gc_signal_handler = glw_grid_callback,
   .gc_child_orientation = GLW_ORIENTATION_VERTICAL,
   .gc_nav_search_mode = GLW_NAV_SEARCH_BY_ORIENTATION,

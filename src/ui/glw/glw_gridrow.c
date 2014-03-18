@@ -30,13 +30,13 @@
  *
  */
 static void
-glw_gridrow_layout(glw_gridrow_t *ggr, glw_rctx_t *rc)
+glw_gridrow_layout(glw_t *w, const glw_rctx_t *rc)
 {
+  glw_gridrow_t *ggr = (glw_gridrow_t *)w;
   glw_grid_t *gg = (glw_grid_t *)ggr->w.glw_parent;
   if(gg->w.glw_class != &glw_grid)
     return;
 
-  glw_t *w = &ggr->w;
   glw_t *c;
   glw_rctx_t rc0 = *rc;
   const float scale = ggr->child_scale;
@@ -109,7 +109,6 @@ scroll_to_me(glw_gridrow_t *ggr, glw_t *c)
 static int
 glw_gridrow_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 {
-  glw_rctx_t *rc = extra;
   glw_gridrow_t *ggr = (glw_gridrow_t *)w;
   glw_t *c;
 
@@ -122,10 +121,6 @@ glw_gridrow_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
     c = extra;
     if(c == TAILQ_FIRST(&w->glw_childs) && !TAILQ_NEXT(c, glw_parent_link))
       scroll_to_me(ggr, c);
-    break;
-
-  case GLW_SIGNAL_LAYOUT:
-    glw_gridrow_layout(ggr, rc);
     break;
 
   case GLW_SIGNAL_FOCUS_CHILD_INTERACTIVE:
@@ -144,24 +139,23 @@ glw_gridrow_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 /**
  *
  */
-static void
-glw_gridrow_set(glw_t *w, va_list ap)
+static int
+glw_gridrow_set_float(glw_t *w, glw_attribute_t attrib, float value)
 {
   glw_gridrow_t *ggr = (glw_gridrow_t *)w;
-  glw_attribute_t attrib;
 
-  do {
-    attrib = va_arg(ap, int);
-    switch(attrib) {
-    case GLW_ATTRIB_CHILD_SCALE:
-      ggr->child_scale = va_arg(ap, double);
-      break;
+  switch(attrib) {
+  case GLW_ATTRIB_CHILD_SCALE:
+    if(ggr->child_scale == value)
+      return 0;
 
-    default:
-      GLW_ATTRIB_CHEW(attrib, ap);
-      break;
-    }
-  } while(attrib);
+    ggr->child_scale = value;
+    break;
+
+  default:
+    return -1;
+  }
+  return 1;
 }
 
 
@@ -184,8 +178,9 @@ static glw_class_t glw_gridrow = {
   .gc_name = "gridrow",
   .gc_instance_size = sizeof(glw_gridrow_t),
   .gc_nav_descend_mode = GLW_NAV_DESCEND_ALL,
+  .gc_layout = glw_gridrow_layout,
   .gc_render = glw_gridrow_render,
-  .gc_set = glw_gridrow_set,
+  .gc_set_float = glw_gridrow_set_float,
   .gc_signal_handler = glw_gridrow_callback,
   .gc_child_orientation = GLW_ORIENTATION_HORIZONTAL,
   .gc_nav_search_mode = GLW_NAV_SEARCH_BY_ORIENTATION,

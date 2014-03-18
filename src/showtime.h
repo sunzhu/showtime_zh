@@ -249,6 +249,7 @@ typedef struct gconf {
   int enable_mem_debug;
   int enable_nav_always_close;
   int enable_kvstore_debug;
+  int enable_conditional_rendering;
 
   const char *devplugin;
   const char *plugin_repo;
@@ -304,6 +305,7 @@ typedef struct inithelper {
     INIT_GROUP_IPC,
     INIT_GROUP_STATIC_APPS,
     INIT_GROUP_ASYNCIO,
+    INIT_GROUP_GRAPHICS,
   } group;
   void (*fn)(void);
 } inithelper_t;

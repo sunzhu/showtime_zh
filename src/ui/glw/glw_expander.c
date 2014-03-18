@@ -29,7 +29,7 @@ static glw_class_t glw_expander_x;
 typedef struct glw_expander {
   glw_t w;
   float expansion;
-  float last;
+  int last;
 } glw_expander_t;
 
 
@@ -69,13 +69,49 @@ update_constraints(glw_expander_t *exp)
 /**
  *
  */
+static void
+glw_expander_layout(glw_t *w, const glw_rctx_t *rc)
+{
+  glw_expander_t *exp = (glw_expander_t *)w;
+  glw_t *c;
+  glw_rctx_t rc0;
+
+  if(exp->expansion < 0.01)
+    return;
+
+  if((c = TAILQ_FIRST(&w->glw_childs)) == NULL)
+    return;
+  rc0 = *rc;
+
+  if(exp->w.glw_class == &glw_expander_x) {
+    rc0.rc_width = c->glw_req_size_x;
+
+    if(rc0.rc_width == 0)
+      rc0.rc_width = exp->last;
+    else
+      exp->last = rc0.rc_width;
+
+  } else {
+    rc0.rc_height = c->glw_req_size_y;
+
+    if(rc0.rc_height == 0)
+      rc0.rc_height = exp->last;
+    else
+      exp->last = rc0.rc_height;
+  }
+
+  glw_layout0(c, &rc0);
+}
+
+
+
+/**
+ *
+ */
 static int
 glw_expander_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 {
   glw_expander_t *exp = (glw_expander_t *)w;
-  glw_rctx_t *rc = extra;
-  glw_t *c;
-  glw_rctx_t rc0;
 
   switch(signal) {
   default:
@@ -85,29 +121,6 @@ glw_expander_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
     update_constraints(exp);
     return 1;
 
-  case GLW_SIGNAL_LAYOUT:
-    if((c = TAILQ_FIRST(&w->glw_childs)) == NULL)
-      break;
-    rc0 = *rc;
-
-    if(exp->w.glw_class == &glw_expander_x) {
-      rc0.rc_width = c->glw_req_size_x;
-
-      if(rc0.rc_width == 0)
-	rc0.rc_width = exp->last;
-      else
-	exp->last = rc0.rc_width;
-
-    } else {
-      rc0.rc_height = c->glw_req_size_y;
-
-      if(rc0.rc_height == 0)
-	rc0.rc_height = exp->last;
-      else
-	exp->last = rc0.rc_height;
-    }
-    glw_layout0(c, &rc0);
-    break;
   }
   return 0;
 }
@@ -119,13 +132,22 @@ glw_expander_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 static void
 glw_expander_render(glw_t *w, const glw_rctx_t *rc)
 {
+  glw_expander_t *exp = (glw_expander_t *)w;
   glw_rctx_t rc0;
   glw_t *c = TAILQ_FIRST(&w->glw_childs);
   if(c == NULL)
     return;
 
+  if(exp->expansion < 0.01)
+    return;
+
   rc0 = *rc;
   rc0.rc_alpha *= w->glw_alpha;
+
+  /**
+   * Trick childs into rendering themselfs as if the widget is
+   * fully expanded
+   */
 
   if(w->glw_class == &glw_expander_x)
     rc0.rc_width = c->glw_req_size_x;
@@ -138,7 +160,7 @@ glw_expander_render(glw_t *w, const glw_rctx_t *rc)
 /**
  *
  */
-static void 
+static void
 glw_expander_ctor(glw_t *w)
 {
   glw_expander_t *exp = (glw_expander_t *)w;
@@ -149,25 +171,24 @@ glw_expander_ctor(glw_t *w)
 /**
  *
  */
-static void 
-glw_expander_set(glw_t *w, va_list ap)
+static int
+glw_expander_set_float(glw_t *w, glw_attribute_t attrib, float value)
 {
   glw_expander_t *exp = (glw_expander_t *)w;
-  glw_attribute_t attrib;
 
-  do {
-    attrib = va_arg(ap, int);
-    switch(attrib) {
-    case GLW_ATTRIB_EXPANSION:
-      exp->expansion = va_arg(ap, double);
-      update_constraints(exp);
-      break;
+  switch(attrib) {
+  case GLW_ATTRIB_EXPANSION:
+    if(exp->expansion == value)
+      return 0;
 
-    default:
-      GLW_ATTRIB_CHEW(attrib, ap);
-      break;
-    }
-  } while(attrib);
+    exp->expansion = value;
+    update_constraints(exp);
+    break;
+
+  default:
+    return -1;
+  }
+  return 1;
 }
 
 
@@ -175,8 +196,9 @@ glw_expander_set(glw_t *w, va_list ap)
 static glw_class_t glw_expander_x = {
   .gc_name = "expander_x",
   .gc_instance_size = sizeof(glw_expander_t),
+  .gc_layout = glw_expander_layout,
   .gc_render = glw_expander_render,
-  .gc_set = glw_expander_set,
+  .gc_set_float = glw_expander_set_float,
   .gc_ctor = glw_expander_ctor,
   .gc_signal_handler = glw_expander_callback,
 };
@@ -184,9 +206,11 @@ static glw_class_t glw_expander_x = {
 static glw_class_t glw_expander_y = {
   .gc_name = "expander_y",
   .gc_instance_size = sizeof(glw_expander_t),
+  .gc_layout = glw_expander_layout,
   .gc_render = glw_expander_render,
-  .gc_set = glw_expander_set,
+  .gc_set_float = glw_expander_set_float,
   .gc_signal_handler = glw_expander_callback,
+  .gc_ctor = glw_expander_ctor,
 };
 
 GLW_REGISTER_CLASS(glw_expander_x);

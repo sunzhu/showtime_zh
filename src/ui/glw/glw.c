@@ -308,7 +308,7 @@ update_in_path(glw_t *w)
  *
  */
 void
-glw_layout0(glw_t *w, glw_rctx_t *rc)
+glw_layout0(glw_t *w, const glw_rctx_t *rc)
 {
   glw_root_t *gr = w->glw_root;
   LIST_REMOVE(w, glw_active_link);
@@ -317,7 +317,10 @@ glw_layout0(glw_t *w, glw_rctx_t *rc)
     w->glw_flags |= GLW_ACTIVE;
     glw_signal0(w, GLW_SIGNAL_ACTIVE, NULL);
   }
-  glw_signal0(w, GLW_SIGNAL_LAYOUT, rc);
+
+  w->glw_class->gc_layout(w, rc);
+
+  glw_signal0(w, GLW_SIGNAL_LAYOUTED, (void *)rc);
 }
 
 
@@ -368,22 +371,6 @@ glw_create(glw_root_t *gr, const glw_class_t *class,
     glw_signal_handler_int(w, class->gc_signal_handler);
 
    return w;
-}
-
-
-/**
- *
- */
-void
-glw_set(glw_t *w, ...)
-{
-  va_list ap;
-
-  va_start(ap, w);
-
-  if(w->glw_class->gc_set != NULL)
-    w->glw_class->gc_set(w, ap);
-  va_end(ap);
 }
 
 
@@ -503,14 +490,17 @@ glw_prepare_frame(glw_root_t *gr, int flags)
   LIST_FOREACH(w, &gr->gr_every_frame_list, glw_every_frame_link)
     w->glw_class->gc_newframe(w, flags);
 
-  while((w = LIST_FIRST(&gr->gr_active_flush_list)) != NULL) {
-    LIST_REMOVE(w, glw_active_link);
-    LIST_INSERT_HEAD(&gr->gr_active_dummy_list, w, glw_active_link);
-    w->glw_flags &= ~GLW_ACTIVE;
-    glw_signal0(w, GLW_SIGNAL_INACTIVE, NULL);
-  }
+  if(gr->gr_need_refresh) {
 
-  glw_reap(gr);
+    while((w = LIST_FIRST(&gr->gr_active_flush_list)) != NULL) {
+      LIST_REMOVE(w, glw_active_link);
+      LIST_INSERT_HEAD(&gr->gr_active_dummy_list, w, glw_active_link);
+      w->glw_flags &= ~GLW_ACTIVE;
+      glw_signal0(w, GLW_SIGNAL_INACTIVE, NULL);
+    }
+
+    glw_reap(gr);
+  }
 
   if(gr->gr_mouse_valid) {
     glw_pointer_event_t gpe;
@@ -526,6 +516,9 @@ glw_prepare_frame(glw_root_t *gr, int flags)
       glw_focus_leave(gr->gr_current_focus);
     }
   }
+
+  if(!gconf.enable_conditional_rendering)
+    gr->gr_need_refresh = GLW_REFRESH_FLAG_LAYOUT | GLW_REFRESH_FLAG_RENDER;
 }
 
 
@@ -643,7 +636,7 @@ glw_destroy(glw_t *w)
     glw_remove_from_parent(w, p);
   }
 
-  free((void *)w->glw_id);
+  rstr_release(w->glw_id_rstr);
 
   TAILQ_INSERT_TAIL(&gr->gr_destroyer_queue, w, glw_parent_link);
 
@@ -2068,6 +2061,7 @@ glw_class_find_by_name(const char *name)
 void
 glw_register_class(glw_class_t *gc)
 {
+  assert(gc->gc_layout != NULL);
   LIST_INSERT_HEAD(&glw_classes, gc, gc_link);
 }
 
@@ -2111,8 +2105,8 @@ glw_get_a_name(glw_t *w)
   if(w == NULL)
     return "<null>";
 
-  if(w->glw_id != NULL)
-    return w->glw_id;
+  if(w->glw_id_rstr != NULL)
+    return rstr_get(w->glw_id_rstr);
 
   static char buf[1024];
   buf[0] = 0;
@@ -2523,3 +2517,84 @@ glw_project(glw_rect_t *r, const glw_rctx_t *rc, const glw_root_t *gr)
   r->x2 = roundf((1.0 + (glw_vec4_extract(V1, 0) / w)) * gr->gr_width  / 2.0);
   r->y2 = roundf((1.0 - (glw_vec4_extract(V1, 1) / w)) * gr->gr_height / 2.0);
 }
+
+
+/**
+ *
+ */
+void
+glw_lp(float *v, glw_root_t *gr, float target, float alpha)
+{
+  const float in = *v;
+
+  const int x = in * 1000.0f;
+  const float out = in + alpha * (target - in);
+  const int y = out * 1000.0f;
+
+  if(x == y) {
+    *v = target;
+    return;
+  }
+  *v = out;
+  gr_schedule_refresh(gr, 0);
+}
+
+
+/**
+ *
+ */
+int
+glw_attrib_set_float3_clamped(float *dst, const float *src)
+{
+  float v[3];
+  for(int i = 0; i < 3; i++)
+    v[i] = GLW_CLAMP(src[i], 0.0f, 1.0f);
+  return glw_attrib_set_float3(dst, v);
+}
+
+int
+glw_attrib_set_float3(float *dst, const float *src)
+{
+  if(!memcmp(dst, src, sizeof(float) * 3))
+    return 0;
+  memcpy(dst, src, sizeof(float) * 3);
+  return 1;
+}
+
+int
+glw_attrib_set_float4(float *dst, const float *src)
+{
+  if(!memcmp(dst, src, sizeof(float) * 4))
+    return 0;
+  memcpy(dst, src, sizeof(float) * 4);
+  return 1;
+}
+
+int
+glw_attrib_set_rgb(glw_rgb_t *rgb, const float *src)
+{
+  return glw_attrib_set_float3((float *)rgb, src);
+}
+
+/**
+ *
+ */
+#ifdef GLW_TRACK_REFRESH
+void
+gr_schedule_refresh0(glw_root_t *gr, int how, const char *file, int line)
+{
+  int flags = GLW_REFRESH_FLAG_LAYOUT;
+
+  if(how != GLW_REFRESH_LAYOUT_ONLY)
+    flags |= GLW_REFRESH_FLAG_RENDER;
+
+  if((gr->gr_need_refresh & flags) == flags)
+    return;
+
+  gr->gr_need_refresh |= flags;
+  printf("%s%srefresh requested by %s:%d\n",
+         flags & GLW_REFRESH_FLAG_LAYOUT ? "layout " : "",
+         flags & GLW_REFRESH_FLAG_RENDER ? "render " : "",
+         file, line);
+}
+#endif

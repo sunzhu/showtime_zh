@@ -27,41 +27,61 @@ typedef struct glw_clip {
 
   float gc_clipping[4];
 
+  char gc_clip_change;
+
 } glw_clip_t;
 
 
 /**
  *
  */
-static void
-set_clipping(glw_t *w, const float *v)
+static int
+glw_clip_set_float4(glw_t *w, glw_attribute_t attrib, const float *v)
 {
   glw_clip_t *gc = (glw_clip_t *)w;
-  memcpy(gc->gc_clipping, v, sizeof(float) * 4);
+
+  switch(attrib) {
+  case GLW_ATTRIB_CLIPPING:
+    if(!glw_attrib_set_float4(gc->gc_clipping, v))
+      return 0;
+    gc->gc_clip_change = 1;
+
+    return w->glw_flags & GLW_ACTIVE ? GLW_REFRESH_LAYOUT_ONLY : 0;
+  default:
+    return -1;
+  }
 }
+
 
 /**
  *
  */
-static int
-glw_clip_layout(glw_t *w, glw_rctx_t *rc)
+static void
+glw_clip_layout(glw_t *w, const glw_rctx_t *rc)
 {
   glw_t *c;
+  glw_clip_t *gc = (glw_clip_t *)w;
 
   if(w->glw_alpha < 0.01)
-    return 0;
+    return;
+
+  if(gc->gc_clip_change) {
+    glw_root_t *gr = w->glw_root;
+    gr_schedule_refresh(gr, 0);
+    gc->gc_clip_change = 0;
+  }
 
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
     if(c->glw_flags & GLW_HIDDEN)
       continue;
     glw_layout0(c, rc);
   }
-  return 0;
 }
 
 
-
-
+/**
+ *
+ */
 static void
 glw_clip_render(glw_t *w, const glw_rctx_t *rc)
 {
@@ -95,8 +115,6 @@ glw_clip_callback(glw_t *w, void *opaque, glw_signal_t signal,
 		  void *extra)
 {
   switch(signal) {
-  case GLW_SIGNAL_LAYOUT:
-    return glw_clip_layout(w, extra);
   case GLW_SIGNAL_CHILD_CONSTRAINTS_CHANGED:
   case GLW_SIGNAL_CHILD_CREATED:
     glw_copy_constraints(w, extra);
@@ -111,9 +129,10 @@ glw_clip_callback(glw_t *w, void *opaque, glw_signal_t signal,
 static glw_class_t glw_clip = {
   .gc_name = "clip",
   .gc_instance_size = sizeof(glw_clip_t),
+  .gc_layout = glw_clip_layout,
   .gc_render = glw_clip_render,
   .gc_signal_handler = glw_clip_callback,
-  .gc_set_clipping = set_clipping,
+  .gc_set_float4 = glw_clip_set_float4,
 };
 
 
@@ -138,38 +157,43 @@ typedef struct glw_fade {
 /**
  *
  */
-static void
-set_plane(glw_t *w, const float *v)
+static int
+glw_fade_set_float4(glw_t *w, glw_attribute_t attrib, const float *v)
 {
   glw_fade_t *gf = (glw_fade_t *)w;
+  float tmp[4];
+  float l;
+  switch(attrib) {
+  case GLW_ATTRIB_PLANE:
+    l = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 
-  float l = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-  
-  gf->gf_plane[0] = v[0] / l;
-  gf->gf_plane[1] = v[1] / l;
-  gf->gf_plane[2] = v[2] / l;
-  gf->gf_plane[3] = v[3];
-
-  gf->gf_run = 1;
+    tmp[0] = v[0] / l;
+    tmp[1] = v[1] / l;
+    tmp[2] = v[2] / l;
+    tmp[3] = v[3];
+    gf->gf_run = 1;
+    return glw_attrib_set_float4(gf->gf_plane, tmp);
+  default:
+    return -1;
+  }
 }
 
 /**
  *
  */
-static int
-glw_fade_layout(glw_t *w, glw_rctx_t *rc)
+static void
+glw_fade_layout(glw_t *w, const glw_rctx_t *rc)
 {
   glw_t *c;
 
   if(w->glw_alpha < 0.01)
-    return 0;
+    return;
 
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
     if(c->glw_flags & GLW_HIDDEN)
       continue;
     glw_layout0(c, rc);
   }
-  return 0;
 }
 
 
@@ -200,8 +224,6 @@ glw_fade_callback(glw_t *w, void *opaque, glw_signal_t signal,
 		  void *extra)
 {
   switch(signal) {
-  case GLW_SIGNAL_LAYOUT:
-    return glw_fade_layout(w, extra);
   case GLW_SIGNAL_CHILD_CONSTRAINTS_CHANGED:
   case GLW_SIGNAL_CHILD_CREATED:
     glw_copy_constraints(w, extra);
@@ -215,29 +237,31 @@ glw_fade_callback(glw_t *w, void *opaque, glw_signal_t signal,
 /**
  *
  */
-static void 
-fader_set(glw_t *w, va_list ap)
+static int
+fader_set_float(glw_t *w, glw_attribute_t attrib, float value)
 {
-  glw_attribute_t attrib;
   glw_fade_t *gf = (glw_fade_t *)w;
 
-  do {
-    attrib = va_arg(ap, int);
-    switch(attrib) {
+  switch(attrib) {
 
-    case GLW_ATTRIB_ALPHA_FALLOFF:
-      gf->gf_alpha_falloff = va_arg(ap, double);
-      break;
+  case GLW_ATTRIB_ALPHA_FALLOFF:
+    if(gf->gf_alpha_falloff == value)
+      return 0;
 
-    case GLW_ATTRIB_BLUR_FALLOFF:
-      gf->gf_blur_falloff = va_arg(ap, double);
-      break;
+    gf->gf_alpha_falloff = value;
+    break;
 
-    default:
-      GLW_ATTRIB_CHEW(attrib, ap);
-      break;
-    }
-  } while(attrib);
+  case GLW_ATTRIB_BLUR_FALLOFF:
+    if(gf->gf_blur_falloff == value)
+      return 0;
+
+    gf->gf_blur_falloff = value;
+    break;
+
+  default:
+    return -1;
+  }
+  return 1;
 }
 
 
@@ -246,10 +270,11 @@ fader_set(glw_t *w, va_list ap)
 static glw_class_t glw_fader = {
   .gc_name = "fader",
   .gc_instance_size = sizeof(glw_fade_t),
+  .gc_layout = glw_fade_layout,
   .gc_render = glw_fade_render,
   .gc_signal_handler = glw_fade_callback,
-  .gc_set_plane = set_plane,
-  .gc_set = fader_set,
+  .gc_set_float4 = glw_fade_set_float4,
+  .gc_set_float = fader_set_float,
 };
 
 
@@ -266,14 +291,8 @@ typedef struct glw_stencil {
   glw_loadable_texture_t *gs_tex;
   int16_t gs_border[4];
 
-  float gs_rotate_a;
-  float gs_rotate_x;
-  float gs_rotate_y;
-  float gs_rotate_z;
-
-  float gs_scale_x;
-  float gs_scale_y;
-  float gs_scale_z;
+  float gs_rotate[4];
+  float gs_scale[3];
 
 } glw_stencil_t;
 
@@ -281,27 +300,25 @@ typedef struct glw_stencil {
 /**
  *
  */
-static int
-glw_stencil_layout(glw_t *w, glw_rctx_t *rc)
+static void
+glw_stencil_layout(glw_t *w, const glw_rctx_t *rc)
 {
   glw_t *c;
   glw_stencil_t *gs = (glw_stencil_t *)w;
   glw_loadable_texture_t *glt = gs->gs_tex;
 
   if(w->glw_alpha < 0.01)
-    return 0;
+    return;
 
   if(glt == NULL)
-    return 0;
+    return;
 
   glw_tex_layout(w->glw_root, glt);
-  
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
     if(c->glw_flags & GLW_HIDDEN)
       continue;
     glw_layout0(c, rc);
   }
-  return 0;
 }
 
 
@@ -317,16 +334,16 @@ glw_stencil_render(glw_t *w, const glw_rctx_t *rc)
   glw_rctx_t rc0 = *rc;
 
   glw_Scalef(&rc0, 
-	     gs->gs_scale_x,
-	     gs->gs_scale_y,
-	     gs->gs_scale_z);
+	     gs->gs_scale[0],
+	     gs->gs_scale[1],
+	     gs->gs_scale[2]);
 
-  if(gs->gs_rotate_a)
-    glw_Rotatef(&rc0, 
-		gs->gs_rotate_a,
-		gs->gs_rotate_x,
-		gs->gs_rotate_y,
-		gs->gs_rotate_z);
+  if(gs->gs_rotate[0])
+    glw_Rotatef(&rc0,
+		gs->gs_rotate[0],
+		gs->gs_rotate[1],
+		gs->gs_rotate[2],
+		gs->gs_rotate[3]);
   
 
   if(glt == NULL)
@@ -354,8 +371,6 @@ glw_stencil_callback(glw_t *w, void *opaque, glw_signal_t signal,
 		  void *extra)
 {
   switch(signal) {
-  case GLW_SIGNAL_LAYOUT:
-    return glw_stencil_layout(w, extra);
   case GLW_SIGNAL_CHILD_CONSTRAINTS_CHANGED:
   case GLW_SIGNAL_CHILD_CREATED:
     glw_copy_constraints(w, extra);
@@ -397,29 +412,35 @@ set_border(glw_t *w, const int16_t *v)
 /**
  *
  */
-static void
-set_rotation(glw_t *w, const float *v)
+static int
+set_float3(glw_t *w, glw_attribute_t attrib, const float *xyz)
 {
   glw_stencil_t *gs = (glw_stencil_t *)w;
-  
-  gs->gs_rotate_a = v[0];
-  gs->gs_rotate_x = v[1];
-  gs->gs_rotate_y = v[2];
-  gs->gs_rotate_z = v[3];
+
+  switch(attrib) {
+  case GLW_ATTRIB_SCALING:
+    return glw_attrib_set_float3(gs->gs_scale, xyz) * GLW_REFRESH_LAYOUT_ONLY;
+  default:
+    return -1;
+  }
 }
 
 
 /**
  *
  */
-static void
-set_scaling(glw_t *w, const float *xyz)
+static int
+set_float4(glw_t *w, glw_attribute_t attrib, const float *vector)
 {
   glw_stencil_t *gs = (glw_stencil_t *)w;
 
-  gs->gs_scale_x = xyz[0];
-  gs->gs_scale_y = xyz[1];
-  gs->gs_scale_z = xyz[2];
+  switch(attrib) {
+  case GLW_ATTRIB_ROTATION:
+    return glw_attrib_set_float4(gs->gs_rotate, vector) *
+      GLW_REFRESH_LAYOUT_ONLY;
+  default:
+    return -1;
+  }
 }
 
 
@@ -431,9 +452,10 @@ glw_stencil_ctor(glw_t *w)
 {
   glw_stencil_t *gs = (glw_stencil_t *)w;
 
-  gs->gs_scale_x = 1;
-  gs->gs_scale_y = 1;
-  gs->gs_scale_z = 1;
+  gs->gs_scale[0] = 1.0f;
+  gs->gs_scale[1] = 1.0f;
+  gs->gs_scale[2] = 1.0f;
+
 }
 
 
@@ -442,13 +464,14 @@ glw_stencil_ctor(glw_t *w)
 static glw_class_t glw_stencil = {
   .gc_name = "stencil",
   .gc_instance_size = sizeof(glw_stencil_t),
+  .gc_layout = glw_stencil_layout,
   .gc_render = glw_stencil_render,
   .gc_signal_handler = glw_stencil_callback,
   .gc_ctor = glw_stencil_ctor,
   .gc_set_source = stencil_set_source,
   .gc_set_border = set_border,
-  .gc_set_rotation = set_rotation,
-  .gc_set_scaling = set_scaling,
+  .gc_set_float4 = set_float4,
+  .gc_set_float3 = set_float3,
 };
 
 GLW_REGISTER_CLASS(glw_stencil);

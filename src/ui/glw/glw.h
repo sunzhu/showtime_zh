@@ -33,11 +33,12 @@
 #include "misc/queue.h"
 #include "misc/layout.h"
 #include "misc/pool.h"
-#include "misc/pixmap.h" // for PIXMAP_ROW_ALIGN
+#include "image/pixmap.h" // for PIXMAP_ROW_ALIGN
 #include "prop/prop.h"
 #include "showtime.h"
 #include "settings.h"
 
+// #define GLW_TRACK_REFRESH
 
 // Beware: If you bump these over 16 remember to fix bitmasks too
 #define NUM_CLIPPLANES 6
@@ -114,10 +115,8 @@ typedef enum {
   GLW_ATTRIB_INT_STEP,
   GLW_ATTRIB_INT_MIN,
   GLW_ATTRIB_INT_MAX,
-  GLW_ATTRIB_PROPROOTS3,
   GLW_ATTRIB_TRANSITION_EFFECT,
   GLW_ATTRIB_EXPANSION,
-  GLW_ATTRIB_BIND_TO_ID,
   GLW_ATTRIB_CHILD_ASPECT,
   GLW_ATTRIB_CHILD_HEIGHT,
   GLW_ATTRIB_CHILD_WIDTH,
@@ -141,6 +140,19 @@ typedef enum {
   GLW_ATTRIB_ASPECT,
   GLW_ATTRIB_CHILD_SCALE,
   GLW_ATTRIB_PARENT_URL,
+  GLW_ATTRIB_ALPHA_SELF,
+  GLW_ATTRIB_SIZE_SCALE,
+  GLW_ATTRIB_DEFAULT_SIZE,
+  GLW_ATTRIB_MIN_SIZE,
+  GLW_ATTRIB_MAX_LINES,
+  GLW_ATTRIB_RGB,
+  GLW_ATTRIB_COLOR1,
+  GLW_ATTRIB_COLOR2,
+  GLW_ATTRIB_SCALING,
+  GLW_ATTRIB_TRANSLATION,
+  GLW_ATTRIB_ROTATION,
+  GLW_ATTRIB_CLIPPING,
+  GLW_ATTRIB_PLANE,
   GLW_ATTRIB_num,
 } glw_attribute_t;
 
@@ -230,7 +242,7 @@ typedef enum {
   GLW_SIGNAL_DESTROY,
   GLW_SIGNAL_ACTIVE,
   GLW_SIGNAL_INACTIVE,
-  GLW_SIGNAL_LAYOUT,
+  GLW_SIGNAL_LAYOUTED,
 
   GLW_SIGNAL_CHILD_CREATED,
   GLW_SIGNAL_CHILD_DESTROYED,
@@ -389,12 +401,35 @@ typedef struct glw_class {
   /**
    * Set attributes GLW_ATTRIB_... for the widget.
    */
-  void (*gc_set)(struct glw *w, va_list ap);
+  int (*gc_set_int)(struct glw *w, glw_attribute_t a, int value);
+
+  int (*gc_set_float)(struct glw *w, glw_attribute_t a, float value);
+
+  int (*gc_set_rstr)(struct glw *w, glw_attribute_t a, rstr_t *value);
+
+  int (*gc_set_prop)(struct glw *w, glw_attribute_t a, prop_t *p);
+
+  void (*gc_set_roots)(struct glw *w, prop_t *self, prop_t *parent,
+                       prop_t *clone);
+
+  int (*gc_bind_to_id)(struct glw *w, const char *id);
+
+  int (*gc_set_page_id)(struct glw *w, const char *id);
+
+  int (*gc_set_float3)(struct glw *w, glw_attribute_t a, const float *vector);
+
+  int (*gc_set_float4)(struct glw *w, glw_attribute_t a, const float *vector);
+
 
   /**
    * Ask widget to render itself in the current render context
    */
   void (*gc_render)(struct glw *w, const struct glw_rctx *rc);
+
+  /**
+   * Ask widget to layout itself in current render context
+   */
+  void (*gc_layout)(struct glw *w, const struct glw_rctx *rc);
 
   /**
    * Ask widget to retire the given child
@@ -460,8 +495,10 @@ typedef struct glw_class {
 
   /**
    * Select a child
+   *
+   * Return 1 if something was changed, otherwise return 0
    */
-  void (*gc_select_child)(struct glw *w, struct glw *c, struct prop *origin);
+  int (*gc_select_child)(struct glw *w, struct glw *c, struct prop *origin);
 
   /**
    * detachable widget control
@@ -481,33 +518,7 @@ typedef struct glw_class {
   /**
    *
    */
-  void (*gc_set_rgb)(struct glw *w, const float *rgb);
-
-  /**
-   *
-   */
-  void (*gc_set_color1)(struct glw *w, const float *rgb);
-
-  /**
-   *
-   */
-  void (*gc_set_color2)(struct glw *w, const float *rgb);
-
-  /**
-   *
-   */
-  void (*gc_set_translation)(struct glw *w, const float *xyz);
-
-  /**
-   *
-   */
-  void (*gc_set_scaling)(struct glw *w, const float *xyz);
-
-  /**
-   *
-   */
   void (*gc_set_border)(struct glw *w, const int16_t *v);
-
 
   /**
    *
@@ -518,21 +529,6 @@ typedef struct glw_class {
    *
    */
   void (*gc_set_margin)(struct glw *w, const int16_t *v);
-
-  /**
-   *
-   */
-  void (*gc_set_clipping)(struct glw *w, const float *v);
-
-  /**
-   *
-   */
-  void (*gc_set_plane)(struct glw *w, const float *v);
-
-  /**
-   *
-   */
-  void (*gc_set_rotation)(struct glw *w, const float *v);
 
   /**
    *
@@ -612,37 +608,12 @@ typedef struct glw_class {
   /**
    *
    */
-  void (*gc_set_alpha_self)(struct glw *w, float a);
-
-  /**
-   *
-   */
   void (*gc_freeze)(struct glw *w);
 
   /**
    *
    */
   void (*gc_thaw)(struct glw *w);
-
-  /**
-   *
-   */
-  void (*gc_set_size_scale)(struct glw *w, const float v);
-
-  /**
-   *
-   */
-  void (*gc_set_default_size)(struct glw *w, int px);
-
-  /**
-   *
-   */
-  void (*gc_set_min_size)(struct glw *w, int px);
-
-  /**
-   *
-   */
-  void (*gc_set_max_lines)(struct glw *w, int lines);
 
   /**
    *
@@ -724,6 +695,8 @@ typedef struct glw_root {
 
   uint64_t gr_time_usec;
   float gr_time_sec;
+
+  int gr_need_refresh;
 
   /**
    * Screensaver
@@ -1060,9 +1033,9 @@ typedef struct glw {
 
   uint8_t glw_alignment;
 
-  char *glw_id;
+  rstr_t *glw_id_rstr;
 
-  struct glw_event_map_list glw_event_maps;		  
+  struct glw_event_map_list glw_event_maps;
 
   struct glw_prop_sub_list glw_prop_subscriptions;
 
@@ -1192,13 +1165,7 @@ void glw_stencil_enable(glw_root_t *gr, const glw_rctx_t *rc,
 
 void glw_stencil_disable(glw_root_t *gr);
 
-
-static inline void
-glw_lp(float *v, const glw_root_t *gr, float t, float alpha)
-{
-  *v = *v + alpha * (t - *v);
-}
-
+void glw_lp(float *v, glw_root_t *gr, float t, float alpha);
 
 
 /**
@@ -1223,66 +1190,6 @@ typedef enum {
 } glw_transition_type_t;
 
 
-/**
- *
- */
-#define GLW_ATTRIB_CHEW(attrib, ap)		\
-do {						\
-  switch((unsigned int)attrib) {		\
-  case GLW_ATTRIB_END:				\
-    break;					\
-  case GLW_ATTRIB_num ... UINT32_MAX:           \
-    abort();                                    \
-  case GLW_ATTRIB_PROPROOTS3:         		\
-    (void)va_arg(ap, void *);			\
-    (void)va_arg(ap, void *);			\
-  case GLW_ATTRIB_ARGS:				\
-  case GLW_ATTRIB_PROP_PARENT:			\
-  case GLW_ATTRIB_PROP_SELF:			\
-  case GLW_ATTRIB_PROP_MODEL:			\
-  case GLW_ATTRIB_PROP_ORIGIN:			\
-  case GLW_ATTRIB_BIND_TO_ID: 			\
-  case GLW_ATTRIB_PAGE_BY_ID:			\
-  case GLW_ATTRIB_PARENT_URL:			\
-    (void)va_arg(ap, void *);			\
-    break;					\
-  case GLW_ATTRIB_MODE:                         \
-  case GLW_ATTRIB_TRANSITION_EFFECT:            \
-  case GLW_ATTRIB_CHILD_TILES_X:                \
-  case GLW_ATTRIB_CHILD_TILES_Y:                \
-  case GLW_ATTRIB_CHILD_HEIGHT:                 \
-  case GLW_ATTRIB_CHILD_WIDTH:                  \
-  case GLW_ATTRIB_PAGE:                         \
-  case GLW_ATTRIB_ALPHA_EDGES:                  \
-  case GLW_ATTRIB_PRIORITY:                     \
-  case GLW_ATTRIB_SPACING:                      \
-  case GLW_ATTRIB_X_SPACING:                    \
-  case GLW_ATTRIB_Y_SPACING:                    \
-  case GLW_ATTRIB_SCROLL_THRESHOLD:             \
-  case GLW_ATTRIB_RADIUS:			\
-    (void)va_arg(ap, int);			\
-    break;					\
-  case GLW_ATTRIB_ANGLE:			\
-  case GLW_ATTRIB_TIME:                         \
-  case GLW_ATTRIB_TRANSITION_TIME:              \
-  case GLW_ATTRIB_EXPANSION:                    \
-  case GLW_ATTRIB_VALUE:                        \
-  case GLW_ATTRIB_INT_STEP:                     \
-  case GLW_ATTRIB_INT_MIN:                      \
-  case GLW_ATTRIB_INT_MAX:                      \
-  case GLW_ATTRIB_CHILD_ASPECT:                 \
-  case GLW_ATTRIB_FILL:                         \
-  case GLW_ATTRIB_SATURATION:                   \
-  case GLW_ATTRIB_CENTER:                       \
-  case GLW_ATTRIB_ALPHA_FALLOFF:                \
-  case GLW_ATTRIB_BLUR_FALLOFF:                 \
-  case GLW_ATTRIB_AUDIO_VOLUME:                 \
-  case GLW_ATTRIB_ASPECT:                       \
-  case GLW_ATTRIB_CHILD_SCALE:                  \
-    (void)va_arg(ap, double);			\
-    break;					\
-  }						\
-} while(0)
 
 const char *glw_get_a_name(glw_t *w);
 
@@ -1299,8 +1206,6 @@ glw_t *glw_create(glw_root_t *gr, const glw_class_t *class,
 #define glw_lock_assert() glw_lock_check(__FILE__, __LINE__)
 
 void glw_lock_check(const char *file, const int line);
-
-void glw_set(glw_t *w, ...) __attribute__((__sentinel__(0)));
 
 void glw_destroy(glw_t *w);
 
@@ -1345,7 +1250,7 @@ int glw_signal0(glw_t *w, glw_signal_t sig, void *extra);
 
 #define glw_render0(w, rc) ((w)->glw_class->gc_render(w, rc))
 
-void glw_layout0(glw_t *w, glw_rctx_t *rc);
+void glw_layout0(glw_t *w, const glw_rctx_t *rc);
 
 void glw_rctx_init(glw_rctx_t *rc, int width, int height, int overscan);
 
@@ -1413,6 +1318,14 @@ void glw_hide(glw_t *w);
 
 void glw_unhide(glw_t *w);
 
+int glw_attrib_set_float3_clamped(float *dst, const float *src);
+
+int glw_attrib_set_float3(float *dst, const float *src);
+
+int glw_attrib_set_rgb(glw_rgb_t *rgb, const float *src);
+
+int glw_attrib_set_float4(float *dst, const float *src);
+
 
 /**
  *
@@ -1447,4 +1360,32 @@ int glw_image_get_details(glw_t *w, char *path, size_t pathlen, float *alpha);
 
 void glw_project(glw_rect_t *r, const glw_rctx_t *rc, const glw_root_t *gr);
 
+#define GLW_REFRESH_FLAG_LAYOUT 0x1
+#define GLW_REFRESH_FLAG_RENDER 0x2
+
+#define GLW_REFRESH_LAYOUT_ONLY 2
+
+#ifdef GLW_TRACK_REFRESH
+
+#define gr_schedule_refresh(gr, how) \
+  gr_schedule_refresh0(gr, how, __FILE__, __LINE__)
+
+void gr_schedule_refresh0(glw_root_t *gr, int how, const char *file, int line);
+
+#else
+
+static inline void
+gr_schedule_refresh(glw_root_t *gr, int how)
+{
+  int flags = GLW_REFRESH_FLAG_LAYOUT;
+
+  if(how != GLW_REFRESH_LAYOUT_ONLY)
+    flags |= GLW_REFRESH_FLAG_RENDER;
+  gr->gr_need_refresh |= flags;
+}
+
+#endif
+
 #endif /* GLW_H */
+
+

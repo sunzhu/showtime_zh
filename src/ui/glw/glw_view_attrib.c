@@ -33,34 +33,35 @@
  *
  */
 static int
-set_string(glw_view_eval_context_t *ec, const token_attrib_t *a,
-	   struct token *t)
+set_rstring(glw_view_eval_context_t *ec, const token_attrib_t *a,
+            struct token *t)
 {
+  rstr_t *rstr;
   char buf[30];
-  const char *str;
+  void (*fn)(struct glw *w, rstr_t *str) = a->fn;
 
   switch(t->type) {
   case TOKEN_VOID:
-    str = "";
+    buf[0] = 0;
     break;
 
   case TOKEN_CSTRING:
-    str = t->t_cstring;
-    break;
+    rstr = rstr_alloc(t->t_cstring);
+    fn(ec->w, rstr);
+    rstr_release(rstr);
+    return 0;
 
   case TOKEN_RSTRING:
   case TOKEN_LINK:
-    str = rstr_get(t->t_rstring);
-    break;
+    fn(ec->w, t->t_rstring);
+    return 0;
 
   case TOKEN_INT:
     snprintf(buf, sizeof(buf), "%d", t->t_int);
-    str = buf;
     break;
 
   case TOKEN_FLOAT:
     snprintf(buf, sizeof(buf), "%f", t->t_float);
-    str = buf;
     break;
 
   default:
@@ -69,36 +70,38 @@ set_string(glw_view_eval_context_t *ec, const token_attrib_t *a,
 			   a->name, token2name(t));
   }
 
-  void (*fn)(struct glw *w, const char *str) = a->fn;
-  fn(ec->w, str);
+  rstr = rstr_alloc(buf);
+  fn(ec->w, rstr);
+  rstr_release(rstr);
   return 0;
 }
 
 
 static void
-set_id(glw_t *w, const char *str)
+set_id_rstr(glw_t *w, rstr_t *rstr)
 {
-  mystrset(&w->glw_id, str);
+  rstr_set(&w->glw_id_rstr, rstr);
 }
 
 static void
-set_how(glw_t *w, const char *str)
+set_how_rstr(glw_t *w, rstr_t *rstr)
 {
   if(w->glw_class->gc_set_how != NULL)
-    w->glw_class->gc_set_how(w, str);
+    w->glw_class->gc_set_how(w, rstr_get(rstr));
 }
 
 static void
-set_description(glw_t *w, const char *str)
+set_description_rstr(glw_t *w, rstr_t *str)
 {
   if(w->glw_class->gc_set_desc != NULL)
-    w->glw_class->gc_set_desc(w, str);
+    w->glw_class->gc_set_desc(w, rstr_get(str));
 }
 
 static void
-set_parent_url(glw_t *w, const char *str)
+set_parent_url_rstr(glw_t *w, rstr_t *rstr)
 {
-  glw_set(w, GLW_ATTRIB_PARENT_URL, str, NULL);
+  if(w->glw_class->gc_set_rstr != NULL)
+    w->glw_class->gc_set_rstr(w, GLW_ATTRIB_PARENT_URL, rstr);
 }
 
 
@@ -202,8 +205,8 @@ set_fs(glw_view_eval_context_t *ec, const token_attrib_t *a,
  *
  */
 static int
-set_float(glw_view_eval_context_t *ec, const token_attrib_t *a, 
-	  struct token *t)
+set_float(glw_view_eval_context_t *ec, const token_attrib_t *a,
+          struct token *t)
 {
   float v;
 
@@ -234,10 +237,8 @@ set_float(glw_view_eval_context_t *ec, const token_attrib_t *a,
   }
 
   void (*fn)(struct glw *w, float v) = a->fn;
-  if(fn)
-    fn(ec->w, v);
-  else
-    glw_set(ec->w, a->attrib, v, NULL);
+  assert(fn != NULL);
+  fn(ec->w, v);
   return 0;
 }
 
@@ -249,28 +250,36 @@ static void
 set_weight(glw_t *w, float v)
 {
   glw_conf_constraints(w, 0, 0, v, GLW_CONSTRAINT_CONF_W);
+  gr_schedule_refresh(w->glw_root, 0);
 }
 
+
+/**
+ *
+ */
 static void
 set_alpha(glw_t *w, float v)
 {
+  if(w->glw_alpha == v)
+    return;
+
   w->glw_alpha = v;
+  gr_schedule_refresh(w->glw_root, 0);
 }
 
+
+/**
+ *
+ */
 static void
 set_blur(glw_t *w, float v)
 {
-  w->glw_sharpness = GLW_CLAMP(1 - v, 0, 1);
-}
+  v = GLW_CLAMP(1 - v, 0, 1);
 
-/**
- *
- */
-static void
-set_alpha_self(glw_t *w, float v)
-{
-  if(w->glw_class->gc_set_alpha_self != NULL)
-    w->glw_class->gc_set_alpha_self(w, v);
+  if(w->glw_sharpness == v)
+    return;
+  w->glw_sharpness = v;
+  gr_schedule_refresh(w->glw_root, 0);
 }
 
 
@@ -278,22 +287,53 @@ set_alpha_self(glw_t *w, float v)
  *
  */
 static void
-set_size_scale(glw_t *w, float v)
+attr_schedule_refresh(glw_root_t *gr, const token_t *t,
+                      const token_attrib_t *a, int how)
 {
-  if(w->glw_class->gc_set_size_scale != NULL)
-    w->glw_class->gc_set_size_scale(w, v);
-}
 
+  int flags = GLW_REFRESH_FLAG_LAYOUT;
+
+  if(how != GLW_REFRESH_LAYOUT_ONLY)
+    flags |= GLW_REFRESH_FLAG_RENDER;
+
+  if((gr->gr_need_refresh & flags) == flags)
+    return;
+
+  gr->gr_need_refresh |= flags;
+
+
+#ifdef GLW_TRACK_REFRESH
+  printf("%s%s refresh requested by %s:%d attribute %s\n",
+         flags & GLW_REFRESH_FLAG_LAYOUT ? "Layout " : "",
+         flags & GLW_REFRESH_FLAG_RENDER ? "Render " : "",
+         rstr_get(t->file), t->line, a->name);
+#endif
+}
 
 
 /**
  *
  */
 static void
-set_size(glw_t *w, float v)
+set_number_int(glw_t *w, const token_attrib_t *a, const token_t *t, int v)
 {
-  if(w->glw_class->gc_set_default_size != NULL)
-    w->glw_class->gc_set_default_size(w, v);
+  const glw_class_t *gc = w->glw_class;
+  int r;
+
+  r = gc->gc_set_int ? gc->gc_set_int(w, a->attrib, v) : -1;
+
+  if(r == -1)
+    r = gc->gc_set_float ? gc->gc_set_float(w, a->attrib, v) : -1;
+
+  if(r == -1) {
+    TRACE(TRACE_ERROR, "GLW",
+          "Widget %s at %s:%d does not respond to attribute %s",
+          gc->gc_name, rstr_get(t->file), t->line, a->name);
+    return;
+  }
+
+  if(r)
+    attr_schedule_refresh(w->glw_root, t, a, r);
 }
 
 
@@ -301,10 +341,69 @@ set_size(glw_t *w, float v)
  *
  */
 static void
-set_min_size(glw_t *w, float v)
+set_number_float(glw_t *w, const token_attrib_t *a, const token_t *t, float v)
 {
-  if(w->glw_class->gc_set_min_size != NULL)
-    w->glw_class->gc_set_min_size(w, v);
+  const glw_class_t *gc = w->glw_class;
+  int r;
+
+  r = gc->gc_set_float ? gc->gc_set_float(w, a->attrib, v) : -1;
+
+  if(r == -1)
+    r = gc->gc_set_int ? gc->gc_set_int(w, a->attrib, v) : -1;
+
+  if(r == -1) {
+    TRACE(TRACE_ERROR, "GLW",
+          "Widget %s at %s:%d does not respond to attribute %s",
+          gc->gc_name, rstr_get(t->file), t->line, a->name);
+    return;
+  }
+
+  if(r)
+    attr_schedule_refresh(w->glw_root, t, a, r);
+}
+
+
+/**
+ *
+ */
+static int
+set_number(glw_view_eval_context_t *ec, const token_attrib_t *a,
+           struct token *t)
+{
+  int v;
+
+  switch(t->type) {
+  case TOKEN_CSTRING:
+    v = atoi(t->t_cstring);
+    set_number_int(ec->w, a, t, v);
+    break;
+
+  case TOKEN_RSTRING:
+  case TOKEN_LINK:
+    v = atoi(rstr_get(t->t_rstring));
+    set_number_int(ec->w, a, t, v);
+    break;
+
+  case TOKEN_FLOAT:
+    set_number_float(ec->w, a, t, t->t_float);
+    break;
+
+  case TOKEN_INT:
+    set_number_int(ec->w, a, t, t->t_int);
+    break;
+
+  case TOKEN_VOID:
+    set_number_int(ec->w, a, t, 0);
+    break;
+
+  default:
+    return glw_view_seterr(ec->ei, t, "Attribute '%s' expects a scalar, got %s",
+			   a->name, token2name(t));
+  }
+
+
+
+  return 0;
 }
 
 
@@ -345,10 +444,8 @@ set_int(glw_view_eval_context_t *ec, const token_attrib_t *a,
   }
 
   void (*fn)(struct glw *w, int v) = a->fn;
-  if(fn)
-    fn(ec->w, v);
-  else
-    glw_set(ec->w, a->attrib, v, NULL);
+  assert(fn != NULL);
+  fn(ec->w, v);
   return 0;
 }
 
@@ -360,6 +457,7 @@ static void
 set_width(glw_t *w, int v)
 {
   glw_conf_constraints(w, v, 0, 0, GLW_CONSTRAINT_CONF_X);
+  gr_schedule_refresh(w->glw_root, 0);
 }
 
 
@@ -370,6 +468,7 @@ static void
 set_height(glw_t *w, int v)
 {
   glw_conf_constraints(w, 0, v, 0, GLW_CONSTRAINT_CONF_Y);
+  gr_schedule_refresh(w->glw_root, 0);
 }
 
 
@@ -380,17 +479,7 @@ static void
 set_divider(glw_t *w, int v)
 {
   glw_conf_constraints(w, 0, 0, 0, GLW_CONSTRAINT_CONF_D);
-}
-
-
-/**
- *
- */
-static void
-set_maxlines(glw_t *w, int v)
-{
-  if(w->glw_class->gc_set_max_lines != NULL)
-    w->glw_class->gc_set_max_lines(w, v);
+  gr_schedule_refresh(w->glw_root, 0);
 }
 
 
@@ -439,64 +528,22 @@ set_float3(glw_view_eval_context_t *ec, const token_attrib_t *a,
 			   a->name, token2name(t));
   }
 
+  glw_t *w = ec->w;
+  const glw_class_t *gc = w->glw_class;
 
-  void (*fn)(struct glw *w, const float *v3) = a->fn;
-  fn(ec->w, vec3);
+  int r = gc->gc_set_float3 ? gc->gc_set_float3(w, a->attrib, vec3) : -1;
+
+  if(r == -1) {
+    TRACE(TRACE_ERROR, "GLW",
+          "Widget %s at %s:%d does not respond to attribute %s",
+          gc->gc_name, rstr_get(t->file), t->line, a->name);
+    return 0;
+  }
+  if(r)
+    attr_schedule_refresh(w->glw_root, t, a, r);
+
   return 0;
 }
-
-
-/**
- *
- */
-static void
-set_rgb(glw_t *w, const float *rgb)
-{
-  if(w->glw_class->gc_set_rgb != NULL)
-    w->glw_class->gc_set_rgb(w, rgb);
-}
-
-/**
- *
- */
-static void
-set_color1(glw_t *w, const float *rgb)
-{
-  if(w->glw_class->gc_set_color1 != NULL)
-    w->glw_class->gc_set_color1(w, rgb);
-}
-
-/**
- *
- */
-static void
-set_color2(glw_t *w, const float *rgb)
-{
-  if(w->glw_class->gc_set_color2 != NULL)
-    w->glw_class->gc_set_color2(w, rgb);
-}
-
-/**
- *
- */
-static void
-set_scaling(glw_t *w, const float *xyz)
-{
-  if(w->glw_class->gc_set_scaling != NULL)
-    w->glw_class->gc_set_scaling(w, xyz);
-}
-
-
-/**
- *
- */
-static void
-set_translation(glw_t *w, const float *xyz)
-{
-  if(w->glw_class->gc_set_translation != NULL)
-    w->glw_class->gc_set_translation(w, xyz);
-}
-
 
 
 /**
@@ -547,8 +594,20 @@ set_float4(glw_view_eval_context_t *ec, const token_attrib_t *a,
 			   a->name, token2name(t));
   }
 
-  void (*fn)(struct glw *w, const float *v4) = a->fn;
-  fn(ec->w, vec4);
+  glw_t *w = ec->w;
+  const glw_class_t *gc = w->glw_class;
+
+  int r = gc->gc_set_float4 ? gc->gc_set_float4(w, a->attrib, vec4) : -1;
+
+  if(r == -1) {
+    TRACE(TRACE_ERROR, "GLW",
+          "Widget %s at %s:%d does not respond to attribute %s",
+          gc->gc_name, rstr_get(t->file), t->line, a->name);
+    return 0;
+  }
+  if(r)
+    attr_schedule_refresh(w->glw_root, t, a, r);
+
   return 0;
 }
 
@@ -618,8 +677,10 @@ set_int16_4(glw_view_eval_context_t *ec, const token_attrib_t *a,
 static void
 set_padding(glw_t *w, const int16_t *vec4)
 {
-  if(w->glw_class->gc_set_padding != NULL)
+  if(w->glw_class->gc_set_padding != NULL) {
     w->glw_class->gc_set_padding(w, vec4);
+    gr_schedule_refresh(w->glw_root, 0);
+  }
 }
 
 
@@ -629,8 +690,10 @@ set_padding(glw_t *w, const int16_t *vec4)
 static void
 set_border(glw_t *w, const int16_t *vec4)
 {
-  if(w->glw_class->gc_set_border != NULL)
+  if(w->glw_class->gc_set_border != NULL) {
     w->glw_class->gc_set_border(w, vec4);
+    gr_schedule_refresh(w->glw_root, 0);
+  }
 }
 
 
@@ -640,41 +703,10 @@ set_border(glw_t *w, const int16_t *vec4)
 static void
 set_margin(glw_t *w, const int16_t *vec4)
 {
-  if(w->glw_class->gc_set_margin != NULL)
+  if(w->glw_class->gc_set_margin != NULL) {
     w->glw_class->gc_set_margin(w, vec4);
-}
-
-
-/**
- *
- */
-static void
-set_rotation(glw_t *w, const float *xyz)
-{
-  if(w->glw_class->gc_set_rotation != NULL)
-    w->glw_class->gc_set_rotation(w, xyz);
-}
-
-
-/**
- *
- */
-static void
-set_clipping(glw_t *w, const float *xyzw)
-{
-  if(w->glw_class->gc_set_clipping != NULL)
-    w->glw_class->gc_set_clipping(w, xyzw);
-}
-
-
-/**
- *
- */
-static void
-set_plane(glw_t *w, const float *xyzw)
-{
-  if(w->glw_class->gc_set_plane != NULL)
-    w->glw_class->gc_set_plane(w, xyzw);
+    gr_schedule_refresh(w->glw_root, 0);
+  }
 }
 
 
@@ -705,6 +737,7 @@ set_align(glw_view_eval_context_t *ec, const token_attrib_t *a,
     return glw_view_seterr(ec->ei, t, "Invalid assignment for attribute %s",
 			    a->name);
   ec->w->glw_alignment = v;
+  gr_schedule_refresh(ec->w->glw_root, 0);
   return 0;
 }
 
@@ -731,7 +764,10 @@ set_transition_effect(glw_view_eval_context_t *ec, const token_attrib_t *a,
 						 transitiontab)) < 0)
     return glw_view_seterr(ec->ei, t, "Invalid assignment for attribute %s",
 			    a->name);
-  glw_set(ec->w, GLW_ATTRIB_TRANSITION_EFFECT, v, NULL);
+
+  if(ec->w->glw_class->gc_set_int != NULL)
+    ec->w->glw_class->gc_set_int(ec->w, GLW_ATTRIB_TRANSITION_EFFECT, v);
+  gr_schedule_refresh(ec->w->glw_root, 0);
   return 0;
 }
 
@@ -784,10 +820,19 @@ mod_hidden(glw_view_eval_context_t *ec, const token_attrib_t *a,
     return glw_view_seterr(ec->ei, t, "Invalid assignment for attribute %s",
 			    a->name);
 
-  if(v)
-    glw_hide(ec->w);
-  else
-    glw_unhide(ec->w);
+  glw_t *w = ec->w;
+
+  if(v) {
+    if(w->glw_flags & GLW_HIDDEN)
+      return 0;
+
+    glw_hide(w);
+  } else {
+    if(!(w->glw_flags & GLW_HIDDEN))
+      return 0;
+    glw_unhide(w);
+  }
+  gr_schedule_refresh(w->glw_root, 0);
   return 0;
 }
 
@@ -806,6 +851,7 @@ mod_flags2(glw_t *w, int set, int clr)
 
   if((set | clr) && w->glw_class->gc_mod_flags2 != NULL)
     w->glw_class->gc_mod_flags2(w, set, clr);
+  gr_schedule_refresh(w->glw_root, 0);
 }
 
 
@@ -817,6 +863,7 @@ mod_text_flags(glw_t *w, int set, int clr)
 {
   if(w->glw_class->gc_mod_text_flags != NULL)
     w->glw_class->gc_mod_text_flags(w, set, clr);
+  gr_schedule_refresh(w->glw_root, 0);
 }
 
 
@@ -828,6 +875,7 @@ mod_img_flags(glw_t *w, int set, int clr)
 {
   if(w->glw_class->gc_mod_image_flags != NULL)
     w->glw_class->gc_mod_image_flags(w, set, clr);
+  gr_schedule_refresh(w->glw_root, 0);
 }
 
 
@@ -839,6 +887,7 @@ mod_video_flags(glw_t *w, int set, int clr)
 {
   if(w->glw_class->gc_mod_video_flags != NULL)
     w->glw_class->gc_mod_video_flags(w, set, clr);
+  gr_schedule_refresh(w->glw_root, 0);
 }
 
 
@@ -937,6 +986,8 @@ set_source(glw_view_eval_context_t *ec, const token_attrib_t *a,
 
   if(w->glw_class->gc_set_source != NULL)
     w->glw_class->gc_set_source(w, r);
+
+  gr_schedule_refresh(w->glw_root, 0);
   rstr_release(r);
   return 0;
 }
@@ -949,9 +1000,11 @@ static int
 set_args(glw_view_eval_context_t *ec, const token_attrib_t *a,
 	   struct token *t)
 {
-  if(t->type == TOKEN_PROPERTY_OWNER ||
-     t->type == TOKEN_PROPERTY_REF)
-    glw_set(ec->w, GLW_ATTRIB_ARGS, t->t_prop, NULL);
+  if(t->type == TOKEN_PROPERTY_OWNER || t->type == TOKEN_PROPERTY_REF) {
+    if(ec->w->glw_class->gc_set_prop != NULL)
+      ec->w->glw_class->gc_set_prop(ec->w, GLW_ATTRIB_ARGS, t->t_prop);
+  }
+
   return 0;
 }
 
@@ -963,8 +1016,11 @@ static int
 set_propref(glw_view_eval_context_t *ec, const token_attrib_t *a,
 	   struct token *t)
 {
+  if(ec->w->glw_class->gc_set_prop == NULL)
+    return 0;
+
   if(t->type == TOKEN_VOID) {
-    glw_set(ec->w, a->attrib, NULL, NULL);
+    ec->w->glw_class->gc_set_prop(ec->w, a->attrib, NULL);
     return 0;
   }
   if(t->type != TOKEN_PROPERTY_REF)
@@ -972,7 +1028,7 @@ set_propref(glw_view_eval_context_t *ec, const token_attrib_t *a,
 			   "Attribute '%s' expects a property ref, got %s",
 			   a->name, token2name(t));
 
-  glw_set(ec->w, a->attrib, t->t_prop, NULL);
+  ec->w->glw_class->gc_set_prop(ec->w, a->attrib, t->t_prop);
   return 0;
 }
 
@@ -985,28 +1041,33 @@ set_page(glw_view_eval_context_t *ec, const token_attrib_t *a,
 	   struct token *t)
 {
   const char *str;
-
+  const glw_class_t *c = ec->w->glw_class;
   switch(t->type) {
   default:
-    glw_set(ec->w, GLW_ATTRIB_PAGE_BY_ID, NULL, NULL);
+    if(c->gc_set_page_id)
+      c->gc_set_page_id(ec->w, NULL);
     break;
 
   case TOKEN_CSTRING:
-    glw_set(ec->w, GLW_ATTRIB_PAGE_BY_ID, t->t_cstring, NULL);
+    if(c->gc_set_page_id)
+      c->gc_set_page_id(ec->w, t->t_cstring);
     break;
 
   case TOKEN_RSTRING:
   case TOKEN_LINK:
     str = rstr_get(t->t_rstring);
-    glw_set(ec->w, GLW_ATTRIB_PAGE_BY_ID, str, NULL);
+    if(c->gc_set_page_id)
+      c->gc_set_page_id(ec->w, str);
     break;
 
   case TOKEN_INT:
-    glw_set(ec->w, GLW_ATTRIB_PAGE, t->t_int, NULL);
+    if(c->gc_set_int)
+      c->gc_set_int(ec->w, GLW_ATTRIB_PAGE, t->t_int);
     break;
 
   case TOKEN_FLOAT:
-    glw_set(ec->w, GLW_ATTRIB_PAGE, (int)t->t_float, NULL);
+    if(c->gc_set_int)
+      c->gc_set_int(ec->w, GLW_ATTRIB_PAGE, t->t_float);
     break;
   }
   return 0;
@@ -1017,10 +1078,10 @@ set_page(glw_view_eval_context_t *ec, const token_attrib_t *a,
  *
  */
 static const token_attrib_t attribtab[] = {
-  {"id",              set_string, 0, set_id},
-  {"how",             set_string, 0, set_how},
-  {"description",     set_string, 0, set_description},
-  {"parentUrl",       set_string, 0, set_parent_url},
+  {"id",              set_rstring, 0, set_id_rstr},
+  {"how",             set_rstring, 0, set_how_rstr},
+  {"description",     set_rstring, 0, set_description_rstr},
+  {"parentUrl",       set_rstring, 0, set_parent_url_rstr},
   {"caption",         set_caption, 0},
   {"font",            set_font, 0},
   {"fragmentShader",  set_fs, 0},
@@ -1078,67 +1139,66 @@ static const token_attrib_t attribtab[] = {
 
   {"alpha",           set_float,  0, set_alpha},
   {"blur",            set_float,  0, set_blur},
-  {"alphaSelf",       set_float,  0, set_alpha_self},
-  {"saturation",      set_float,  GLW_ATTRIB_SATURATION},
   {"weight",          set_float,  0, set_weight},
-  {"time",            set_float,  GLW_ATTRIB_TIME},
-  {"transitionTime",  set_float,  GLW_ATTRIB_TRANSITION_TIME},
-  {"angle",           set_float,  GLW_ATTRIB_ANGLE},
-  {"expansion",       set_float,  GLW_ATTRIB_EXPANSION},
-  {"min",             set_float,  GLW_ATTRIB_INT_MIN},
-  {"max",             set_float,  GLW_ATTRIB_INT_MAX},
-  {"step",            set_float,  GLW_ATTRIB_INT_STEP},
-  {"value",           set_float,  GLW_ATTRIB_VALUE},
-  {"sizeScale",       set_float,  0, set_size_scale},
-  {"size",            set_float,  0, set_size},
-  {"minSize",         set_float,  0, set_min_size},
   {"focusable",       set_float,  0, glw_set_focus_weight},
-  {"childAspect",     set_float,  GLW_ATTRIB_CHILD_ASPECT},
-  {"center",          set_float,  GLW_ATTRIB_CENTER},
-  {"audioVolume",     set_float,  GLW_ATTRIB_AUDIO_VOLUME},
-  {"aspect",          set_float,  GLW_ATTRIB_ASPECT},
 
   {"height",          set_int,  0, set_height},
   {"width",           set_int,  0, set_width},
+  {"divider",         set_int,  0, set_divider},
 
-  {"fill",            set_float,  GLW_ATTRIB_FILL},
+  {"maxlines",        set_number, GLW_ATTRIB_MAX_LINES},
+  {"sizeScale",       set_number, GLW_ATTRIB_SIZE_SCALE},
+  {"size",            set_number, GLW_ATTRIB_DEFAULT_SIZE},
+  {"minSize",         set_number, GLW_ATTRIB_MIN_SIZE},
+  {"alphaSelf",       set_number, GLW_ATTRIB_ALPHA_SELF},
+  {"saturation",      set_number, GLW_ATTRIB_SATURATION},
+  {"time",            set_number, GLW_ATTRIB_TIME},
+  {"transitionTime",  set_number, GLW_ATTRIB_TRANSITION_TIME},
+  {"angle",           set_number, GLW_ATTRIB_ANGLE},
+  {"expansion",       set_number, GLW_ATTRIB_EXPANSION},
+  {"min",             set_number, GLW_ATTRIB_INT_MIN},
+  {"max",             set_number, GLW_ATTRIB_INT_MAX},
+  {"step",            set_number, GLW_ATTRIB_INT_STEP},
+  {"value",           set_number, GLW_ATTRIB_VALUE},
+  {"childAspect",     set_number, GLW_ATTRIB_CHILD_ASPECT},
+  {"center",          set_number, GLW_ATTRIB_CENTER},
+  {"audioVolume",     set_number, GLW_ATTRIB_AUDIO_VOLUME},
+  {"aspect",          set_number, GLW_ATTRIB_ASPECT},
+  {"alphaFallOff",    set_number, GLW_ATTRIB_ALPHA_FALLOFF},
+  {"blurFallOff",     set_number, GLW_ATTRIB_BLUR_FALLOFF},
+  {"fill",            set_number, GLW_ATTRIB_FILL},
+  {"childScale",      set_number, GLW_ATTRIB_CHILD_SCALE},
 
-  {"childScale",      set_float,  GLW_ATTRIB_CHILD_SCALE},
+  {"childWidth",      set_number, GLW_ATTRIB_CHILD_WIDTH},
+  {"childHeight",     set_number, GLW_ATTRIB_CHILD_HEIGHT},
 
-  {"childWidth",      set_int,    GLW_ATTRIB_CHILD_WIDTH},
-  {"childHeight",     set_int,    GLW_ATTRIB_CHILD_HEIGHT},
+  {"childTilesX",     set_number, GLW_ATTRIB_CHILD_TILES_X},
+  {"childTilesY",     set_number, GLW_ATTRIB_CHILD_TILES_Y},
 
-  {"childTilesX",     set_int,    GLW_ATTRIB_CHILD_TILES_X},
-  {"childTilesY",     set_int ,   GLW_ATTRIB_CHILD_TILES_Y},
+  {"alphaEdges",      set_number, GLW_ATTRIB_ALPHA_EDGES},
+  {"priority",        set_number, GLW_ATTRIB_PRIORITY},
+  {"spacing",         set_number, GLW_ATTRIB_SPACING},
+  {"Xspacing",        set_number, GLW_ATTRIB_X_SPACING},
+  {"Yspacing",        set_number, GLW_ATTRIB_Y_SPACING},
+  {"scrollThreshold", set_number, GLW_ATTRIB_SCROLL_THRESHOLD},
+  {"cornerRadius",    set_number, GLW_ATTRIB_RADIUS},
 
   {"page",            set_page,   0},
 
-  {"alphaEdges",      set_int,    GLW_ATTRIB_ALPHA_EDGES},
-  {"priority",        set_int,    GLW_ATTRIB_PRIORITY},
-  {"maxlines",        set_int,    0, set_maxlines},
-  {"spacing",         set_int,    GLW_ATTRIB_SPACING},
-  {"Xspacing",        set_int,    GLW_ATTRIB_X_SPACING},
-  {"Yspacing",        set_int,    GLW_ATTRIB_Y_SPACING},
-  {"scrollThreshold", set_int,    GLW_ATTRIB_SCROLL_THRESHOLD},
-  {"divider",         set_int,    0, set_divider},
-  {"cornerRadius",    set_int,    GLW_ATTRIB_RADIUS},
 
-  {"color",           set_float3, 0, set_rgb},
-  {"translation",     set_float3, 0, set_translation},
-  {"scaling",         set_float3, 0, set_scaling},
-  {"color1",          set_float3, 0, set_color1},
-  {"color2",          set_float3, 0, set_color2},
+  {"color",           set_float3, GLW_ATTRIB_RGB},
+  {"translation",     set_float3, GLW_ATTRIB_TRANSLATION},
+  {"scaling",         set_float3, GLW_ATTRIB_SCALING},
+  {"color1",          set_float3, GLW_ATTRIB_COLOR1},
+  {"color2",          set_float3, GLW_ATTRIB_COLOR2},
+
+  {"rotation",        set_float4, GLW_ATTRIB_ROTATION},
+  {"clipping",        set_float4, GLW_ATTRIB_CLIPPING},
+  {"plane",           set_float4, GLW_ATTRIB_PLANE},
 
   {"padding",         set_int16_4, 0, set_padding},
   {"border",          set_int16_4, 0, set_border},
   {"margin",          set_int16_4, 0, set_margin},
-  {"rotation",        set_float4, 0, set_rotation},
-  {"clipping",        set_float4, 0, set_clipping},
-  {"plane",           set_float4, 0, set_plane},
-  {"alphaFallOff",    set_float, GLW_ATTRIB_ALPHA_FALLOFF},
-  {"blurFallOff",     set_float, GLW_ATTRIB_BLUR_FALLOFF},
-  
-
 
   {"align",           set_align,  0},
   {"effect",          set_transition_effect,  0},

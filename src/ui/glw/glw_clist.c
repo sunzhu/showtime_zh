@@ -59,10 +59,11 @@ typedef struct glw_clist {
 /**
  *
  */
-static int
-layout(glw_clist_t *l, glw_rctx_t *rc)
+static void
+glw_clist_layout(glw_t *w, const glw_rctx_t *rc)
 {
-  glw_t *c, *w = &l->w, *n;
+  glw_clist_t *l = (glw_clist_t *)w;
+  glw_t *c, *n;
   int ypos = 0;
   glw_rctx_t rc0 = *rc;
   float IH = 1.0f / rc->rc_height;
@@ -123,8 +124,6 @@ layout(glw_clist_t *l, glw_rctx_t *rc)
 
     glw_layout0(c, &rc0);
   }
-
-  return 0;
 }
 
 
@@ -214,10 +213,6 @@ signal_handler(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
   case GLW_SIGNAL_POINTER_EVENT:
     break;
 
-  case GLW_SIGNAL_LAYOUT:
-    layout((glw_clist_t *)w, extra);
-    break;
-
   case GLW_SIGNAL_EVENT_BUBBLE:
     w->glw_flags &= ~GLW_FLOATING_FOCUS;
     break;
@@ -242,33 +237,55 @@ ctor(glw_t *w)
 /**
  *
  */
-static void 
-glw_clist_set(glw_t *w, va_list ap)
+static int
+glw_clist_set_int(glw_t *w, glw_attribute_t attrib, int value)
 {
-  glw_attribute_t attrib;
   glw_clist_t *l = (glw_clist_t *)w;
 
-  do {
-    attrib = va_arg(ap, int);
-    switch(attrib) {
+  switch(attrib) {
 
-    case GLW_ATTRIB_SPACING:
-      l->spacing = va_arg(ap, int);
-      break;
+  case GLW_ATTRIB_SPACING:
+    if(l->spacing == value)
+      return 0;
 
-    case GLW_ATTRIB_CENTER:
-      l->center = va_arg(ap, double);
-      break;
+    l->spacing = value;
+    break;
 
-    case GLW_ATTRIB_CHILD_HEIGHT:
-      l->child_height = va_arg(ap, int);
-      break;
+  case GLW_ATTRIB_CHILD_HEIGHT:
+    if(l->child_height == value)
+      return 0;
 
-    default:
-      GLW_ATTRIB_CHEW(attrib, ap);
-      break;
-    }
-  } while(attrib);
+    l->child_height = value;
+    break;
+
+  default:
+    return -1;
+  }
+  return 1;
+}
+
+
+/**
+ *
+ */
+static int
+glw_clist_set_float(glw_t *w, glw_attribute_t attrib, float value)
+{
+  glw_clist_t *l = (glw_clist_t *)w;
+
+  switch(attrib) {
+
+  case GLW_ATTRIB_CENTER:
+    if(l->center == value)
+      return 0;
+
+    l->center = value;
+    break;
+
+  default:
+    return -1;
+  }
+  return 1;
 }
 
 
@@ -280,12 +297,13 @@ static glw_class_t glw_clist = {
   .gc_child_orientation = GLW_ORIENTATION_VERTICAL,
   .gc_nav_descend_mode = GLW_NAV_DESCEND_FOCUSED,
   .gc_nav_search_mode = GLW_NAV_SEARCH_BY_ORIENTATION_WITH_PAGING,
-
+  .gc_layout = glw_clist_layout,
   .gc_render = render,
   .gc_ctor = ctor,
   .gc_signal_handler = signal_handler,
   .gc_escape_score = 100,
-  .gc_set = glw_clist_set,
+  .gc_set_int = glw_clist_set_int,
+  .gc_set_float = glw_clist_set_float,
 };
 
 GLW_REGISTER_CLASS(glw_clist);
