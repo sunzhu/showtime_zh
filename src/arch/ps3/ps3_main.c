@@ -425,18 +425,13 @@ static void
 preload_fonts(void)
 {
 /*
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-VR-R-LATIN2.TTF",
-		     FONT_DOMAIN_FALLBACK, NULL);
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-NR-R-JPN.TTF",
-		     FONT_DOMAIN_FALLBACK, NULL);
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-YG-R-KOR.TTF",
-		     FONT_DOMAIN_FALLBACK, NULL);
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-DH-R-CGB.TTF",
-		     FONT_DOMAIN_FALLBACK, NULL);
-  freetype_load_font("file:///dev_flash/data/font/SCE-PS3-CP-R-KANA.TTF",
-		     FONT_DOMAIN_FALLBACK, NULL);
+  freetype_load_default_font("file:///dev_flash/data/font/SCE-PS3-VR-R-LATIN2.TTF", 100);
+  freetype_load_default_font("file:///dev_flash/data/font/SCE-PS3-NR-R-JPN.TTF", 101);
+  freetype_load_default_font("file:///dev_flash/data/font/SCE-PS3-YG-R-KOR.TTF", 102);
+  freetype_load_default_font("file:///dev_flash/data/font/SCE-PS3-DH-R-CGB.TTF", 103);
+  freetype_load_default_font("file:///dev_flash/data/font/SCE-PS3-CP-R-KANA.TTF",104);
 */
-  freetype_load_font("file:///dev_hdd0/game/HTSS00003/USRDIR/FONT.TTF",FONT_DOMAIN_FALLBACK, NULL);
+  freetype_load_default_font("file:///dev_hdd0/game/HTSS00003/USRDIR/FONT.TTF",100);
 }
 
 const char *
