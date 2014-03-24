@@ -155,7 +155,7 @@ gvo_set_pts(glw_video_t *gv, int64_t pts)
     next = LIST_NEXT(gvo, gvo_link);
 
     if(gvo->gvo_stop != PTS_UNSET && gvo->gvo_stop <= pts) {
-      gr_schedule_refresh(gv->w.glw_root, 0);
+      glw_need_refresh(gv->w.glw_root, 0);
       gvo_destroy(gv, gvo);
       continue;
     }
@@ -177,7 +177,7 @@ gvo_set_pts(glw_video_t *gv, int64_t pts)
     a = GLW_CLAMP(a, 0.0f, 1.0f);
     if(a != gvo->gvo_alpha) {
       gvo->gvo_alpha = a;
-      gr_schedule_refresh(gv->w.glw_root, 0);
+      glw_need_refresh(gv->w.glw_root, 0);
     }
 
   }
@@ -271,7 +271,7 @@ glw_video_overlay_layout(glw_video_t *gv,
 	break;
       }
 
-      gc->gc_set_padding(w, f);
+      gc->gc_set_int16_4(w, GLW_ATTRIB_PADDING, f);
       glw_layout0(w, rc);
       l->used_height[gvo->gvo_alignment] += w->glw_req_size_y;
     }
@@ -441,7 +441,8 @@ glw_video_overlay_render(glw_video_t *gv, const glw_rctx_t *frc,
  */
 int
 glw_video_overlay_pointer_event(video_decoder_t *vd, int width, int height,
-				glw_pointer_event_t *gpe, media_pipe_t *mp)
+				const glw_pointer_event_t *gpe,
+				media_pipe_t *mp)
 {
 #if ENABLE_DVD
   pci_t *pci;
@@ -648,7 +649,7 @@ glw_video_overlay_spu_layout(glw_video_t *gv, int64_t pts)
     return;
   }
 
-  gr_schedule_refresh(gr, 0);
+  glw_need_refresh(gr, 0);
 
   if(d->d_destroyme == 1)
     goto destroy;
@@ -859,7 +860,7 @@ glw_video_overlay_sub_set_pts(glw_video_t *gv, int64_t pts)
 	break;
       // FALLTHRU
     case VO_FLUSH:
-      gr_schedule_refresh(gr, 0);
+      glw_need_refresh(gr, 0);
       gvo_flush_all(gv);
       video_overlay_dequeue_destroy(mp, vo);
       continue;
@@ -867,7 +868,7 @@ glw_video_overlay_sub_set_pts(glw_video_t *gv, int64_t pts)
     case VO_BITMAP:
       if(vo->vo_start > pts)
 	break;
-      gr_schedule_refresh(gr, 0);
+      glw_need_refresh(gr, 0);
       gvo_flush_infinite(gv);
       if(vo->vo_pixmap != NULL)
         gvo_create_from_vo_bitmap(gv, vo);
@@ -877,7 +878,7 @@ glw_video_overlay_sub_set_pts(glw_video_t *gv, int64_t pts)
     case VO_TEXT:
       if(vo->vo_start > pts)
         break;
-      gr_schedule_refresh(gr, 0);
+      glw_need_refresh(gr, 0);
       gvo_flush_infinite(gv);
       gvo_create_from_vo_text(gv, vo);
       video_overlay_dequeue_destroy(mp, vo);

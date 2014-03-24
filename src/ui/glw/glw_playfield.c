@@ -130,7 +130,7 @@ detach(glw_t *s, glw_t *d)
   s->glw_parent_detached = d;
   if(d != NULL) {
     d->glw_class->gc_detach_control(d, 1);
-    glw_signal_handler_register(d, destroy_detached_callback, s, 1000);
+    glw_signal_handler_register(d, destroy_detached_callback, s);
   }
 }
 
@@ -226,11 +226,6 @@ glw_playfield_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
   default:
     break;
 
-  case GLW_SIGNAL_EVENT:
-    if(w->glw_selected != NULL)
-      return glw_signal0(w->glw_selected, GLW_SIGNAL_EVENT, extra);
-    break;
-
   case GLW_SIGNAL_CHILD_CONSTRAINTS_CHANGED:
     if(w->glw_selected == extra)
       glw_playfield_update_constraints(p);
@@ -309,6 +304,7 @@ static glw_class_t glw_playfield = {
   .gc_ctor = clear_constraints,
   .gc_signal_handler = glw_playfield_callback,
   .gc_select_child = playfield_select_child,
+  .gc_send_event = glw_event_to_selected_child,
 };
 
 GLW_REGISTER_CLASS(glw_playfield);
