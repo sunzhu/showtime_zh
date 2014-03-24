@@ -25,20 +25,26 @@
 #include "glw.h"
 #include "glw_event.h"
 
+
 /**
  *
  */
 static void
 event_bubble(glw_t *w, event_t *e)
 {
+  glw_root_t *gr = w->glw_root;
   if(e->e_nav == NULL)
     e->e_nav = prop_ref_inc(w->glw_root->gr_prop_nav);
 
   while(w != NULL) {
-    if(glw_signal0(w, GLW_SIGNAL_EVENT_BUBBLE, e))
+    w->glw_flags &= ~GLW_FLOATING_FOCUS;
+    if(glw_bubble_event(w, e))
       return;
     w = w->glw_parent;
   }
+
+  if(!glw_root_event_handler(gr, e))
+    event_release(e);
 }
 
 
@@ -499,7 +505,7 @@ glw_event_map_internal_fire(glw_t *w, glw_event_map_t *gem, event_t *src)
     if((t = glw_event_find_target(w, g->target)) == NULL) {
       TRACE(TRACE_ERROR, "GLW", "Targeted widget %s not found", g->target);
     } else {
-      glw_signal0(t, GLW_SIGNAL_EVENT, e);
+      glw_send_event(t, e);
     }
   } else {
     event_bubble(w, e);
@@ -548,4 +554,29 @@ glw_event_map_intercept(glw_t *w, event_t *e)
     }
   }
   return 0;
+}
+
+
+/**
+ *
+ */
+int
+glw_event_distribute_to_childs(glw_t *w, event_t *e)
+{
+  glw_t *c;
+
+  TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link)
+    if(glw_send_event(c, e))
+      return 1;
+  return 0;
+}
+
+
+/**
+ *
+ */
+int
+glw_event_to_selected_child(glw_t *w, event_t *e)
+{
+  return w->glw_selected != NULL && glw_send_event(w->glw_selected, e);
 }

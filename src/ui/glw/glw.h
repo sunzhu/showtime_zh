@@ -54,6 +54,14 @@ LIST_HEAD(glw_loadable_texture_list, glw_loadable_texture);
 TAILQ_HEAD(glw_loadable_texture_queue, glw_loadable_texture);
 LIST_HEAD(glw_video_list, glw_video);
 
+#ifndef likely
+#define likely(x)       __builtin_expect((x),1)
+#endif
+
+#ifndef unlikely
+#define unlikely(x)     __builtin_expect((x),0)
+#endif
+
 // ------------------- Backends -----------------
 
 #if CONFIG_GLW_BACKEND_OPENGL || CONFIG_GLW_BACKEND_OPENGL_ES
@@ -99,6 +107,16 @@ typedef float Vec2[2];
 #define GLW_SWAP(a, b) do { typeof(a) c = (b); (b) = (a); (a) = (c); } while(0)
 #define GLW_CLAMP(x, min, max) GLW_MIN(GLW_MAX((x), (min)), (max))
 
+// -- Flags for dynamic evaluation of view statements --
+
+#define GLW_VIEW_EVAL_LAYOUT     0x1
+#define GLW_VIEW_EVAL_ACTIVE     0x2
+#define GLW_VIEW_EVAL_FHP_CHANGE 0x4
+#define GLW_VIEW_EVAL_OTHER      0x8
+#define GLW_VIEW_EVAL_PROP       0x100
+#define GLW_VIEW_EVAL_KEEP       0x200
+
+// ----------------- Attributes ------------------------
 
 typedef enum {
   GLW_ATTRIB_END = 0,
@@ -153,6 +171,9 @@ typedef enum {
   GLW_ATTRIB_ROTATION,
   GLW_ATTRIB_CLIPPING,
   GLW_ATTRIB_PLANE,
+  GLW_ATTRIB_MARGIN,
+  GLW_ATTRIB_BORDER,
+  GLW_ATTRIB_PADDING,
   GLW_ATTRIB_num,
 } glw_attribute_t;
 
@@ -219,9 +240,6 @@ typedef enum {
   GLW_POINTER_FOCUS_MOTION,
   GLW_POINTER_SCROLL,
   GLW_POINTER_GONE,
-  GLW_POINTER_TOUCH_PRESS,
-  GLW_POINTER_TOUCH_RELEASE,
-  GLW_POINTER_TOUCH_MOTION,
 } glw_pointer_event_type_t;
 
 typedef struct glw_pointer_event {
@@ -242,15 +260,10 @@ typedef enum {
   GLW_SIGNAL_DESTROY,
   GLW_SIGNAL_ACTIVE,
   GLW_SIGNAL_INACTIVE,
-  GLW_SIGNAL_LAYOUTED,
 
   GLW_SIGNAL_CHILD_CREATED,
   GLW_SIGNAL_CHILD_DESTROYED,
   GLW_SIGNAL_CHILD_MOVED,
-
-  GLW_SIGNAL_EVENT_BUBBLE,
-
-  GLW_SIGNAL_EVENT,
 
   /**
    * Sent to widget when its focused child is changed.
@@ -258,11 +271,6 @@ typedef enum {
    */
   GLW_SIGNAL_FOCUS_CHILD_INTERACTIVE,
   GLW_SIGNAL_FOCUS_CHILD_AUTOMATIC,
-
-  /**
-   *
-   */
-  GLW_SIGNAL_POINTER_EVENT,
 
   /**
    *
@@ -323,6 +331,8 @@ typedef enum {
    *
    */
   GLW_SIGNAL_WRAP_CHECK,
+
+  GLW_SIGNAL_num,
 
 } glw_signal_t;
 
@@ -420,6 +430,8 @@ typedef struct glw_class {
 
   int (*gc_set_float4)(struct glw *w, glw_attribute_t a, const float *vector);
 
+  int (*gc_set_int16_4)(struct glw *w, glw_attribute_t a, const int16_t *v);
+
 
   /**
    * Ask widget to render itself in the current render context
@@ -456,6 +468,22 @@ typedef struct glw_class {
    *
    */
   void (*gc_suggest_focus)(struct glw *w, struct glw *c);
+
+  /**
+   *
+   */
+  int (*gc_send_event)(struct glw *w, struct event *e);
+
+  /**
+   *
+   */
+  int (*gc_bubble_event)(struct glw *w, struct event *e);
+
+  /**
+   *
+   */
+  int (*gc_pointer_event)(struct glw *w, const glw_pointer_event_t *gpe);
+
 
   /**
    * Send a GLW_SIGNAL_... to all listeners
@@ -514,21 +542,6 @@ typedef struct glw_class {
    *
    */
   void (*gc_get_rctx)(struct glw *w, struct glw_rctx *rc);
-
-  /**
-   *
-   */
-  void (*gc_set_border)(struct glw *w, const int16_t *v);
-
-  /**
-   *
-   */
-  void (*gc_set_padding)(struct glw *w, const int16_t *v);
-
-  /**
-   *
-   */
-  void (*gc_set_margin)(struct glw *w, const int16_t *v);
 
   /**
    *
@@ -697,6 +710,7 @@ typedef struct glw_root {
   float gr_time_sec;
 
   int gr_need_refresh;
+  int64_t gr_scheduled_refresh;
 
   /**
    * Screensaver
@@ -906,7 +920,6 @@ typedef struct glw_signal_handler {
   LIST_ENTRY(glw_signal_handler) gsh_link;
   glw_callback_t *gsh_func;
   void *gsh_opaque;
-  int16_t gsh_pri;
   int16_t gsh_defer_remove;
 } glw_signal_handler_t;
 
@@ -1032,6 +1045,8 @@ typedef struct glw {
   float glw_focus_weight;
 
   uint8_t glw_alignment;
+
+  uint8_t glw_dynamic_eval;   // GLW_VIEW_EVAL_ -flags
 
   rstr_t *glw_id_rstr;
 
@@ -1176,6 +1191,10 @@ glw_t *glw_view_create(glw_root_t *gr, rstr_t *url,
 		       struct prop *prop_parent, prop_t *args,
 		       struct prop *prop_clone, int cache, int nofail);
 
+void glw_view_eval_signal(glw_t *w, glw_signal_t sig);
+
+void glw_view_eval_layout(glw_t *w, const glw_rctx_t *rc, int mask);
+
 /**
  * Transitions
  */
@@ -1221,6 +1240,8 @@ glw_t *glw_get_next_n(glw_t *c, int count);
 
 int glw_event(glw_root_t *gr, struct event *e);
 
+int glw_root_event_handler(glw_root_t *gr, event_t *e);
+
 int glw_event_to_widget(glw_t *w, struct event *e, int local);
 
 void glw_inject_event(glw_root_t *gr, event_t *e);
@@ -1235,18 +1256,43 @@ int glw_navigate(glw_t *w, struct event *e, int local);
 
 glw_t *glw_find_neighbour(glw_t *w, const char *id);
 
-#define GLW_SIGNAL_PRI_INTERNAL 100
-
-void glw_signal_handler_register(glw_t *w, glw_callback_t *func, void *opaque, 
-				 int pri);
+void glw_signal_handler_register(glw_t *w, glw_callback_t *func, void *opaque);
 
 void glw_signal_handler_unregister(glw_t *w, glw_callback_t *func,
 				   void *opaque);
 
-#define glw_signal_handler_int(w, func) \
- glw_signal_handler_register(w, func, NULL, GLW_SIGNAL_PRI_INTERNAL)
+void glw_signal0(glw_t *w, glw_signal_t sig, void *extra);
 
-int glw_signal0(glw_t *w, glw_signal_t sig, void *extra);
+static inline int
+glw_send_event(glw_t *w, event_t *e)
+{
+  const glw_class_t *gc = w->glw_class;
+  return gc->gc_send_event != NULL && gc->gc_send_event(w, e);
+}
+
+static inline int
+glw_send_pointer_event(glw_t *w, const glw_pointer_event_t *gpe)
+{
+  const glw_class_t *gc = w->glw_class;
+  return gc->gc_pointer_event != NULL && gc->gc_pointer_event(w, gpe);
+}
+
+static inline int
+glw_bubble_event(glw_t *w, event_t *e)
+{
+  const glw_class_t *gc = w->glw_class;
+  return gc->gc_bubble_event != NULL && gc->gc_bubble_event(w, e);
+}
+
+int glw_event_distribute_to_childs(glw_t *w, event_t *e);
+
+int glw_event_to_selected_child(glw_t *w, event_t *e);
+
+
+
+
+
+
 
 #define glw_render0(w, rc) ((w)->glw_class->gc_render(w, rc))
 
@@ -1326,6 +1372,8 @@ int glw_attrib_set_rgb(glw_rgb_t *rgb, const float *src);
 
 int glw_attrib_set_float4(float *dst, const float *src);
 
+int glw_attrib_set_int16_4(int16_t *dst, const int16_t *src);
+
 
 /**
  *
@@ -1367,15 +1415,15 @@ void glw_project(glw_rect_t *r, const glw_rctx_t *rc, const glw_root_t *gr);
 
 #ifdef GLW_TRACK_REFRESH
 
-#define gr_schedule_refresh(gr, how) \
-  gr_schedule_refresh0(gr, how, __FILE__, __LINE__)
+#define glw_need_refresh(gr, how) \
+  glw_need_refresh0(gr, how, __FILE__, __LINE__)
 
-void gr_schedule_refresh0(glw_root_t *gr, int how, const char *file, int line);
+void glw_need_refresh0(glw_root_t *gr, int how, const char *file, int line);
 
 #else
 
 static inline void
-gr_schedule_refresh(glw_root_t *gr, int how)
+glw_need_refresh(glw_root_t *gr, int how)
 {
   int flags = GLW_REFRESH_FLAG_LAYOUT;
 
@@ -1385,6 +1433,13 @@ gr_schedule_refresh(glw_root_t *gr, int how)
 }
 
 #endif
+
+static inline void
+glw_schedule_refresh(glw_root_t *gr, int64_t when)
+{
+  gr->gr_scheduled_refresh = MIN(gr->gr_scheduled_refresh, when);
+}
+
 
 #endif /* GLW_H */
 
