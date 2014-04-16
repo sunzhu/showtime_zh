@@ -84,7 +84,10 @@ typedef struct glw_video_surface {
 #endif
 
 #if ENABLE_VDPAU
-  VdpVideoSurface gvs_vdpau_surface;
+  GLuint gvs_texture;
+  int gvs_mapped;
+  VdpOutputSurface gvs_vdpau_surface;
+  GLvdpauSurfaceNV gvs_gl_surface;
 #endif
 
 } glw_video_surface_t;
@@ -190,21 +193,6 @@ typedef struct glw_video {
 
   void *gv_aux;
 
-  /**
-   * VDPAU specifics
-   */
-#if ENABLE_VDPAU
-  int gv_vdpau_initialized;
-  int gv_vdpau_running;
-  Pixmap gv_xpixmap;
-  GLXPixmap gv_glx_pixmap;
-  VdpPresentationQueue gv_vdpau_pq;
-  VdpPresentationQueueTarget gv_vdpau_pqt;
-  GLuint gv_vdpau_texture;
-  int64_t gv_vdpau_clockdiff;
-
-  vdpau_mixer_t gv_vm;
-#endif
 
   // 
   prop_sub_t *gv_vo_scaling_sub;
@@ -227,6 +215,9 @@ typedef struct glw_video {
 
   prop_sub_t *gv_fstretch_sub;
   int gv_fstretch;
+
+  prop_sub_t *gv_vinterpolate_sub;
+  int gv_vinterpolate;
 
   // DVD SPU stuff
 
@@ -288,7 +279,8 @@ typedef void (gv_surface_pixmap_release_t)(glw_video_t *gv,
 					   struct glw_video_surface_queue *fq);
 
 int64_t glw_video_newframe_blend(glw_video_t *gv, video_decoder_t *vd,
-				 int flags, gv_surface_pixmap_release_t *r);
+				 int flags, gv_surface_pixmap_release_t *r,
+                                 int interpolation);
 
 void glw_video_render(glw_t *w, const glw_rctx_t *rc);
 
@@ -321,6 +313,14 @@ void glw_video_put_surface(glw_video_t *gv, glw_video_surface_t *s,
 int glw_video_configure(glw_video_t *gv, const glw_video_engine_t *engine);
 
 void *glw_video_add_reap_task(glw_video_t *gv, size_t s, void *fn);
+
+/**
+ *
+ */
+void glw_render_video_quad(int interlace, int rectmode, int width, int height,
+                           int bob1, int bob2,
+                           glw_backend_root_t *gbr, glw_program_t *gp,
+                           const glw_video_t *gv, glw_rctx_t *rc);
 
 #endif /* GLW_VIDEO_COMMON_H */
 

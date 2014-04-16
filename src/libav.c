@@ -29,6 +29,9 @@
 #include "fileaccess/fa_libav.h"
 #include "video/video_decoder.h"
 
+#if ENABLE_VDPAU
+#include "video/vdpau.h"
+#endif
 
 /**
  *
@@ -74,7 +77,7 @@ libav_decode_video(struct media_codec *mc, struct video_decoder *vd,
 /**
  *
  */
-void
+static void
 libav_video_flush(media_codec_t *mc, video_decoder_t *vd)
 {
   AVCodecContext *ctx = mc->ctx;
@@ -89,6 +92,38 @@ libav_video_flush(media_codec_t *mc, video_decoder_t *vd)
   avcodec_flush_buffers(ctx);
 }
 
+
+/**
+ *
+ */
+static enum PixelFormat
+libav_get_format(struct AVCodecContext *ctx, const enum PixelFormat *fmt)
+{
+  media_codec_t *mc = ctx->opaque;
+  if(mc->close != NULL) {
+    mc->close(mc);
+    mc->close = NULL;
+  }
+
+#if ENABLE_VDPAU
+  if(!vdpau_init_libav_decode(mc, ctx)) {
+    return AV_PIX_FMT_VDPAU;
+  }
+#endif
+  mc->get_buffer2 = &avcodec_default_get_buffer2;
+  return avcodec_default_get_format(ctx, fmt);
+}
+
+
+/**
+ *
+ */
+static int
+get_buffer2_wrapper(struct AVCodecContext *s, AVFrame *frame, int flags)
+{
+  media_codec_t *mc = s->opaque;
+  return mc->get_buffer2(s, frame, flags);
+}
 
 /**
  *
@@ -126,19 +161,25 @@ media_codec_create_lavc(media_codec_t *cw, const media_codec_params_t *mcp,
       cw->ctx->flags2 |= CODEC_FLAG2_FAST;
   }
 
-  if(codec->type == AVMEDIA_TYPE_VIDEO)
+  if(codec->type == AVMEDIA_TYPE_VIDEO) {
+
+    cw->ctx->opaque = cw;
     cw->ctx->refcounted_frames = 1;
+    cw->ctx->get_format = &libav_get_format;
+    cw->ctx->get_buffer2 = &get_buffer2_wrapper;
+
+    cw->decode = &libav_decode_video;
+    cw->flush  = &libav_video_flush;
+  }
 
   if(avcodec_open2(cw->ctx, codec, NULL) < 0) {
     TRACE(TRACE_INFO, "libav", "Unable to open codec %s",
 	  codec ? codec->name : "<noname>");
+
     if(cw->fmt_ctx != cw->ctx)
       av_freep(&cw->ctx);
+
     return -1;
-  }
-  if(codec->type == AVMEDIA_TYPE_VIDEO) {
-    cw->decode = &libav_decode_video;
-    cw->flush  = &libav_video_flush;
   }
 
   return 0;
@@ -174,7 +215,7 @@ media_format_deref(media_format_t *fw)
 
 
 /**
- * 
+ *
  */
 void
 metadata_from_libav(char *dst, size_t dstlen,
@@ -208,13 +249,13 @@ metadata_from_libav(char *dst, size_t dstlen,
 		      ", %s (Level %d.%d)",
 		      p, avctx->level / 10, avctx->level % 10);
   }
-    
+
   if(avctx->codec_type == AVMEDIA_TYPE_AUDIO) {
     char buf[64];
 
     av_get_channel_layout_string(buf, sizeof(buf), avctx->channels,
                                  avctx->channel_layout);
-					    
+
     off += snprintf(dst + off, dstlen - off, ", %d Hz, %s",
 		    avctx->sample_rate, buf);
   }
@@ -222,18 +263,21 @@ metadata_from_libav(char *dst, size_t dstlen,
   if(avctx->width)
     off += snprintf(dst + off, dstlen - off,
 		    ", %dx%d", avctx->width, avctx->height);
-  
+
   if(avctx->codec_type == AVMEDIA_TYPE_AUDIO && avctx->bit_rate)
     off += snprintf(dst + off, dstlen - off,
 		    ", %d kb/s", avctx->bit_rate / 1000);
 
+  if(avctx->hwaccel != NULL)
+    off += snprintf(dst + off, dstlen - off, " (%s)",
+                    avctx->hwaccel->name);
 }
 
 /**
- * 
+ *
  */
 void
-mp_set_mq_meta(media_queue_t *mq, const AVCodec *codec, 
+mp_set_mq_meta(media_queue_t *mq, const AVCodec *codec,
 	       const AVCodecContext *avctx)
 {
   char buf[128];
