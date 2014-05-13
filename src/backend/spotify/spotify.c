@@ -53,6 +53,7 @@
 #include "metadata/metadata.h"
 #include "prop/prop_concat.h"
 #include "plugins.h"
+#include "usage.h"
 
 #ifdef CONFIG_LIBSPOTIFY_LOAD_RUNTIME
 #include <dlfcn.h>
@@ -4176,6 +4177,8 @@ be_spotify_play(const char *url, media_pipe_t *mp,
   
   memset(&su, 0, sizeof(su));
 
+  usage_inc_counter("spotifyplay", 1);
+
   if(!strcmp(url, "spotify:track:0000000000000000000000")) {
     /* Invalid track - happens for localtracks */
     snprintf(errbuf, errlen, "Invalid track");
@@ -4657,7 +4660,7 @@ spotify_shutdown_late(void *opaque, int exitcode)
  *
  */
 static void
-be_spotify_search(prop_t *source, const char *query)
+be_spotify_search(prop_t *source, const char *query, prop_t *loading)
 {
   if(spotify_start(NULL, 0, 1))
     return;

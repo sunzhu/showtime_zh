@@ -144,6 +144,8 @@ playfield_select_child(glw_t *w, glw_t *c, prop_t *origin)
   glw_playfield_t *p = (glw_playfield_t *)w;
   float speed = 0.1;
 
+  glw_need_refresh(w->glw_root, 0);
+
   if(origin && w->glw_selected != NULL &&
      TAILQ_NEXT(w->glw_selected, glw_parent_link) == c) {
     glw_t *x = find_by_prop(w->glw_selected, origin);
@@ -198,10 +200,17 @@ glw_playfield_layout(glw_t *w, const glw_rctx_t *rc)
 
     s = p->speed;
 
+    float n = c->glw_parent_amount;
+
     if(c->glw_parent_amount < v) {
-      c->glw_parent_amount = GLW_MIN(v, c->glw_parent_amount + s);
+      n = GLW_MIN(v, c->glw_parent_amount + s);
     } else if(c->glw_parent_amount > v) {
-      c->glw_parent_amount = GLW_MAX(v, c->glw_parent_amount - s);
+      n = GLW_MAX(v, c->glw_parent_amount - s);
+    }
+
+    if(c->glw_parent_amount != n) {
+      c->glw_parent_amount = n;
+      glw_need_refresh(w->glw_root, 0);
     }
 
     if((c->glw_parent_amount > 0 && c->glw_parent_amount < 2) ||

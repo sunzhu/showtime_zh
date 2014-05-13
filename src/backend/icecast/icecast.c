@@ -34,6 +34,7 @@
 #include "misc/cancellable.h"
 #include "htsmsg/htsmsg_xml.h"
 #include "networking/http.h"
+#include "usage.h"
 
 TAILQ_HEAD(icecast_source_queue, icecast_source);
 
@@ -220,6 +221,10 @@ open_stream(icecast_play_context_t *ipc)
     fh = fa_open_ex(ipc->ipc_url, errbuf, sizeof(errbuf), flags, &foe);
 
     if(fh == NULL) {
+
+      if(cancellable_is_cancelled(&ipc->ipc_cancellable))
+        return -1;
+
       TRACE(TRACE_ERROR, "Radio", "Unable to open %s -- %s",
             ipc->ipc_url, errbuf);
       return -1;
@@ -358,8 +363,12 @@ open_stream(icecast_play_context_t *ipc)
 
   if((fctx = fa_libav_open_format(avio, url, errbuf, sizeof(errbuf), ct,
                                   4096, 0, -1)) == NULL) {
-    TRACE(TRACE_ERROR, "Radio", "Unable to open %s -- %s",
-          ipc->ipc_url, errbuf);
+
+    if(!cancellable_is_cancelled(&ipc->ipc_cancellable)) {
+      TRACE(TRACE_ERROR, "Radio", "Unable to open %s -- %s",
+            ipc->ipc_url, errbuf);
+    }
+
     fa_libav_close(avio);
     return -1;
   }
@@ -445,6 +454,8 @@ stream_radio(icecast_play_context_t *ipc, char *errbuf, size_t errlen)
   event_t *e;
   media_pipe_t *mp = ipc->ipc_mp;
   mq = &mp->mp_audio;
+
+  usage_inc_counter("icecast", 1);
 
   ipc->ipc_radio_info = prop_create(mp->mp_prop_root, "radioinfo");
 
@@ -723,7 +734,8 @@ icymeta_fsize(fa_handle_t *handle)
 static void
 icymeta_parse(icecast_play_context_t *ipc, const char *buf)
 {
-  hexdump("icymeta", buf, strlen(buf));
+  if(gconf.enable_icecast_debug)
+    hexdump("icymeta", buf, strlen(buf));
 
   const char *title = mystrstr(buf, "StreamTitle='");
   if(title != NULL) {
@@ -734,8 +746,21 @@ icymeta_parse(icecast_play_context_t *ipc, const char *buf)
       int tlen = end - title;
       rstr_t *t = rstr_from_bytes_len(title, tlen, how, sizeof(how));
 
-      TRACE(TRACE_DEBUG, "Radio", "Title decoded as '%s' to '%s'",
-            how, rstr_get(t));
+      if(gconf.enable_icecast_debug)
+        TRACE(TRACE_DEBUG, "Radio", "Title decoded as '%s' to '%s'",
+              how, rstr_get(t));
+
+      const char *title_tag = strstr(rstr_get(t), "<mus_sng_title>");
+      if(title_tag != NULL) {
+        title_tag += strlen("<mus_sng_title>");
+        const char *title_tag_end = strstr(title_tag, "</mus_sng_title>");
+        if(title_tag_end != NULL) {
+          rstr_t *n = rstr_allocl(title_tag, title_tag_end - title_tag);
+          rstr_release(t);
+          t = n;
+        }
+      }
+
       if(!ipc->ipc_streaminfo_set) {
         prop_set_rstring(ipc->ipc_radio_info, t);
         ipc->ipc_streaminfo_set = 1;
