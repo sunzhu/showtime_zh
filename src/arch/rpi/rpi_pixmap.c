@@ -110,6 +110,9 @@ setup_tunnel(rpi_pixmap_decoder_t *rpd)
   portdef.nPortIndex = rpd->rpd_decoder->oc_outport;
   omxchk(OMX_GetParameter(rpd->rpd_decoder->oc_handle,
 			  OMX_IndexParamPortDefinition, &portdef));
+  portdef.format.image.nSliceHeight = 16;
+  omxchk(OMX_SetParameter(rpd->rpd_decoder->oc_handle,
+			  OMX_IndexParamPortDefinition, &portdef));
 
   pixmap_compute_rescale_dim(rpd->rpd_im,
 			     portdef.format.image.nFrameWidth,
@@ -184,9 +187,16 @@ setup_tunnel(rpi_pixmap_decoder_t *rpd)
 static pixmap_t *
 rpi_pixmap_decode(image_coded_type_t type,
 		  buf_t *buf, const image_meta_t *im,
-		  char *errbuf, size_t errlen)
+		  char *errbuf, size_t errlen,
+                  const image_t *img)
 {
   if(type != IMAGE_JPEG)
+    return NULL;
+
+  if(img->im_flags & IMAGE_PROGRESSIVE)
+    return NULL;
+
+  if(img->im_color_planes != 3)
     return NULL;
 
 #ifdef TIMING
@@ -270,14 +280,16 @@ rpi_pixmap_decode(image_coded_type_t type,
       continue;
     }
 
-    if(rpd->rpd_decoder->oc_avail == NULL) {
+    buf = rpd->rpd_decoder->oc_avail;
+
+    if(buf == NULL) {
       hts_cond_wait(&rpd->rpd_cond, &rpd->rpd_mtx);
       continue;
     }
 
-    buf = rpd->rpd_decoder->oc_avail;
     rpd->rpd_decoder->oc_avail = buf->pAppPrivate;
     rpd->rpd_decoder->oc_inflight_buffers++;
+    rpd->rpd_decoder->oc_avail_bytes -= buf->nAllocLen;
 
     hts_mutex_unlock(&rpd->rpd_mtx);
 

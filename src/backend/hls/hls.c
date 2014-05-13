@@ -41,6 +41,7 @@
 #include "fileaccess/fa_libav.h"
 #include "hls.h"
 #include "subtitles/subtitles.h"
+#include "usage.h"
 
 /**
  * Relevant docs:
@@ -1210,8 +1211,10 @@ hls_play(hls_t *h, media_pipe_t *mp, char *errbuf, size_t errlen,
       }
 
       if(mb->mb_data_type == MB_VIDEO) {
-	if(hd->hd_delta_ts == PTS_UNSET && mb->mb_pts != PTS_UNSET)
+	if(hd->hd_delta_ts == PTS_UNSET && mb->mb_pts != PTS_UNSET) {
 	  hd->hd_delta_ts = mb->mb_pts - hs->hs_time_offset;
+          mp->mp_start_time = hd->hd_delta_ts;
+        }
 
 	mb->mb_drive_clock = 1;
 	mb->mb_delta = hd->hd_delta_ts;
@@ -1473,6 +1476,8 @@ hls_play_extm3u(char *buf, const char *url, media_pipe_t *mp,
     return NULL;
   }
 
+  usage_inc_counter("playvideohls", 1);
+
   prop_set(mp->mp_prop_root, "loading", PROP_SET_INT, 1);
 
   hls_t h;
@@ -1496,12 +1501,22 @@ hls_play_extm3u(char *buf, const char *url, media_pipe_t *mp,
       else if((v = mystrbegins(s, "#EXT-X-STREAM-INF:")) != NULL)
         hls_ext_x_stream_inf(&h, v, &hv);
       else if(s[0] != '#') {
+#if 1
+        if(hv->hv_width && hv->hv_height &&
+           (hv->hv_width <= 128 || hv->hv_height <= 72)) {
+          free(hv);
+          hv = NULL;
+          continue;
+        }
+#endif
         hls_add_variant(&h, s, &hv, &h.h_primary);
       }
     }
   } else {
     hls_add_variant(&h, h.h_baseurl, &hv, &h.h_primary);
   }
+
+  free(hv);
 
   hls_dump(&h);
 

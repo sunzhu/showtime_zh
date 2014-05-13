@@ -34,6 +34,7 @@
 #include "fileaccess.h"
 #include "fa_zlib.h"
 #include "showtime.h"
+#include "usage.h"
 
 
 static hts_mutex_t zip_global_mutex;

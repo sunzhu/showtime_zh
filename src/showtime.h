@@ -249,6 +249,8 @@ typedef struct gconf {
   int enable_mem_debug;
   int enable_nav_always_close;
   int enable_kvstore_debug;
+  int enable_icecast_debug;
+  int enable_image_debug;
   int enable_conditional_rendering;
 
   const char *devplugin;
@@ -288,6 +290,8 @@ typedef struct gconf {
   int showtime_shell_fd;
 
   char system_name[64];
+
+  char device_id[64];
 
 } gconf_t;
 
