@@ -43,6 +43,9 @@ msg: 退出Showtime
 id: Go to Home screen
 msg: 转至首页
 
+id: Hide system info
+msg: 隐藏系统信息
+
 id: Navigation
 msg: 导航
 
@@ -57,6 +60,9 @@ msg: 关机
 
 id: Reload current page
 msg: 刷新
+
+id: Show system info
+msg: 显示系统信息
 
 id: Suspend
 msg: 关机
@@ -156,6 +162,24 @@ msg: 视频设置
 #
 id: System log
 msg: 系统日志
+
+#
+# ./glwskins/default/osk.view
+#
+id: Cancel
+msg: 取消
+
+id: Clear
+msg: 清除
+
+id: Default
+msg: 默认
+
+id: Keyboard layout:
+msg: 键盘布局：
+
+id: OK
+msg: 确定
 
 #
 # ./glwskins/default/pages/directory.view
@@ -387,6 +411,12 @@ id: Playback status
 msg: 播放信息
 
 #
+# ./glwskins/default/pages/wideinfo/video.view
+#
+id: Seen:
+msg: 看过：
+
+#
 # ./glwskins/default/playdecks/dvd.view
 #
 id: Chapter: %d
@@ -409,15 +439,6 @@ msg: 记住用户
 
 id: Username
 msg: 用户名
-
-#
-# ./glwskins/default/popups/common.view
-#
-id: Cancel
-msg: 取消
-
-id: OK
-msg: 确定
 
 #
 # ./glwskins/default/screensaver.view
@@ -498,6 +519,18 @@ id: System is low on memory (%d kB RAM available)
 msg: 系统内存偏少(%d kB RAM可用)
 
 #
+# ./src/arch/rpi/rpi_audio.c
+#
+id: Analog
+msg: 模拟
+
+id: Audio output port
+msg: 音频输出端口
+
+id: HDMI
+msg: HDMI
+
+#
 # ./src/arch/rpi/rpi_cec.c
 #
 id: Configure how Showtime communicates with your TV
@@ -505,6 +538,72 @@ msg: 配置Showtime和电视的交互
 
 id: Consumer Electronics Control
 msg: 消费型电子产品控制
+
+#
+# ./src/audio2/audio.c
+#
+id: Audio delay
+msg: 音频延迟
+
+id: Audio gain adjustment during video playback
+msg: 视频播放时的音频增益调节
+
+id: Audio settings during video playback
+msg: 视频播放时的音频设置
+
+id: Setup audio output
+msg: 设置音频输出
+
+#
+# ./src/audio2/audio_test.c
+#
+id: 440Hz sinewave -12dB
+msg: 440Hz正弦波 -12dB
+
+id: Audio test
+msg: 音频测试
+
+id: Center
+msg: 居中
+
+id: Front Left
+msg: 左前
+
+id: Front Right
+msg: 右前
+
+id: LFE
+msg: 低音炮
+
+id: Pink noise
+msg: 粉红噪声
+
+id: Play test signal
+msg: 播放测试信号
+
+id: Rear Left
+msg: 左后环绕
+
+id: Rear Right
+msg: 右后环绕
+
+id: Speaker position
+msg: 音箱位置
+
+id: Surround Left
+msg: 左环绕
+
+id: Surround Right
+msg: 右环绕
+
+id: Test signal type
+msg: 测试信号类型
+
+#
+# ./src/audio2/pulseaudio.c
+#
+id: Unable to initialize audio system %s -- %s
+msg: 无法初始化音频系统%s -- %s
 
 #
 # ./src/backend/dvd/cdda.c
@@ -704,6 +803,9 @@ msg: 文件浏览
 id: Show filename extensions
 msg: 显示文件扩展名
 
+id: Store per-file settings in filesystem
+msg: 保存单文件设置到文件系统
+
 id: %d archive parts
 msg[0]: %d个分卷
 msg[1]: %d个分卷
@@ -785,14 +887,20 @@ msg: 记住已删除密码
 id: Align subtitles on video frame
 msg: 字幕显示在视频帧内
 
-id: Audio delay
-msg: 音频延迟
-
 id: Audio volume
 msg: 音量
 
 id: Go to standby after video ends
 msg: 视频播放结束后自动关机
+
+id: Reset defaults for folder '%s'
+msg: 恢复文件夹'%s'的默认设置
+
+id: Save as defaults for folder '%s'
+msg: 保存为文件夹'%s'的默认设置
+
+id: Save as global default
+msg: 保存为全局默认设置
 
 id: Stretch video to fullscreen
 msg: 拉升视频至全屏
@@ -811,6 +919,9 @@ msg: 字幕缩放
 
 id: Subtitle vertical displacement
 msg: 字幕垂直移位
+
+id: Video frame interpolation
+msg: 视频帧插值
 
 id: Video zoom
 msg: 视频缩放
@@ -842,26 +953,53 @@ msg: 元数据模式
 #
 # ./src/metadata/metadata.c
 #
-id: Custom search query
-msg: 设置搜索条件
-
-id: Custom title
-msg: 自定义标题
-
 id: Embedded in file
 msg: 文件内置
 
+id: Track %d
+msg: 轨道%d
+
+#
+# ./src/metadata/metadata_sources.c
+#
 id: Enabled
 msg: 启用
-
-id: IMDb ID
-msg: IMDb ID
 
 id: Metadata
 msg: 元信息
 
 id: Metadata configuration and provider settings
 msg: 元信息及元信息源设置
+
+id: Providers for Music
+msg: 音乐源
+
+id: Providers for Video
+msg: 视频源
+
+#
+# ./src/metadata/metadb.c
+#
+id: %d items deleted
+msg: 已删除%d条
+
+id: Clear all metadata
+msg: 清除所有元信息
+
+id: Clearing all metadata means losing <b>all</b> information about:\n\nIf a track/movie has been seen\nNumber of times a track/movie has been played\nPlayback resume position\n\nIt will also erase the metadata cached from external sources such as themoviedb.org, etc\n\nAre you sure you proceed?
+msg: 清除所有元信息意味着你将清除掉<b>所有</b>以下数据：\n\n音乐或视频是否已播放\n音乐或视频的播放次数\n播放位置记录\n从外部源（例如themoviedb.org等）缓存的元信息\n\n确认要继续吗？
+
+#
+# ./src/metadata/mlp.c
+#
+id: Custom search query
+msg: 设置搜索条件
+
+id: Custom title
+msg: 自定义标题
+
+id: IMDb ID
+msg: IMDb ID
 
 id: Metadata loaded from '%s' using %s
 msg: 已从'%s'使用%s下载元信息
@@ -884,23 +1022,11 @@ msg: 未找到数据
 id: None
 msg: 无
 
-id: Providers for Music
-msg: 音乐源
-
-id: Providers for Video
-msg: 视频源
-
-id: Providers for Video
-msg: 视频提供商
-
 id: Refresh metadata
 msg: 更新元信息
 
 id: Title, Season, Episode
 msg: 片名，季，集
-
-id: Track %d
-msg: 轨道%d
 
 id: custom IMDb ID
 msg: 设置IMDb ID
@@ -916,18 +1042,6 @@ msg: 电视剧集文件名
 
 id: folder name
 msg: 目录名
-
-#
-# ./src/metadata/metadb.c
-#
-id: %d items deleted
-msg: 已删除%d条
-
-id: Clear all metadata
-msg: 清除所有元信息
-
-id: Clearing all metadata means losing <b>all</b> information about:\n\nIf a track/movie has been seen\nNumber of times a track/movie has been played\nPlayback resume position\n\nIt will also erase the metadata cached from external sources such as themoviedb.org, etc\n\nAre you sure you proceed?
-msg: 清除所有元信息意味着你将清除掉<b>所有</b>以下数据：\n\n音乐或视频是否已播放\n音乐或视频的播放次数\n播放位置记录\n从外部源（例如themoviedb.org等）缓存的元信息\n\n确认要继续吗？
 
 #
 # ./src/navigator.c
@@ -1019,9 +1133,6 @@ msg: 云服务
 id: Corrupt plugin bundle
 msg: 损坏的插件包
 
-id: Default
-msg: 默认
-
 id: Disk write error
 msg: 磁盘写入错误
 
@@ -1063,6 +1174,9 @@ msg: 未安装
 
 id: Not upgradable
 msg: 不可升级
+
+id: On Screen Keyboards
+msg: 屏幕（软）键盘
 
 id: Online TV
 msg: 在线电视
@@ -1201,9 +1315,6 @@ msg: 自动
 
 id: Automatically select from this source
 msg: 自动选择
-
-id: Center
-msg: 居中
 
 id: Central subtitle folder
 msg: 字幕主文件夹
@@ -1382,6 +1493,12 @@ msg: 未发现服务
 #
 # ./src/video/ps3_vdec.c
 #
+id: Cell-h264: %d Ref-frames for 1080 content is incompatible with PS3 HW decoder. Disabling acceleration
+msg: Cell-h264: PS3硬件不兼容1080p内容的%d帧引用，将禁用硬件加速。
+
+id: Cell-h264: Broken headers, Disabling acceleration
+msg: 头信息破损，将禁用硬件加速。
+
 id: Cell-h264: Forcing level 4.2 for content in level %d.%d. This may break video playback.
 msg: Cell-h264: 强制级别%d.%d的内容为级别4.2。可能会影响播放。
 

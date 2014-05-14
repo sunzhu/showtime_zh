@@ -102,9 +102,12 @@ static const struct {
   { "video/quicktime", "mov" },
   { "video/mp4", "mp4" },
   { "video/x-msvideo", "avi" },
-  { "video/vnd.dlna.mpeg-tts,", "mpegts" },
+  { "video/MP2T", "mpegts" },
+  { "video/mpeg", "mpegts" },
+  { "video/vnd.dlna.mpeg-tts", "mpegts" },
   { "video/avi", "avi" },
   { "video/nsv", "nsv" },
+  { "video/webm", "webm" },
   { "audio/x-mpeg", "mp3" },
   { "audio/mpeg", "mp3" },
   { "application/ogg", "ogg" },
@@ -131,14 +134,14 @@ fa_libav_open_format(AVIOContext *avio, const char *url,
     int i;
 
     for(i = 0; i < sizeof(mimetype2fmt) / sizeof(mimetype2fmt[0]); i++) {
-      if(!strcmp(mimetype, mimetype2fmt[i].mimetype)) {
+      if(!strcasecmp(mimetype, mimetype2fmt[i].mimetype)) {
 	fmt = av_find_input_format(mimetype2fmt[i].fmt);
 	break;
       }
     }
     if(fmt == NULL)
-      TRACE(TRACE_DEBUG, "probe", "Don't know mimetype %s, probing instead",
-	    mimetype);
+      TRACE(TRACE_DEBUG, "probe", "%s: Don't know mimetype %s, probing instead",
+	    url, mimetype);
   }
 
   if(fmt == NULL) {
@@ -150,6 +153,7 @@ fa_libav_open_format(AVIOContext *avio, const char *url,
       snprintf(errbuf, errlen, "Unknown file format");
       return NULL;
     }
+    TRACE(TRACE_DEBUG, "probe", "%s: Probed as %s", url, fmt->name);
   }
 
   fctx = avformat_alloc_context();

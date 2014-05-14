@@ -60,6 +60,10 @@
 
 
 
+#define MB_EOF ((void *)-1)
+#define MB_NYA ((void *)-2)
+
+
 TAILQ_HEAD(hls_variant_queue, hls_variant);
 TAILQ_HEAD(hls_segment_queue, hls_segment);
 
@@ -165,6 +169,8 @@ typedef struct hls_demuxer {
 
   int64_t hd_delta_ts;
 
+  media_codec_t *hd_audio_codec;
+
 } hls_demuxer_t;
 
 /**
@@ -178,7 +184,6 @@ typedef struct hls {
   media_pipe_t *h_mp;
 
   media_codec_t *h_codec_h264;
-  media_codec_t *h_codec_aac;
 
   AVInputFormat *h_fmt;
 
@@ -604,7 +609,7 @@ typedef enum {
  *
  */
 static segment_open_result_t
-segment_open(hls_t *h, hls_segment_t *hs, int fast_fail)
+segment_open(hls_t *h, hls_demuxer_t *hd, hls_segment_t *hs, int fast_fail)
 {
   int err, j;
   fa_handle_t *fh;
@@ -692,10 +697,23 @@ segment_open(hls_t *h, hls_segment_t *hs, int fast_fail)
       break;
 
     case AVMEDIA_TYPE_AUDIO:
-      if(hs->hs_astream == -1 && ctx->codec_id == AV_CODEC_ID_AAC)
-	hs->hs_astream = j;
+      if(hs->hs_astream != -1)
+        break;
+
+      hs->hs_astream = j;
+
+      if(hd->hd_audio_codec != NULL &&
+         hd->hd_audio_codec->codec_id == ctx->codec_id)
+        break;
+
+
+      if(hd->hd_audio_codec != NULL)
+        media_codec_deref(hd->hd_audio_codec);
+
+      hd->hd_audio_codec = media_codec_create(ctx->codec_id,
+                                              0, NULL, NULL, NULL, h->h_mp);
       break;
-	
+
     default:
       break;
     }
@@ -817,7 +835,7 @@ demuxer_get_segment(hls_t *h, hls_demuxer_t *hd)
     // If we're not playing from the seek segment (ie. our "fallback" segment)
     // we ask for fast fail so we can retry with another segment
 
-    segment_open_result_t rcode = segment_open(h, hs, hv != hd->hd_seek);
+    segment_open_result_t rcode = segment_open(h, hd, hs, hv != hd->hd_seek);
 
     switch(rcode) {
     case SEGMENT_OPEN_OK:
@@ -893,84 +911,27 @@ demuxer_get_segment(hls_t *h, hls_demuxer_t *hd)
  *
  */
 static void
-hls_seek(hls_t *h, int64_t pts, int64_t ts, int initial)
+hls_seek(hls_t *h, int64_t pts, int64_t ts, int initial, media_buf_t **mbp)
 {
   hls_demuxer_t *hd = &h->h_primary;
-  mp_flush(h->h_mp, 0);
+  media_pipe_t *mp = h->h_mp;
+  mp_flush(mp, 0);
 
-  h->h_mp->mp_video.mq_seektarget = pts;
-  h->h_mp->mp_audio.mq_seektarget = pts;
+  mp->mp_video.mq_seektarget = pts;
+  mp->mp_audio.mq_seektarget = pts;
   hd->hd_seek_to = ts;
   hd->hd_seek_initial = initial;
-  prop_set(h->h_mp->mp_prop_root, "seektime", PROP_SET_FLOAT, ts / 1000000.0);
-}
+  prop_set(mp->mp_prop_root, "seektime", PROP_SET_FLOAT, ts / 1000000.0);
 
+  if(mbp != NULL) {
+    media_buf_t *mb = *mbp;
+    if(mb != NULL && mb != MB_EOF && mb != MB_NYA)
+      media_buf_free_unlocked(mp, mb);
 
-#if 0
-/**
- *
- */
-static hls_variant_t *
-pick_variant(hls_t *h, int bw, int64_t buffer_depth, int td)
-{
-  hls_variant_t *hv;
-  float f;
-
-  int bd = buffer_depth / 1000000LL;
-
-  printf("-- Estimated bandwidth: %d buffer depth: %d seconds\n", bw, bd);
-
-  TAILQ_FOREACH(hv, &h->h_variants, hv_link) {
-
-    if(bd) {
-      f = (0.1 * bd) / (hv->hv_target_duration ?: td);
-      printf("\t\tf=%f\n", f);
-    } else {
-      f = 0.75;
-    }
-
-    f = MAX(0.1, MIN(f, 2.0));
-    printf("\tBW:%d factor:%f  comparing with:%d\n", hv->hv_bitrate, f,
-	   (int)(bw * f));
-
-    if(hv->hv_bitrate < bw * f)
-      break;
+    *mbp = NULL;
   }
-  if(hv == NULL)
-     hv = h->h_seek;
-  
-  return hv;
 }
 
-
-/**
- *
- */
-static hls_variant_t *
-pick_variant(hls_t *h, int bw, int64_t buffer_depth, int td)
-{
-  hls_variant_t *hv;
-
-  //  int bd = buffer_depth / 1000000LL;
-
-  //  printf("-- Estimated bandwidth: %d buffer depth: %d seconds\n", bw, bd);
-
-  TAILQ_FOREACH(hv, &h->h_variants, hv_link) {
-
-    int dltime = (hv->hv_target_duration ?: td) * hv->hv_bitrate / 8;
-    //    printf("\tBW: %d estimated download time: %d\n", hv->hv_bitrate, dltime);
-	   
-    if(3 * dltime < buffer_depth)
-      break;
-  }
-  if(hv == NULL)
-     hv = h->h_seek;
-  
-  return hv;
-}
-
-
-#endif
 
 
 /**
@@ -1045,10 +1006,6 @@ demuxer_select_variant(hls_t *h, hls_demuxer_t *hd)
 }
 
 
-#define MB_EOF ((void *)-1)
-#define MB_NYA ((void *)-2)
-
-
 
 /**
  *
@@ -1120,7 +1077,7 @@ hls_play(hls_t *h, media_pipe_t *mp, char *errbuf, size_t errlen,
     int64_t start = playinfo_get_restartpos(canonical_url) * 1000;
     if(start) {
       mp->mp_seek_base = start;
-      hls_seek(h, start, start, 1);
+      hls_seek(h, start, start, 1, NULL);
     }
   }
 
@@ -1186,7 +1143,7 @@ hls_play(hls_t *h, media_pipe_t *mp, char *errbuf, size_t errlen,
         mb->mb_data_type = MB_AUDIO;
         mq = &mp->mp_audio;
 
-        mb->mb_cw = media_codec_ref(h->h_codec_aac);
+        mb->mb_cw = media_codec_ref(hd->hd_audio_codec);
         mb->mb_stream = 1;
 
       } else {
@@ -1198,14 +1155,13 @@ hls_play(hls_t *h, media_pipe_t *mp, char *errbuf, size_t errlen,
       mb->mb_pts = rescale(hs->hs_fctx, pkt.pts, si);
       mb->mb_dts = rescale(hs->hs_fctx, pkt.dts, si);
 
-      if(mq->mq_seektarget != AV_NOPTS_VALUE &&
-         mb->mb_data_type != MB_SUBTITLE) {
+      if(mq->mq_seektarget != AV_NOPTS_VALUE) {
         int64_t ts;
         ts = mb->mb_pts != AV_NOPTS_VALUE ? mb->mb_pts : mb->mb_dts;
+
         if(ts < mq->mq_seektarget) {
           mb->mb_skip = 1;
         } else {
-          mb->mb_skip = 2;
           mq->mq_seektarget = AV_NOPTS_VALUE;
         }
       }
@@ -1272,14 +1228,8 @@ hls_play(hls_t *h, media_pipe_t *mp, char *errbuf, size_t errlen,
 
     } else if(event_is_type(e, EVENT_SEEK)) {
 
-      if(mb != NULL && mb != MB_EOF && mb != MB_NYA)
-	media_buf_free_unlocked(mp, mb);
-
-      mb = NULL;
-
       event_ts_t *ets = (event_ts_t *)e;
-
-      hls_seek(h, ets->ts + hd->hd_delta_ts, ets->ts, 0);
+      hls_seek(h, ets->ts + hd->hd_delta_ts, ets->ts, 0, &mb);
 
     } else if(event_is_action(e, ACTION_STOP)) {
       mp_set_playstatus_stop(mp);
@@ -1287,6 +1237,14 @@ hls_play(hls_t *h, media_pipe_t *mp, char *errbuf, size_t errlen,
     } else if(event_is_type(e, EVENT_SELECT_SUBTITLE_TRACK)) {
       event_select_track_t *est = (event_select_track_t *)e;
       select_subtitle_track(mp, est->id);
+
+    } else if(event_is_action(e, ACTION_SKIP_FORWARD)) {
+      break;
+    } else if(event_is_action(e, ACTION_SKIP_BACKWARD)) {
+
+      if(mp->mp_seek_base < MP_SKIP_LIMIT)
+	break;
+      hls_seek(h, hd->hd_delta_ts, 0, 0, &mb);
 
     } else if(event_is_type(e, EVENT_EXIT) ||
 	      event_is_type(e, EVENT_PLAY_URL)) {
@@ -1465,6 +1423,17 @@ hls_demuxer_init(hls_demuxer_t *hd)
 /**
  *
  */
+static void
+hls_demuxer_close(hls_demuxer_t *hd)
+{
+  variants_destroy(&hd->hd_variants);
+  if(hd->hd_audio_codec != NULL)
+    media_codec_deref(hd->hd_audio_codec);
+}
+
+/**
+ *
+ */
 event_t *
 hls_play_extm3u(char *buf, const char *url, media_pipe_t *mp,
 		char *errbuf, size_t errlen,
@@ -1487,7 +1456,6 @@ hls_play_extm3u(char *buf, const char *url, media_pipe_t *mp,
   h.h_baseurl = url;
   h.h_fmt = av_find_input_format("mpegts");
   h.h_codec_h264 = media_codec_create(AV_CODEC_ID_H264, 0, NULL, NULL, NULL, mp);
-  h.h_codec_aac  = media_codec_create(AV_CODEC_ID_AAC,  0, NULL, NULL, NULL, mp);
   h.h_debug = gconf.enable_hls_debug;
 
   hls_variant_t *hv = NULL;
@@ -1522,10 +1490,9 @@ hls_play_extm3u(char *buf, const char *url, media_pipe_t *mp,
 
   event_t *e = hls_play(&h, mp, errbuf, errlen, va0);
 
-  variants_destroy(&h.h_primary.hd_variants);
+  hls_demuxer_close(&h.h_primary);
 
   media_codec_deref(h.h_codec_h264);
-  media_codec_deref(h.h_codec_aac);
 
   HLS_TRACE(&h, "HLS player done");
 
