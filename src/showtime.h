@@ -251,7 +251,8 @@ typedef struct gconf {
   int enable_kvstore_debug;
   int enable_icecast_debug;
   int enable_image_debug;
-  int enable_conditional_rendering;
+  int enable_settings_debug;
+  int enable_thread_debug;
 
   const char *devplugin;
   const char *plugin_repo;

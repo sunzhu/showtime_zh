@@ -43,6 +43,9 @@ msg: Salir de Showtime
 id: Go to Home screen
 msg: Ir a Pantalla Principal
 
+id: Hide system info
+msg: Ocultar información del sistema
+
 id: Navigation
 msg: Navegación
 
@@ -57,6 +60,9 @@ msg: Apagar
 
 id: Reload current page
 msg: Recargar Página actual
+
+id: Show system info
+msg: Ver información del sistema
 
 id: Suspend
 msg: Suspender
@@ -156,6 +162,24 @@ msg: Ajustes de video
 #
 id: System log
 msg: Registro de Sistema
+
+#
+# ./glwskins/default/osk.view
+#
+id: Cancel
+msg: Cancelar
+
+id: Clear
+msg: Borrar
+
+id: Default
+msg: Por defecto
+
+id: Keyboard layout:
+msg: Teclado:
+
+id: OK
+msg: OK
 
 #
 # ./glwskins/default/pages/directory.view
@@ -324,7 +348,7 @@ id: Available version:
 msg: Versión disponible:
 
 id: Changelog for %s releases
-msg: Registro de cambios para las versiones %s
+msg: Registro de cambios para las versiones del repositorio '%s'
 
 id: Check for updates now
 msg: Buscar actualizaciones ahora
@@ -387,6 +411,12 @@ id: Playback status
 msg: Estatus de reproducción
 
 #
+# ./glwskins/default/pages/wideinfo/video.view
+#
+id: Seen:
+msg: Visto:
+
+#
 # ./glwskins/default/playdecks/dvd.view
 #
 id: Chapter: %d
@@ -409,15 +439,6 @@ msg: Recordarme
 
 id: Username
 msg: Nombre de Usuario
-
-#
-# ./glwskins/default/popups/common.view
-#
-id: Cancel
-msg: Cancelar
-
-id: OK
-msg: OK
 
 #
 # ./glwskins/default/screensaver.view
@@ -498,6 +519,18 @@ id: System is low on memory (%d kB RAM available)
 msg: Sistema con baja memoria (%d kB RAM disponible)
 
 #
+# ./src/arch/rpi/rpi_audio.c
+#
+id: Analog
+msg: Análogo
+
+id: Audio output port
+msg: Puerto de salida de audio
+
+id: HDMI
+msg: HDMI
+
+#
 # ./src/arch/rpi/rpi_cec.c
 #
 id: Configure how Showtime communicates with your TV
@@ -505,6 +538,72 @@ msg: Configurar cómo Showtime se comunica con su TV
 
 id: Consumer Electronics Control
 msg: Consumer Electronics Control
+
+#
+# ./src/audio2/audio.c
+#
+id: Audio delay
+msg: Retraso de audio
+
+id: Audio gain adjustment during video playback
+msg: Incremento en el volumen durante la reproducción del video
+
+id: Audio settings during video playback
+msg: Ajustes del audio durante la reproducción del video
+
+id: Setup audio output
+msg: Ajustar la salida de audio
+
+#
+# ./src/audio2/audio_test.c
+#
+id: 440Hz sinewave -12dB
+msg: Sonido de onda sinusoidal de 440Hz -12dB
+
+id: Audio test
+msg: Probar audio
+
+id: Center
+msg: Centro
+
+id: Front Left
+msg: Frontal Izquierdo
+
+id: Front Right
+msg: Frontal Derecho
+
+id: LFE
+msg: Efectos de baja frecuencia (LFE)
+
+id: Pink noise
+msg: Ruido rosa
+
+id: Play test signal
+msg: Reproducir señal de prueba
+
+id: Rear Left
+msg: Trasero Izquierdo
+
+id: Rear Right
+msg: Trasero Derecho
+
+id: Speaker position
+msg: Posición de altavoces
+
+id: Surround Left
+msg: Sonido envolvente Izquierdo
+
+id: Surround Right
+msg: Sonido envolvente Derecho
+
+id: Test signal type
+msg: Tipo de señal de prueba
+
+#
+# ./src/audio2/pulseaudio.c
+#
+id: Unable to initialize audio system %s -- %s
+msg: No se pudo inicializar el sistema de audio %s -- %s
 
 #
 # ./src/backend/dvd/cdda.c
@@ -704,6 +803,9 @@ msg: Exploración de archivos
 id: Show filename extensions
 msg: Mostrar extensiones de archivos 
 
+id: Store per-file settings in filesystem
+msg: Guardar ajustes de cada archivo en el sistema
+
 id: %d archive parts
 msg[0]: %d parte de archivo
 msg[1]: %d partes de archivo
@@ -785,14 +887,20 @@ msg: Recordar contraseñas borradas
 id: Align subtitles on video frame
 msg: Alinear subtítulos en cuadro de video
 
-id: Audio delay
-msg: Retraso de audio
-
 id: Audio volume
 msg: Volumen del audio
 
 id: Go to standby after video ends
 msg: Apagar equipo al finalizar el video
+
+id: Reset defaults for folder '%s'
+msg: Restaurar ajustes predeterminados para la carpeta '%s'
+
+id: Save as defaults for folder '%s'
+msg: Guardar como ajustes predeterminados para la carpeta '%s'
+
+id: Save as global default
+msg: Guardar como ajustes predeterminados globales
 
 id: Stretch video to fullscreen
 msg: Estirar video a pantalla completa
@@ -811,6 +919,9 @@ msg: Escala de subtítulos
 
 id: Subtitle vertical displacement
 msg: Desplazamiento vertical del subtítulo
+
+id: Video frame interpolation
+msg: Interpolar fotogramas de video
 
 id: Video zoom
 msg: Zoom de Video
@@ -842,26 +953,53 @@ msg: Modo metadatos
 #
 # ./src/metadata/metadata.c
 #
+id: Embedded in file
+msg: Incluído en archivo
+
+id: Track %d
+msg: Pista %d
+
+#
+# ./src/metadata/metadata_sources.c
+#
+id: Enabled
+msg: Habilitado
+
+id: Metadata
+msg: Metadatos
+
+id: Metadata configuration and provider settings
+msg: Configurar Metadatos y ajustes de proveedor
+
+id: Providers for Music
+msg: Proveedores para Música
+
+id: Providers for Video
+msg: Proveedores para Video
+
+#
+# ./src/metadata/metadb.c
+#
+id: %d items deleted
+msg: %d items borrados
+
+id: Clear all metadata
+msg: Limpiar todos los metadatos
+
+id: Clearing all metadata means losing <b>all</b> information about:\n\nIf a track/movie has been seen\nNumber of times a track/movie has been played\nPlayback resume position\n\nIt will also erase the metadata cached from external sources such as themoviedb.org, etc\n\nAre you sure you proceed?
+msg: Limpiar todos los metadatos significa perder <b>toda</b> la información acerca:\n\nSi una canción/película ha sido vista\nNúmero de veces que una cancion/película ha sido reproducida\nPosición de resumen de reproducción\n\nTambién será borrado el cache de los metadatos provenientes de fuentes externas como themoviedb.org, etc\n\nEstá seguro de proceder?
+
+#
+# ./src/metadata/mlp.c
+#
 id: Custom search query
 msg: Búsqueda personalizada
 
 id: Custom title
 msg: Título personalizado
 
-id: Embedded in file
-msg: Incluído en archivo
-
-id: Enabled
-msg: Habilitado
-
 id: IMDb ID
 msg: Usuario IMDb
-
-id: Metadata
-msg: Metadatos
-
-id: Metadata configuration and provider settings
-msg: configurar Metadatos y ajustes de proveedor
 
 id: Metadata loaded from '%s' using %s
 msg: Metadatos cargados de '%s' usando %s
@@ -884,20 +1022,11 @@ msg: No se encontraron datos
 id: None
 msg: Ninguno
 
-id: Providers for Music
-msg: Proveedores para Música
-
-id: Providers for Video
-msg: Proveedores para Video
-
 id: Refresh metadata
 msg: Refrescar Metadatos
 
 id: Title, Season, Episode
 msg: Título, Temporada, Episodio
-
-id: Track %d
-msg: Pista %d
 
 id: custom IMDb ID
 msg: Usuario actual IMDb
@@ -913,18 +1042,6 @@ msg: Nombre de episodio
 
 id: folder name
 msg: Nombre de carpeta
-
-#
-# ./src/metadata/metadb.c
-#
-id: %d items deleted
-msg: %d items borrados
-
-id: Clear all metadata
-msg: Limpiar todos los metadatos
-
-id: Clearing all metadata means losing <b>all</b> information about:\n\nIf a track/movie has been seen\nNumber of times a track/movie has been played\nPlayback resume position\n\nIt will also erase the metadata cached from external sources such as themoviedb.org, etc\n\nAre you sure you proceed?
-msg: Limpiar todos los metadatos significa perder <b>toda</b> la información acerca:\n\nSi una canción/película ha sido vista\nNúmero de veces que una cancion/película ha sido reproducida\nPosición de resumen de reproducción\n\nTambién será borrado el cache de los metadatos provenientes de fuentes externas como themoviedb.org, etc\n\nEstá seguro de proceder?
 
 #
 # ./src/navigator.c
@@ -1016,9 +1133,6 @@ msg: Servicios en la nube
 id: Corrupt plugin bundle
 msg: Paquete de plugin corrupto
 
-id: Default
-msg: Por defecto
-
 id: Disk write error
 msg: Error en escritura al disco
 
@@ -1060,6 +1174,9 @@ msg: No instalado
 
 id: Not upgradable
 msg: No actualizable
+
+id: On Screen Keyboards
+msg: Teclados de pantalla
 
 id: Online TV
 msg: TV en línea
@@ -1152,7 +1269,7 @@ id: Applications and installed plugins
 msg: Aplicaciones y plugins instalados
 
 id: Developer settings
-msg: Ajustes de desarrolladores
+msg: Ajustes para desarrolladores
 
 id: Discovered media sources
 msg: Medios Encontrados
@@ -1198,9 +1315,6 @@ msg: Automático
 
 id: Automatically select from this source
 msg: Seleccionar automáticamente
-
-id: Center
-msg: Centrado
 
 id: Central subtitle folder
 msg: Carpeta Central de Subtítulos
@@ -1302,7 +1416,7 @@ id: Seek using L2 and R2 button
 msg: Buscar usando botones L2 y R2
 
 id: Yes with Select button
-msg: Sí con botón Select
+msg: Sí con botón SELECT
 
 #
 # ./src/ui/glw/glw_settings.c
@@ -1379,6 +1493,12 @@ msg: Servicio no encontrado
 #
 # ./src/video/ps3_vdec.c
 #
+id: Cell-h264: %d Ref-frames for 1080 content is incompatible with PS3 HW decoder. Disabling acceleration
+msg: Cell-h264: %d Ref-frames para contenido 1080 es incompatible con el decodificador PS3. Inactivando aceleración
+
+id: Cell-h264: Broken headers, Disabling acceleration
+msg: Cell-h264: Cabeceras dañadas. Inactivando aceleración
+
 id: Cell-h264: Forcing level 4.2 for content in level %d.%d. This may break video playback.
 msg: Cell-h264: Forzando nivel 4.2 para contenido en nivel %d.%d. Puede impedir reproducir el video.
 
