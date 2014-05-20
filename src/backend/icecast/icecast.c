@@ -142,16 +142,13 @@ static void
 parse_xspf(icecast_play_context_t *ipc, buf_t *b)
 {
   char errbuf[512];
-  htsmsg_t *m = htsmsg_xml_deserialize_buf2(b, errbuf, sizeof(errbuf));
+  htsmsg_t *m = htsmsg_xml_deserialize_buf(b, errbuf, sizeof(errbuf));
   if(m == NULL) {
     TRACE(TRACE_ERROR, "Radio", "Unable to parse XSPF -- %s", errbuf);
     return;
   }
 
-  htsmsg_t *list = htsmsg_get_map_multi(m,
-                                        "tags", "playlist",
-                                        "tags", "trackList",
-                                        "tags", NULL);
+  htsmsg_t *list = htsmsg_get_map_multi(m, "playlist", "trackList", NULL);
 
   if(list != NULL) {
     htsmsg_field_t *f;
@@ -159,14 +156,12 @@ parse_xspf(icecast_play_context_t *ipc, buf_t *b)
       htsmsg_t *t;
       if((t = htsmsg_get_map_by_field_if_name(f, "track")) == NULL)
         continue;
-      if((t = htsmsg_get_map(t, "tags")) == NULL)
-        continue;
-      const char *loc = htsmsg_get_cdata(t, "location");
+      const char *loc = htsmsg_get_str(t, "location");
       if(loc != NULL)
         add_source(ipc, loc);
     }
   }
-  htsmsg_destroy(m);
+  htsmsg_release(m);
 }
 
 
