@@ -17,6 +17,7 @@
 $ui.showplaydeck = $self.media.stats || changed($self.media.seektime, 5, true);
 
 $clone.menu = "skin://cmdmenu/cmdmenu_video.view";
+$clone.menuPage = 0;
 
 $self.directClose = 1;
 
@@ -49,7 +50,15 @@ widget(container_z, {
 	spacing: 4;
 	padding: 20;
 	align: top;
-	  
+
+	widget(container_x, {
+	  hidden: select($self.media.error, false, true);
+	  widget(label, {
+	    OSD();
+	    caption: $self.media.metadata.title;
+	  });
+	});
+
 	widget(container_x, {
 	  hidden: select($self.media.error, false, true);
 	  widget(icon, {

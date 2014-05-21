@@ -45,6 +45,10 @@
 
 #define MAX_USER_AUDIO_GAIN 12 // dB
 
+
+#define MP_SKIP_LIMIT 3000000 /* µs that must before a skip back is
+				 actually considered a restart */
+
 struct AVCodecContext;
 
 static LIST_HEAD(, codec_def) registeredcodecs;
@@ -587,7 +591,7 @@ mp_settings_init(media_pipe_t *mp, const char *url, const char *dir_url,
 
   TRACE(TRACE_DEBUG, "media",
         "Settings initialized for URL %s in folder: %s [%s]",
-        url, parent_title, dir_url);
+        url, parent_title ?: "<unset>", dir_url ?: "<unset>");
 
   if(dir_url != NULL) {
     rstr_t *fmt;
@@ -662,7 +666,9 @@ mp_settings_init(media_pipe_t *mp, const char *url, const char *dir_url,
                    NULL);
   }
 
-  settings_create_separator(mp->mp_setting_video_root, NULL);
+  setting_create(SETTING_SEPARATOR, mp->mp_setting_video_root, 0,
+                 SETTING_GROUP(&mp->mp_settings_video),
+                 NULL);
 
   setting_create(SETTING_ACTION, mp->mp_setting_video_root, 0,
                  SETTING_TITLE(_p("Save as global default")),
@@ -671,19 +677,21 @@ mp_settings_init(media_pipe_t *mp, const char *url, const char *dir_url,
                  SETTING_GROUP(&mp->mp_settings_video),
                  NULL);
 
-  setting_create(SETTING_ACTION, mp->mp_setting_video_root, 0,
-                 SETTING_TITLE_CSTR(set_directory_title),
-                 SETTING_COURIER(mp->mp_pc),
-                 SETTING_CALLBACK(set_video_directory_defaults, mp),
-                 SETTING_GROUP(&mp->mp_settings_video),
-                 NULL);
+  if(dir_url != NULL) {
+    setting_create(SETTING_ACTION, mp->mp_setting_video_root, 0,
+                   SETTING_TITLE_CSTR(set_directory_title),
+                   SETTING_COURIER(mp->mp_pc),
+                   SETTING_CALLBACK(set_video_directory_defaults, mp),
+                   SETTING_GROUP(&mp->mp_settings_video),
+                   NULL);
 
-  setting_create(SETTING_ACTION, mp->mp_setting_video_root, 0,
-                 SETTING_TITLE_CSTR(clr_directory_title),
-                 SETTING_COURIER(mp->mp_pc),
-                 SETTING_CALLBACK(clr_video_directory_defaults, mp),
-                 SETTING_GROUP(&mp->mp_settings_video),
-                 NULL);
+    setting_create(SETTING_ACTION, mp->mp_setting_video_root, 0,
+                   SETTING_TITLE_CSTR(clr_directory_title),
+                   SETTING_COURIER(mp->mp_pc),
+                   SETTING_CALLBACK(clr_video_directory_defaults, mp),
+                   SETTING_GROUP(&mp->mp_settings_video),
+                   NULL);
+  }
 
   // --- Audio ---------------------------------------------
 
@@ -722,7 +730,9 @@ mp_settings_init(media_pipe_t *mp, const char *url, const char *dir_url,
                  SETTING_INHERIT(p),
                  NULL);
 
-  settings_create_separator(mp->mp_setting_audio_root, NULL);
+  setting_create(SETTING_SEPARATOR, mp->mp_setting_audio_root, 0,
+                 SETTING_GROUP(&mp->mp_settings_audio),
+                 NULL);
 
   setting_create(SETTING_ACTION, mp->mp_setting_audio_root, 0,
                  SETTING_TITLE(_p("Save as global default")),
@@ -731,19 +741,21 @@ mp_settings_init(media_pipe_t *mp, const char *url, const char *dir_url,
                  SETTING_GROUP(&mp->mp_settings_audio),
                  NULL);
 
-  setting_create(SETTING_ACTION, mp->mp_setting_audio_root, 0,
-                 SETTING_TITLE_CSTR(set_directory_title),
-                 SETTING_COURIER(mp->mp_pc),
-                 SETTING_CALLBACK(set_audio_directory_defaults, mp),
-                 SETTING_GROUP(&mp->mp_settings_audio),
-                 NULL);
+  if(dir_url != NULL) {
+    setting_create(SETTING_ACTION, mp->mp_setting_audio_root, 0,
+                   SETTING_TITLE_CSTR(set_directory_title),
+                   SETTING_COURIER(mp->mp_pc),
+                   SETTING_CALLBACK(set_audio_directory_defaults, mp),
+                   SETTING_GROUP(&mp->mp_settings_audio),
+                   NULL);
 
-  setting_create(SETTING_ACTION, mp->mp_setting_audio_root, 0,
-                 SETTING_TITLE_CSTR(clr_directory_title),
-                 SETTING_COURIER(mp->mp_pc),
-                 SETTING_CALLBACK(clr_audio_directory_defaults, mp),
-                 SETTING_GROUP(&mp->mp_settings_audio),
-                 NULL);
+    setting_create(SETTING_ACTION, mp->mp_setting_audio_root, 0,
+                   SETTING_TITLE_CSTR(clr_directory_title),
+                   SETTING_COURIER(mp->mp_pc),
+                   SETTING_CALLBACK(clr_audio_directory_defaults, mp),
+                   SETTING_GROUP(&mp->mp_settings_audio),
+                   NULL);
+  }
 
 
   // --- Subtitle ------------------------------------------
@@ -827,7 +839,9 @@ mp_settings_init(media_pipe_t *mp, const char *url, const char *dir_url,
                  SETTING_INHERIT(p),
                  NULL);
 
-  settings_create_separator(mp->mp_setting_subtitle_root, NULL);
+  setting_create(SETTING_SEPARATOR, mp->mp_setting_subtitle_root, 0,
+                 SETTING_GROUP(&mp->mp_settings_subtitle),
+                 NULL);
 
   setting_create(SETTING_ACTION, mp->mp_setting_subtitle_root, 0,
                  SETTING_TITLE(_p("Save as global default")),
@@ -836,19 +850,21 @@ mp_settings_init(media_pipe_t *mp, const char *url, const char *dir_url,
                  SETTING_GROUP(&mp->mp_settings_subtitle),
                  NULL);
 
-  setting_create(SETTING_ACTION, mp->mp_setting_subtitle_root, 0,
-                 SETTING_TITLE_CSTR(set_directory_title),
-                 SETTING_COURIER(mp->mp_pc),
-                 SETTING_CALLBACK(set_subtitle_directory_defaults, mp),
-                 SETTING_GROUP(&mp->mp_settings_subtitle),
-                 NULL);
+  if(dir_url != NULL) {
+    setting_create(SETTING_ACTION, mp->mp_setting_subtitle_root, 0,
+                   SETTING_TITLE_CSTR(set_directory_title),
+                   SETTING_COURIER(mp->mp_pc),
+                   SETTING_CALLBACK(set_subtitle_directory_defaults, mp),
+                   SETTING_GROUP(&mp->mp_settings_subtitle),
+                   NULL);
 
-  setting_create(SETTING_ACTION, mp->mp_setting_subtitle_root, 0,
-                 SETTING_TITLE_CSTR(clr_directory_title),
-                 SETTING_COURIER(mp->mp_pc),
-                 SETTING_CALLBACK(clr_subtitle_directory_defaults, mp),
-                 SETTING_GROUP(&mp->mp_settings_subtitle),
-                 NULL);
+    setting_create(SETTING_ACTION, mp->mp_setting_subtitle_root, 0,
+                   SETTING_TITLE_CSTR(clr_directory_title),
+                   SETTING_COURIER(mp->mp_pc),
+                   SETTING_CALLBACK(clr_subtitle_directory_defaults, mp),
+                   SETTING_GROUP(&mp->mp_settings_subtitle),
+                   NULL);
+  }
 
   // ----------------------------------------------------------------
 
@@ -1198,19 +1214,34 @@ mp_enqueue_event_locked(media_pipe_t *mp, event_t *e)
     track_mgr_next_track(&mp->mp_subtitle_track_mgr);
   } else {
 
+    // Forward event to player
+
+    if(event_is_action(e, ACTION_SKIP_BACKWARD) &&
+       mp->mp_seek_base >= MP_SKIP_LIMIT &&
+       mp->mp_flags & MP_CAN_SEEK) {
+
+      printf("skip backward becomes seek\n");
+
+      // Convert skip previous to track restart
+
+      mp_direct_seek(mp, 0);
+      return;
+    }
+
     if(event_is_type(e, EVENT_PLAYQUEUE_JUMP) ||
        event_is_action(e, ACTION_STOP) ||
        event_is_action(e, ACTION_SKIP_FORWARD) ||
-       (event_is_action(e, ACTION_SKIP_BACKWARD)
-        && !(mp->mp_flags & MP_CAN_SEEK))) {
-      if(mp->mp_cancellable != NULL)
+       event_is_action(e, ACTION_SKIP_BACKWARD)) {
+
+      if(mp->mp_cancellable != NULL) {
+        printf("cancelling\n");
         cancellable_cancel(mp->mp_cancellable);
+      }
     }
 
     atomic_add(&e->e_refcount, 1);
     TAILQ_INSERT_TAIL(&mp->mp_eq, e, e_link);
     hts_cond_signal(&mp->mp_backpressure);
-    return;
   }
 }
 
@@ -2084,38 +2115,48 @@ mp_set_duration(media_pipe_t *mp, int64_t duration)
     prop_set(mp->mp_prop_metadata_source, "duration", PROP_SET_FLOAT, d);
 }
 
+/**
+ *
+ */
+static void
+mp_set_clr_flags_locked(media_pipe_t *mp, int set, int clr)
+{
+  mp->mp_flags &= ~clr;
+  mp->mp_flags |= set;
+
+  prop_set_int(mp->mp_prop_canSeek,  mp->mp_flags & MP_CAN_SEEK  ? 1 : 0);
+  prop_set_int(mp->mp_prop_canPause, mp->mp_flags & MP_CAN_PAUSE ? 1 : 0);
+  prop_set_int(mp->mp_prop_canEject, mp->mp_flags & MP_CAN_EJECT ? 1 : 0);
+}
+
 
 /**
  *
  */
 void
-mp_configure(media_pipe_t *mp, int caps, int buffer_size, int64_t duration,
+mp_set_clr_flags(media_pipe_t *mp, int set, int clr)
+{
+  hts_mutex_lock(&mp->mp_mutex);
+  mp_set_clr_flags_locked(mp, set, clr);
+  hts_mutex_unlock(&mp->mp_mutex);
+}
+
+/**
+ *
+ */
+void
+mp_configure(media_pipe_t *mp, int flags, int buffer_size, int64_t duration,
              const char *type)
 {
   hts_mutex_lock(&mp->mp_mutex);
   mp->mp_max_realtime_delay = 0;
 
-  if(caps & MP_PLAY_CAPS_FLUSH_ON_HOLD)
-    mp->mp_flags |= MP_FLUSH_ON_HOLD;
-  else
-    mp->mp_flags &= ~MP_FLUSH_ON_HOLD;
-
-
-  if(caps & MP_PLAY_CAPS_ALWAYS_SATISFIED) {
-    mp->mp_flags |= MP_ALWAYS_SATISFIED;
-  } else {
-    mp->mp_flags &= ~MP_ALWAYS_SATISFIED;
-  }
-
-  if(caps & MP_PLAY_CAPS_SEEK) {
-    mp->mp_flags |= MP_CAN_SEEK;
-  } else {
-    mp->mp_flags &= ~MP_CAN_SEEK;;
-  }
-
-  prop_set_int(mp->mp_prop_canSeek,  caps & MP_PLAY_CAPS_SEEK  ? 1 : 0);
-  prop_set_int(mp->mp_prop_canPause, caps & MP_PLAY_CAPS_PAUSE ? 1 : 0);
-  prop_set_int(mp->mp_prop_canEject, caps & MP_PLAY_CAPS_EJECT ? 1 : 0);
+  mp_set_clr_flags_locked(mp, flags,
+                          MP_FLUSH_ON_HOLD |
+                          MP_ALWAYS_SATISFIED |
+                          MP_CAN_SEEK |
+                          MP_CAN_PAUSE |
+                          MP_CAN_EJECT);
 
   prop_set(mp->mp_prop_root, "type", PROP_SET_STRING, type);
 

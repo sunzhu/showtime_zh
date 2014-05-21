@@ -73,6 +73,14 @@ svg_mtx_scale(float *mtx, float x, float y)
 
 
 static void
+svg_mtx_translate(float *mtx, float x, float y)
+{
+  mtx[6] += mtx[0] * x + mtx[3] * y;
+  mtx[7] += mtx[4] * x + mtx[5] * y;
+}
+
+
+static void
 svg_mtx_vec_mul(float *dst, const float *mtx, const float *a)
 {
   dst[0] = mtx[0] * a[0] + mtx[3] * a[1] + mtx[6];
@@ -306,6 +314,38 @@ cmd_lineto_abs(svg_state_t *state, const float *p)
 }
 
 
+static void
+cmd_horizontal_rel(svg_state_t *state, const float *p)
+{
+  state->cur[0] += p[0];
+  cmd_lineto(state);
+}
+
+
+static void
+cmd_horizontal_abs(svg_state_t *state, const float *p)
+{
+  state->cur[0] = p[0];
+  cmd_lineto(state);
+}
+
+
+static void
+cmd_vertical_rel(svg_state_t *state, const float *p)
+{
+  state->cur[1] += p[0];
+  cmd_lineto(state);
+}
+
+
+static void
+cmd_vertical_abs(svg_state_t *state, const float *p)
+{
+  state->cur[1] = p[0];
+  cmd_lineto(state);
+}
+
+
 /**
  *
  */
@@ -393,6 +433,26 @@ stroke_path(svg_state_t *state, const char *str)
     case 'L':
       next_cmd = cur_cmd = cmd_lineto_abs;
       num_params = 2;
+      break;
+
+    case 'v':
+      next_cmd = cur_cmd = cmd_vertical_rel;
+      num_params = 1;
+      break;
+
+    case 'V':
+      next_cmd = cur_cmd = cmd_vertical_abs;
+      num_params = 1;
+      break;
+
+    case 'h':
+      next_cmd = cur_cmd = cmd_horizontal_rel;
+      num_params = 1;
+      break;
+
+    case 'H':
+      next_cmd = cur_cmd = cmd_horizontal_abs;
+      num_params = 1;
       break;
 
     case 'z':
@@ -513,8 +573,18 @@ svg_parse_element(const svg_state_t *s0, htsmsg_t *element,
     free(style);
   }
 
+  const char *fill = htsmsg_get_str(a, "fill");
+
+  if(fill != NULL) {
+    if(!strcmp(fill, "none"))
+      fill_color = 0;
+    else
+      fill_color = (fill_color & 0xff000000) | html_makecolor(fill);
+  }
+
   if(s.icv == NULL)
     return;
+
 
   const char *transform = htsmsg_get_str(a, "transform");
   if(transform != NULL)
@@ -595,8 +665,27 @@ svg_decode1(htsmsg_t *doc, const image_meta_t *im,
     return NULL;
   }
 
-  int orig_width  = htsmsg_get_u32_or_default(svg, "width", 0);
-  int orig_height = htsmsg_get_u32_or_default(svg, "height", 0);
+  float offset_x = 0, offset_y = 0;
+  int orig_width;
+  int orig_height;
+
+  const char *viewbox = htsmsg_get_str(svg, "viewBox");
+  if(viewbox != NULL) {
+    float x1 = my_str2double(viewbox, &viewbox);
+    float y1 = my_str2double(viewbox, &viewbox);
+    float x2 = my_str2double(viewbox, &viewbox);
+    float y2 = my_str2double(viewbox, &viewbox);
+    orig_width  = x2;
+    orig_height = y2;
+
+    offset_x = -x1;
+    offset_y = -y1;
+
+  } else {
+    orig_width  = htsmsg_get_u32_or_default(svg, "width", 0);
+    orig_height = htsmsg_get_u32_or_default(svg, "height", 0);
+  }
+
   if(orig_width < 1 || orig_height < 1) {
     snprintf(errbuf, errlen, "Invalid SVG dimensions (%d x %d)", 
 	     orig_width, orig_height);
@@ -621,6 +710,7 @@ svg_decode1(htsmsg_t *doc, const image_meta_t *im,
   state.scaling = (float)w / orig_width;
   svg_mtx_identity(state.ctm);
   svg_mtx_scale(state.ctm, (float)w / orig_width, (float)h / orig_height);
+  svg_mtx_translate(state.ctm, offset_x, offset_y);
 
   image_t *img = image_create_vector(w, h, im->im_margin);
   state.icv = &img->im_components[0].vector;
