@@ -1374,6 +1374,8 @@ zap_channel(htsp_connection_t *hc, htsp_subscription_t *hs,
   prop_ref_dec(hs->hs_origin);
   hs->hs_origin = next;
 
+  prop_suggest_focus(hs->hs_origin);
+
   htsmsg_release(m);
   set_channel(hc, hs, newch, name);
   return 0;
@@ -1440,7 +1442,7 @@ htsp_subscriber(htsp_connection_t *hc, htsp_subscription_t *hs,
   }
 
   if(htsmsg_get_u32_or_default(m, "timeshiftPeriod", 0))
-    mp_flags |= MP_PLAY_CAPS_PAUSE;
+    mp_flags |= MP_CAN_PAUSE;
 
   htsmsg_release(m);
 
@@ -1484,7 +1486,7 @@ htsp_subscriber(htsp_connection_t *hc, htsp_subscription_t *hs,
       htsmsg_release(m);      
 
 
-    } else if(mp_flags & MP_PLAY_CAPS_PAUSE && event_is_type(e, EVENT_HOLD)) {
+    } else if(mp_flags & MP_CAN_PAUSE && event_is_type(e, EVENT_HOLD)) {
 
       event_int_t *ei = (event_int_t *)e;
       int hold = ei->val;
