@@ -52,6 +52,7 @@ LDFLAGS += ${PGFLAGS}
 ##############################################################
 SRCS += src/showtime.c \
 	src/trace.c \
+	src/task.c \
 	src/runcontrol.c \
 	src/version.c \
 	src/navigator.c \
@@ -111,6 +112,7 @@ SRCS +=	src/image/image.c \
 # Misc support
 ##############################################################
 SRCS +=	src/misc/ptrvec.c \
+	src/misc/average.c \
 	src/misc/callout.c \
 	src/misc/rstr.c \
 	src/misc/gz.c \
@@ -247,6 +249,9 @@ SRCS += src/networking/net_common.c \
 	src/networking/http.c \
 	src/networking/ftp_server.c \
 
+SRCS-$(CONFIG_POLARSSL) += src/networking/net_polarssl.c
+SRCS-$(CONFIG_OPENSSL)  += src/networking/net_openssl.c
+
 SRCS-$(CONFIG_HTTPSERVER) += src/networking/http_server.c
 SRCS-$(CONFIG_HTTPSERVER) += src/networking/ssdp.c
 SRCS-$(CONFIG_HTTPSERVER) += \
@@ -314,6 +319,21 @@ SRCS-$(CONFIG_DVD)       += src/backend/dvd/dvd.c
 SRCS-$(CONFIG_DVD_LINUX) += src/backend/dvd/linux_dvd.c
 SRCS-$(CONFIG_DVD_WII)   += src/backend/dvd/wii_dvd.c
 SRCS-$(CONFIG_CDDA)      += src/backend/dvd/cdda.c
+
+##############################################################
+# Bittorrent
+##############################################################
+SRCS                     += \
+	src/backend/bittorrent/bt_backend.c \
+	src/backend/bittorrent/fa_torrent.c \
+	src/backend/bittorrent/torrent.c \
+	src/backend/bittorrent/peer.c \
+	src/backend/bittorrent/diskio.c \
+	src/backend/bittorrent/torrent_stats.c \
+	src/backend/bittorrent/torrent_settings.c \
+	src/backend/bittorrent/tracker.c \
+	src/backend/bittorrent/bencode.c \
+
 
 ##############################################################
 # TV
@@ -677,6 +697,25 @@ SRCS-${CONFIG_TLSF} += ext/tlsf/tlsf.c
 ##############################################################
 
 SRCS-${CONFIG_MINER} += ext/miner/miner.c \
+
+##############################################################
+# Duktape
+##############################################################
+
+SRCS += ext/duktape/duktape.c \
+	src/ecmascript/ecmascript.c \
+	src/ecmascript/es_service.c \
+	src/ecmascript/es_page.c \
+	src/ecmascript/es_prop.c \
+	src/ecmascript/es_io.c \
+	src/ecmascript/es_string.c \
+	src/ecmascript/es_htsmsg.c \
+	src/ecmascript/es_metadata.c \
+
+#	src/ecmascript/es_hook.c \
+
+${BUILDDIR}/ext/duktape/%.o : CFLAGS = -Wall ${OPTFLAGS} \
+ -fstrict-aliasing -std=c99  -DDUK_OPT_ASSERTIONS
 
 include support/${OS}.mk
 

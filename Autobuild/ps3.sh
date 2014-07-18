@@ -1,13 +1,14 @@
 
 build()
 {
-    TOOLCHAIN_URL=https://github.com/andoma/ps3toolchain/tarball/48dd592125c6dc8501a1b85515b1d6aa62ec4d45
+    TOOLCHAIN_URL=https://github.com/andoma/ps3toolchain/tarball/3fd10be8f90aad2f98bf51d43718980f63b19c0d
     TOOLCHAIN_HASH=`echo ${TOOLCHAIN_URL} | sha1sum  | awk '{print $1}'`
     TOOLCHAIN="${WORKINGDIR}/${TOOLCHAIN_HASH}"
     
     cleanup() {
 	echo "Cleaning up"
-	rm -rf ${TOOLCHAIN}
+	rm -rf ${TOOLCHAIN}.broken
+	mv ${TOOLCHAIN} ${TOOLCHAIN}.broken
 	exit 1
     }
     
@@ -62,6 +63,8 @@ build()
     artifact build.${TARGET}/showtime_geohot.pkg pkg application/octect-stream showtime-gh.pkg
 }
 
+BUILD_DEPS="git-core build-essential autoconf bison flex libelf-dev libtool pkg-config texinfo libncurses5-dev libz-dev python-dev libssl-dev libgmp3-dev ccache zip curl wget"
+
 deps()
 {
     DISTID=`lsb_release -si`
@@ -71,7 +74,7 @@ deps()
 		echo "Build dependencies must be installed as root"
 		exit 1
 	    fi
-	    apt-get install git-core build-essential autoconf bison flex libelf-dev libtool pkg-config texinfo libncurses5-dev libz-dev python-dev libssl-dev libgmp3-dev ccache zip
+	    apt-get --yes --force-yes install ${BUILD_DEPS}
 	    ;;
 	*)
 	    echo "Don't know how to install deps on ${DISTID}"
@@ -80,5 +83,9 @@ deps()
     esac
 }
 
+buildenv()
+{
+    echo ${BUILD_DEPS} | sha1sum | awk '{print $1}'
+}
 
 eval $OP

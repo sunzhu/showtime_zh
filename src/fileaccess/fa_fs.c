@@ -761,6 +761,64 @@ fs_get_xattr(struct fa_protocol *fap, const char *url,
 #endif
 
 
+
+#if defined(__APPLE__) || defined(__linux__)
+
+#if defined(__APPLE__)
+#include <sys/param.h>
+#include <sys/mount.h>
+#else
+#include <sys/vfs.h>
+#endif
+
+static fa_err_code_t
+fs_fsinfo(struct fa_protocol *fap, const char *url, fa_fsinfo_t *ffi)
+{
+  struct statfs f;
+  if(statfs(url, &f))
+    return FAP_ERROR;
+
+  ffi->ffi_size  = (int64_t)f.f_bsize * f.f_blocks;
+  ffi->ffi_avail = (int64_t)f.f_bsize * f.f_bavail;
+  return 0;
+}
+
+#elif defined(__PPU__)
+
+#include <psl1ght/lv2.h>
+
+static fa_err_code_t
+fs_fsinfo(struct fa_protocol *fap, const char *url, fa_fsinfo_t *ffi)
+{
+  const char *path = "/dev_hdd0/game/HTSS00003/";
+
+  if(mystrbegins(url, "/dev_hdd0/game/HTSS00003/") == NULL)
+    return FAP_NOT_SUPPORTED;
+
+  int r = Lv2Syscall3(840,
+                      (uint64_t)path,
+                      (uint64_t)&ffi->ffi_size,
+                      (uint64_t)&ffi->ffi_avail);
+
+  return r ? FAP_ERROR : 0;
+}
+
+
+#else
+#error Not sure how to do fs_fsinfo()
+#endif
+
+
+static int
+fs_ftruncate(fa_handle_t *fh0, uint64_t newsize)
+{
+  fs_handle_t *fh = (fs_handle_t *)fh0;
+  if(fh->part_count == 1 && !ftruncate(fh->parts[0].fd, newsize))
+    return FAP_OK;
+  return FAP_ERROR;
+}
+
+
 fa_protocol_t fa_protocol_fs = {
   .fap_name = "file",
   .fap_scan = fs_scandir,
@@ -791,7 +849,8 @@ fa_protocol_t fa_protocol_fs = {
   .fap_get_xattr = fs_get_xattr,
 #endif
 
-
+  .fap_fsinfo = fs_fsinfo,
+  .fap_ftruncate = fs_ftruncate,
 
 };
 

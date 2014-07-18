@@ -61,7 +61,7 @@ typedef struct {
 
   const char *canonical_url;
 
-  int total_duration;
+  int total_duration;  // in ms
 } rtmp_t;
 
 
@@ -106,7 +106,7 @@ handle_metadata0(rtmp_t *r, AMFObject *obj,
      prop.p_type == AMF_NUMBER && prop.p_vu.p_number > 0) {
     prop_set_float(prop_create(m, "duration"), prop.p_vu.p_number);
     r->total_duration = prop.p_vu.p_number * 1000;
-    mp_set_duration(mp, r->total_duration);
+    mp_set_duration(mp, r->total_duration * 1000LL);
     mp_set_clr_flags(mp, MP_CAN_SEEK, 0);
 
   } else {
@@ -118,9 +118,11 @@ handle_metadata0(rtmp_t *r, AMFObject *obj,
 
   if((RTMP_FindFirstMatchingProperty(obj, &av_videoframerate, &prop) &&
       RTMP_FindFirstMatchingProperty(obj, &av_framerate, &prop))
-     && prop.p_type == AMF_NUMBER)
+     && prop.p_type == AMF_NUMBER) {
     r->vframeduration = 1000000.0 / prop.p_vu.p_number;
-
+    mp->mp_framerate.num = 1000000;
+    mp->mp_framerate.den = prop.p_vu.p_number;
+  }
   r->width = r->height = 0;
   if(RTMP_FindFirstMatchingProperty(obj, &av_width, &prop) &&
      prop.p_type == AMF_NUMBER)
@@ -211,18 +213,6 @@ rtmp_process_event(rtmp_t *r, event_t *e, media_buf_t **mbp)
     event_ts_t *ets = (event_ts_t *)e;
 
     video_seek(r, mp, mbp, ets->ts, "direct");
-
-  } else if(event_is_action(e, ACTION_STOP)) {
-    mp_set_playstatus_stop(mp);
-  } else if(event_is_type(e, EVENT_SELECT_SUBTITLE_TRACK)) {
-    event_select_track_t *est = (event_select_track_t *)e;
-    prop_set_string(mp->mp_prop_subtitle_track_current, est->id);
-    if(!strcmp(est->id, "sub:off")) {
-      mp_load_ext_sub(mp, NULL, NULL);
-      } else {
-      AVRational framerate = {1000000, r->vframeduration};
-      mp_load_ext_sub(mp, est->id, &framerate);
-    }
 
   }
   event_release(e);

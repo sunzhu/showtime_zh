@@ -39,6 +39,7 @@
 #include "misc/str.h"
 #include "misc/sha.h"
 #include "misc/callout.h"
+#include "misc/average.h"
 
 #if ENABLE_SPIDERMONKEY
 #include "js/js.h"
@@ -192,10 +193,10 @@ typedef struct http_file {
 
   cancellable_t *hf_c;
 
-#define STAT_VEC_SIZE 20
-  int hf_stats[STAT_VEC_SIZE];
-  int hf_stats_ptr;
-  int hf_num_stats;
+  uint64_t hf_bytes_downloaded;
+
+  average_t hf_download_rate;
+
   char hf_line[4096];
 
 } http_file_t;
@@ -258,9 +259,22 @@ http_connection_get(const char *hostname, int port, int ssl,
   id = ++http_connection_tally;
   hts_mutex_unlock(&http_connections_mutex);
 
+  if(errbuf == NULL || errlen == 0) {
+    char xerrbuf[256];
+    errbuf = xerrbuf;
+    errlen = sizeof(xerrbuf);
+  }
+
+
+  int tcp_connect_flags = 0;
+  if(dbg)
+    tcp_connect_flags |= TCP_DEBUG;
+  if(ssl)
+    tcp_connect_flags |= TCP_SSL;
+
   if((tc = tcp_connect(hostname, port, errbuf, errlen,
-                       timeout, ssl, c)) == NULL) {
-    HTTP_TRACE(dbg, "Connection to %s:%d failed", hostname, port);
+                        timeout, tcp_connect_flags, c)) == NULL) {
+    HTTP_TRACE(dbg, "Connection to %s:%d failed -- %s", hostname, port, errbuf);
     return NULL;
   }
   HTTP_TRACE(dbg, "Connected to %s:%d (id=%d)", hostname, port, id);
@@ -1243,6 +1257,22 @@ http_tokenize(char *buf, char **vec, int vecsize, int delimiter)
   return n;
 }
 
+
+/**
+ * Work around broken HTTP servers that send Location: without
+ * proper URL escaping. We only catch spaces atm.
+ */
+static void
+hf_set_location(http_file_t *hf, const char *str)
+{
+  free(hf->hf_location);
+
+  size_t len = url_escape(NULL, 0, str, URL_ESCAPE_SPACE_ONLY);
+  char *r = malloc(len);
+  url_escape(r, len, str, URL_ESCAPE_SPACE_ONLY);
+  hf->hf_location = r;
+}
+
 /**
  *
  */
@@ -1328,8 +1358,7 @@ http_read_response(http_file_t *hf, struct http_header_list *headers)
 
 
     if(!strcasecmp(argv[0], "Location")) {
-      free(hf->hf_location);
-      hf->hf_location = strdup(argv[1]);
+      hf_set_location(hf, argv[1]);
       continue;
     }
 
@@ -1748,7 +1777,7 @@ http_open_ex(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
   hf->hf_no_retries = !!(flags & FA_NO_RETRIES);
   if(foe != NULL) {
     if(foe->foe_stats != NULL) {
-      hf->hf_stats_speed = prop_ref_inc(prop_create(foe->foe_stats, "bitrate"));
+      hf->hf_stats_speed = prop_create_r(foe->foe_stats, "bitrate");
       prop_set(foe->foe_stats, "bitrateValid", PROP_SET_INT, 1);
     }
     hf->hf_user_request_headers  = foe->foe_request_headers;
@@ -2018,28 +2047,14 @@ http_read(fa_handle_t *handle, void *buf, const size_t size)
   if(hf->hf_stats_speed == NULL)
     return http_read_i(hf, buf, size);
 
-  int64_t ts = showtime_get_ts();
   int r = http_read_i(hf, buf, size);
-  ts = showtime_get_ts() - ts;
-  if(r <= 0)
-    return r;
+  hf->hf_bytes_downloaded += r;
 
+  time_t now = time(NULL);
+  average_fill(&hf->hf_download_rate, now, hf->hf_bytes_downloaded);
 
-  int64_t bps = r * 1000000LL / ts;
-  hf->hf_stats[hf->hf_stats_ptr] = bps;
-  hf->hf_stats_ptr++;
-  if(hf->hf_stats_ptr == STAT_VEC_SIZE)
-    hf->hf_stats_ptr = 0;
-
-  if(hf->hf_num_stats < STAT_VEC_SIZE)
-    hf->hf_num_stats++;
-
-  int i, sum = 0;
-  
-  for(i = 0; i < hf->hf_num_stats; i++)
-    sum += hf->hf_stats[i];
-
-  prop_set_int(hf->hf_stats_speed, sum / hf->hf_num_stats);
+  int rate = average_read(&hf->hf_download_rate, now) / 125;
+  prop_set_int(hf->hf_stats_speed, rate);
   return r;
 }
 

@@ -322,6 +322,8 @@ typedef struct media_queue {
 
   int64_t mq_seektarget;
 
+  int64_t mq_buffer_delay;
+
   prop_t *mq_prop_qlen_cur;
   prop_t *mq_prop_qlen_max;
 
@@ -391,8 +393,7 @@ typedef struct media_pipe {
 #define MP_CAN_PAUSE        0x40
 #define MP_CAN_EJECT        0x80
 
-
-
+  AVRational mp_framerate;
 
   int mp_eof;   // End of file: We don't expect to need to read more data
   int mp_hold;  // Paused
@@ -401,6 +402,7 @@ typedef struct media_pipe {
 
 
   unsigned int mp_buffer_current; // Bytes current queued (total for all queues)
+  int mp_buffer_delay;            // Current delay of buffer in µs
   unsigned int mp_buffer_limit;   // Max buffer size
   unsigned int mp_max_realtime_delay; // Max delay in a queue (real time)
   int mp_satisfied;        /* If true, means we are satisfied with buffer
@@ -474,6 +476,7 @@ typedef struct media_pipe {
 
   prop_t *mp_prop_buffer_current;
   prop_t *mp_prop_buffer_limit;
+  prop_t *mp_prop_buffer_delay;
 
   prop_courier_t *mp_pc;
   prop_sub_t *mp_sub_currenttime;
@@ -509,6 +512,8 @@ typedef struct media_pipe {
 
   struct setting_list mp_settings_other;
 
+  struct setting *mp_vol_setting;
+
   /**
    * Extra (created by media_pipe_init_extra)
    */
@@ -532,6 +537,15 @@ typedef struct media_pipe {
    * Cancellable must be accessed under mp_mutex protection
    */
   struct cancellable *mp_cancellable;
+
+  /**
+   * Subtitle loader
+   */
+
+  hts_thread_t mp_subtitle_loader_thread;
+  char *mp_subtitle_loader_url;
+  int mp_subtitle_loader_status;
+
 
 } media_pipe_t;
 
@@ -696,8 +710,6 @@ extern media_pipe_t *media_primary;
 
 void mp_set_playstatus_by_hold(media_pipe_t *mp, int hold, const char *msg);
 
-void mp_set_playstatus_stop(media_pipe_t *mp);
-
 void mp_set_url(media_pipe_t *mp, const char *url, const char *parent_url,
                 const char *parent_title);
 
@@ -718,7 +730,7 @@ void mp_set_cancellable(media_pipe_t *mp, struct cancellable *c);
 
 int64_t mq_realtime_delay(media_queue_t *mq);
 
-void mp_load_ext_sub(media_pipe_t *mp, const char *url, AVRational *framerate);
+void mp_load_ext_sub(media_pipe_t *mp, const char *url);
 
 void mq_update_stats(media_pipe_t *mp, media_queue_t *mq);
 

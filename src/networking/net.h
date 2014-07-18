@@ -44,10 +44,13 @@ typedef void (net_read_cb_t)(void *opaque, int bytes_done);
 
 typedef struct tcpcon tcpcon_t;
 
-void net_initialize(void);
+void net_init(void);
+
+#define TCP_SSL   0x1
+#define TCP_DEBUG 0x2
 
 tcpcon_t *tcp_connect(const char *hostname, int port, char *errbuf,
-		      size_t errbufsize, int timeout, int ssl,
+		      size_t errbufsize, int timeout, int flags,
                       struct cancellable *c);
 
 void tcp_set_cancellable(tcpcon_t *tc, struct cancellable *c);
@@ -82,7 +85,13 @@ void tcp_shutdown(tcpcon_t *tc);
 
 void tcp_set_read_timeout(tcpcon_t *tc, int ms);
 
+
+
+int net_resolve(const char *hostname, net_addr_t *addr, const char **errmsg);
+
 void net_change_nonblocking(int fd, int on);
+
+void net_change_ndelay(int fd, int on);
 
 typedef struct netif {
   uint32_t ipv4;
@@ -97,5 +106,9 @@ void net_local_addr_from_fd(net_addr_t *na, int fd);
 void net_remote_addr_from_fd(net_addr_t *na, int fd);
 
 void net_fmt_host(char *dst, size_t dstlen, const net_addr_t *na);
+
+int net_addr_cmp(const net_addr_t *a, const net_addr_t *b);
+
+const char *net_addr_str(const net_addr_t *na);
 
 #endif /* NET_H__ */

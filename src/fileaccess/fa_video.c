@@ -138,70 +138,6 @@ video_seek(AVFormatContext *fctx, media_pipe_t *mp, media_buf_t **mbp,
  *
  */
 static void
-select_audio_track(media_pipe_t *mp, AVFormatContext *fctx, const char *id)
-{
-  TRACE(TRACE_DEBUG, "Video", "Selecting audio track %s", id);
-
-  if(!strcmp(id, "audio:off")) {
-    prop_set_string(mp->mp_prop_audio_track_current, id);
-    mp->mp_audio.mq_stream = -1;
-    
-  } else if(!strncmp(id, "libav:", strlen("libav:"))) {
-    unsigned int idx = atoi(id + strlen("libav:"));
-    if(idx < fctx->nb_streams) {
-      AVCodecContext *ctx = fctx->streams[idx]->codec;
-      if(ctx->codec_type == AVMEDIA_TYPE_AUDIO) {
-	mp->mp_audio.mq_stream = idx;
-	    prop_set_string(mp->mp_prop_audio_track_current, id);
-      }
-    }
-  }
-
-}
-
-
-/**
- *
- */
-static void
-select_subtitle_track(media_pipe_t *mp, AVFormatContext *fctx, const char *id)
-{
-  TRACE(TRACE_DEBUG, "Video", "Selecting subtitle track %s",
-	id);
-
-  mp_send_cmd(mp, &mp->mp_video, MB_CTRL_FLUSH_SUBTITLES);
-
-  if(!strcmp(id, "sub:off")) {
-    prop_set_string(mp->mp_prop_subtitle_track_current, id);
-    mp->mp_video.mq_stream2 = -1;
-
-    mp_load_ext_sub(mp, NULL, NULL);
-
-  } else if(!strncmp(id, "libav:", strlen("libav:"))) {
-    unsigned int idx = atoi(id + strlen("libav:"));
-    if(idx < fctx->nb_streams) {
-      AVCodecContext *ctx = fctx->streams[idx]->codec;
-      if(ctx->codec_type == AVMEDIA_TYPE_SUBTITLE) {
-	mp_load_ext_sub(mp, NULL, NULL);
-	mp->mp_video.mq_stream2 = idx;
-	prop_set_string(mp->mp_prop_subtitle_track_current, id);
-      }
-    }
-  } else  {
-
-    mp->mp_video.mq_stream2 = -1;
-    prop_set_string(mp->mp_prop_subtitle_track_current, id);
-    mp_load_ext_sub(mp, id,
-                    &fctx->streams[mp->mp_video.mq_stream]->avg_frame_rate);
-  }
-}
-
-
-
-/**
- *
- */
-static void
 update_seek_index(seek_index_t *si, int sec)
 {
   if(si != NULL && si->si_nitems) {
@@ -230,7 +166,8 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 		  int freetype_context,
 		  seek_index_t *sidx, // Minute for minute thumbs
 		  seek_index_t *cidx, // Chapters
-		  int cwvec_size)
+		  int cwvec_size,
+		  fa_handle_t *fh)
 {
   media_buf_t *mb = NULL;
   media_queue_t *mq = NULL;
@@ -266,6 +203,10 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
     if(mb == NULL) {
 
       mp->mp_eof = 0;
+
+      fa_deadline(fh, mp->mp_buffer_delay != INT32_MAX ? 
+		  mp->mp_buffer_delay / 3 : 0);
+
       r = av_read_frame(fctx, &pkt);
 
       if(r == AVERROR(EAGAIN))
@@ -297,6 +238,8 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 	} else {
 	  mb->mb_duration = rescale(fctx, pkt.duration, si);
 	}
+
+        mp->mp_framerate = fctx->streams[si]->avg_frame_rate;
 
       } else if(fctx->streams[si]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
 
@@ -395,17 +338,6 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
 
       ets = (event_ts_t *)e;
       video_seek(fctx, mp, &mb, ets->ts, "direct");
-
-    } else if(event_is_action(e, ACTION_STOP)) {
-      mp_set_playstatus_stop(mp);
-
-    } else if(event_is_type(e, EVENT_SELECT_SUBTITLE_TRACK)) {
-      event_select_track_t *est = (event_select_track_t *)e;
-      select_subtitle_track(mp, fctx, est->id);
-
-    } else if(event_is_type(e, EVENT_SELECT_AUDIO_TRACK)) {
-      event_select_track_t *est = (event_select_track_t *)e;
-      select_audio_track(mp, fctx, est->id);
 
     } else if(event_is_action(e, ACTION_SKIP_FORWARD) ||
               event_is_action(e, ACTION_SKIP_BACKWARD) ||
@@ -872,7 +804,7 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
   event_t *e;
   e = video_player_loop(fctx, cwvec, mp, va.flags, errbuf, errlen,
 			va.canonical_url, freetype_context, si, ci,
-			cwvec_size);
+			cwvec_size, fh);
 
   seek_index_destroy(si);
   seek_index_destroy(ci);

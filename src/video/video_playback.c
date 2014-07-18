@@ -703,7 +703,6 @@ video_player_idle(void *aux)
       prop_set(mp->mp_prop_root, "loading", PROP_SET_INT, 0);
       if(e == NULL) {
 	prop_set_string(errprop, errbuf);
-        mp->mp_video_frame_deliver(NULL, mp->mp_video_frame_opaque);
       }
     }
 
@@ -804,7 +803,7 @@ video_player_idle(void *aux)
 	play_url = NULL;
       }
       if(play_url == NULL)
-	mp_set_playstatus_stop(mp);
+        prop_set_string(mp->mp_prop_playstatus, "stop");
     }
 
     event_release(e);
