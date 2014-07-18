@@ -43,6 +43,8 @@
 #include "misc/callout.h"
 #include "usage.h"
 
+// http://msdn.microsoft.com/en-us/library/ee442092.aspx
+
 #define SAMBA_NEED_AUTH ((void *)-1)
 
 #define SMB_ECHO_INTERVAL 30
@@ -1508,9 +1510,8 @@ cifs_get_connection(const char *hostname, int port, char *errbuf, size_t errlen,
     LIST_INSERT_HEAD(&cifs_connections, cc, cc_link);
     hts_mutex_unlock(&smb_global_mutex);
 
-    cc->cc_tc = tcp_connect(hostname, port,
-			    cc->cc_errbuf, sizeof(cc->cc_errbuf), 3000, 0,
-                            NULL);
+    cc->cc_tc = tcp_connect(hostname, port, cc->cc_errbuf,
+                            sizeof(cc->cc_errbuf), 3000, 0, NULL);
 
     hts_mutex_lock(&smb_global_mutex);
 

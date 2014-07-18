@@ -132,6 +132,7 @@ htsmsg_t *
 htsmsg_create_map(void)
 {
   htsmsg_t *msg = calloc(1, sizeof(htsmsg_t));
+  msg->hm_refcount = 1;
   TAILQ_INIT(&msg->hm_fields);
   return msg;
 }
@@ -143,6 +144,7 @@ htsmsg_t *
 htsmsg_create_list(void)
 {
   htsmsg_t *msg = calloc(1, sizeof(htsmsg_t));
+  msg->hm_refcount = 1;
   TAILQ_INIT(&msg->hm_fields);
   msg->hm_islist = 1;
   return msg;
@@ -158,7 +160,8 @@ htsmsg_release(htsmsg_t *msg)
   if(msg == NULL)
     return;
 
-  if(atomic_add(&msg->hm_refcount, -1) > 1)
+  msg->hm_refcount--;
+  if(msg->hm_refcount > 0)
     return;
 
   htsmsg_field_t *f;
@@ -176,7 +179,7 @@ htsmsg_release(htsmsg_t *msg)
 htsmsg_t *
 htsmsg_retain(htsmsg_t *msg)
 {
-  atomic_add(&msg->hm_refcount, 1);
+  msg->hm_refcount++;
   return msg;
 }
 
@@ -425,10 +428,16 @@ htsmsg_get_bin(htsmsg_t *msg, const char *name, const void **binp,
 	       size_t *lenp)
 {
   htsmsg_field_t *f;
-  
+
   if((f = htsmsg_field_find(msg, name)) == NULL)
     return HTSMSG_ERR_FIELD_NOT_FOUND;
-  
+
+  if(f->hmf_type == HMF_STR) {
+    *binp = f->hmf_str;
+    *lenp = strlen(f->hmf_str);
+    return 0;
+  }
+
   if(f->hmf_type != HMF_BIN)
     return HTSMSG_ERR_CONVERSION_IMPOSSIBLE;
 

@@ -278,11 +278,12 @@ net_fmt_host(char *dst, size_t dstlen, const net_addr_t *na)
 {
   switch(na->na_family) {
   case 4:
-    snprintf(dst, dstlen, "%d.%d.%d.%d",
+    snprintf(dst, dstlen, "%d.%d.%d.%d:%d",
              na->na_addr[0],
              na->na_addr[1],
              na->na_addr[2],
-             na->na_addr[3]);
+             na->na_addr[3],
+	     na->na_port);
     break;
 
   default:
@@ -290,6 +291,37 @@ net_fmt_host(char *dst, size_t dstlen, const net_addr_t *na)
       *dst = 0;
   }
 }
+
+
+
+/**
+ *
+ */
+const char *
+net_addr_str(const net_addr_t *na)
+{
+  static __thread char buf[64];
+  net_fmt_host(buf, sizeof(buf), na);
+  return buf;
+}
+
+
+/**
+ *
+ */
+int
+net_addr_cmp(const net_addr_t *a, const net_addr_t *b)
+{
+  if(a->na_family != b->na_family)
+    return 1;
+  if(a->na_port != b->na_port)
+    return 1;
+  if(a->na_family == 4)
+    return memcmp(a->na_addr, b->na_addr, 4);
+
+  return 1;
+}
+
 
 
 /**
@@ -337,4 +369,58 @@ tcp_set_cancellable(tcpcon_t *tc, struct cancellable *c)
   tc->c = c;
   if(tc->c != NULL)
     cancellable_bind(tc->c, tcp_cancel, tc);
+}
+
+
+/**
+ *
+ */
+tcpcon_t *
+tcp_connect(const char *hostname, int port,
+            char *errbuf, size_t errlen,
+            int timeout, int flags, cancellable_t *c)
+{
+  tcpcon_t *tc;
+  const int dbg = !!(flags & TCP_DEBUG);
+
+  tc = tcp_connect_arch(hostname, port, errbuf, errlen, timeout, c, dbg);
+  if(tc == NULL)
+    return NULL;
+
+  if(flags & TCP_SSL) {
+
+    if(tcp_ssl_open(tc, errbuf, errlen)) {
+      tcp_close(tc);
+      return NULL;
+    }
+
+  }
+  return tc;
+}
+
+/**
+ *
+ */
+void
+tcp_close(tcpcon_t *tc)
+{
+  if(tc->ssl != NULL)
+    tcp_ssl_close(tc);
+
+  cancellable_unbind(tc->c);
+  htsbuf_queue_flush(&tc->spill);
+
+  tcp_close_arch(tc);
+
+  free(tc);
+}
+
+
+/**
+ *
+ */
+void
+net_init(void)
+{
+  net_ssl_init();
 }

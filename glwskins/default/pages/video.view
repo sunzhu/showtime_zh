@@ -25,6 +25,7 @@ $self.directClose = 1;
 $self.close = $self.media.playstatus == "stop";
 
 $self.model.loading = $self.media.loading;
+$self.model.io = $self.media.io;
 
 $view.statsAlpha = iir($self.media.stats, 8);
 
@@ -118,6 +119,17 @@ widget(container_z, {
 	    });
 	  });
 	});
+
+	widget(container_x, {
+	  hidden: !changed($self.media.ctrl.audiovolume, 2, true) || !$self.media.ctrl.audiovolume;
+	  widget(label, {
+            padding: [10 + $ui.size,0,0,0];
+	    OSD();
+            caption: fmt(_("Audio volume adjustment: %d dB"),
+                         $self.media.ctrl.audiovolume);
+	  });
+	});
+
 
 	widget(container_x, {
 	  spacing: 10;
@@ -229,6 +241,12 @@ widget(container_z, {
 		widget(label, {
 		  InfoLabel();
 		  align: right;
+		  caption: "Remaining buffer:";
+		});
+
+		widget(label, {
+		  InfoLabel();
+		  align: right;
 		  caption: "Video queue len:";
 		});
 		
@@ -236,6 +254,13 @@ widget(container_z, {
 		  InfoLabel();
 		  align: right;
 		  caption: "Audio queue len:";
+		});
+
+		widget(label, {
+		  hidden: !$self.media.io.bitrateValid;
+		  InfoLabel();
+		  align: right;
+		  caption: "Download speed:";
 		});
 	      });
 	      
@@ -300,6 +325,11 @@ widget(container_z, {
 		
 		widget(label, {
 		  TextStyleItem();
+		  caption: fmt("%ds", $self.media.buffer.delay);
+		});
+
+		widget(label, {
+		  TextStyleItem();
 		  caption: $self.media.video.dqlen;
 		});
 		
@@ -307,6 +337,13 @@ widget(container_z, {
 		  TextStyleItem();
 		  caption: $self.media.audio.dqlen;
 		});
+
+		widget(label, {
+		  hidden: !$self.media.io.bitrateValid;
+		  TextStyleItem();
+		  caption:  fmt("%d kb/s", $self.media.io.bitrate);
+		});
+
 	      });
 	    });
 	  });
