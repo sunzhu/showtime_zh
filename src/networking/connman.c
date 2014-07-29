@@ -161,8 +161,17 @@ connman_connect_cb(GObject *source_object,
 static void
 connman_service_connect(connman_service_t *cs)
 {
+  GError *err = NULL;
+  GVariant *v = g_dbus_proxy_call_sync(cs->cs_proxy, "Disconnect", NULL,
+                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
+  if(v == NULL) {
+    g_error_free(err);
+  } else {
+    g_variant_unref(v);
+  }
+
   TRACE(TRACE_DEBUG, "CONNMAN", "User request connect to %s", cs->cs_path);
-  
+
   g_dbus_proxy_call(cs->cs_proxy, "Connect", NULL,
 		    G_DBUS_CALL_FLAGS_NONE, -1, NULL,
 		    connman_connect_cb, cs);
@@ -272,7 +281,6 @@ input_req_event(void *opaque, event_t *e)
     g_dbus_method_invocation_return_value(cs->cs_input_req_inv, result);
 
     g_variant_builder_unref(builder);
-    g_variant_unref(result);
     rstr_release(username);
     rstr_release(password);
     connman_stop_input_request(cs);
@@ -640,9 +648,8 @@ handle_method_call(GDBusConnection *connection, const gchar *sender,
     notify_add(NULL, NOTIFY_ERROR, NULL, 3,
 	       rstr_alloc("%s\n%s"), cs ? cs->cs_name : "Unknown network", msg);
     g_dbus_method_invocation_return_value(inv, NULL);
-  }
 
-  if(!strcmp(method_name, "RequestInput")) {
+  } else if(!strcmp(method_name, "RequestInput")) {
     connman_service_t *cs = connman_service_from_params(param);
 
     if(cs == NULL) {
