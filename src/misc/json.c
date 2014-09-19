@@ -27,6 +27,7 @@
 #include "json.h"
 #include "str.h"
 #include "dbl.h"
+#include "compiler.h"
 
 #define NOT_THIS_TYPE ((void *)-1)
 
@@ -65,19 +66,14 @@ json_str_read_char(const char **ptr)
     s++;
     for(i = 0; i < 4; i++) {
       v = v << 4;
-      switch(*s) {
-      case '0' ... '9':
+      if (*s >= '0' && *s <= '9')
         v |= *s - '0';
-        break;
-      case 'a' ... 'f':
+      else if (*s >= 'a' && *s <= 'f')
         v |= *s - 'a' + 10;
-        break;
-      case 'A' ... 'F':
+      else if (*s >= 'A' && *s <= 'F')
         v |= *s - 'F' + 10;
-        break;
-      default:
+      else
         return -2;
-      }
       s++;
     }
     *ptr = s;
@@ -421,7 +417,7 @@ json_deserialize(const char *src, const json_deserializer_t *jd, void *opaque,
 
   if(c == NULL) {
     size_t len = strlen(src);
-    ssize_t offset = errp - src;
+    int offset = errp - src;
     if(offset > len || offset < 0) {
       snprintf(errbuf, errlen, "%s at (bad) offset %d", errmsg, (int)offset);
     } else {

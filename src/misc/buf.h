@@ -24,9 +24,10 @@
 #include <assert.h>
 #include "arch/atomic.h"
 #include "rstr.h"
+#include "compiler.h"
 
 typedef struct buf {
-  int b_refcount;
+  atomic_t b_refcount;
   size_t b_size;
   void *b_ptr;
   void (*b_free)(void *);
@@ -38,10 +39,10 @@ typedef struct buf {
 
 #define buf_cstr(buf) ((const char *)(buf)->b_ptr)
 
-static inline char *
+static __inline char *
 buf_str(buf_t *b)
 {
-  assert(b->b_refcount == 1);
+  assert(atomic_get(&b->b_refcount) == 1);
   return (char *)b->b_ptr;
 }
 
@@ -63,10 +64,10 @@ buf_t *buf_create_and_adopt(size_t size, void *data, void (*freefn)(void *));
 
 buf_t *buf_create_from_malloced(size_t size, void *data);
 
-static inline buf_t *  __attribute__ ((warn_unused_result))
+static __inline buf_t *  attribute_unused_result
 buf_retain(buf_t *b)
 {
-  atomic_add(&b->b_refcount, 1);
+  atomic_inc(&b->b_refcount);
   return b;
 }
 

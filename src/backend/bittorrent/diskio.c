@@ -29,6 +29,8 @@
 #include "htsmsg/htsmsg.h"
 #include "bittorrent.h"
 #include "bencode.h"
+#include "misc/minmax.h"
+
 
 static int torrent_write_thread_running;
 static int diskio_debug = 0;
@@ -36,7 +38,7 @@ static int diskio_debug = 0;
 
 static void
 diskio_trace(const torrent_t *t, const char *msg, ...)
- __attribute__((format(printf, 2, 3)));
+  attribute_printf(2, 3);
 
 static void
 diskio_trace(const torrent_t *t, const char *msg, ...)
@@ -128,7 +130,7 @@ update_disk_usage(void)
 static void
 torrent_write_to_disk(torrent_t *to, torrent_piece_t *tp)
 {
-  to->to_refcount++;
+  torrent_retain(to);
   tp->tp_refcount++;
 
   uint8_t mapdata[4];
@@ -242,7 +244,7 @@ torrent_write_to_disk(torrent_t *to, torrent_piece_t *tp)
 static void
 torrent_read_from_disk(torrent_t *to, torrent_piece_t *tp)
 {
-  to->to_refcount++;
+  torrent_retain(to);
   tp->tp_refcount++;
 
   int idx = to->to_cachefile_piece_map[tp->tp_index];
@@ -595,7 +597,7 @@ torrent_diskio_scan(void)
       sf->sf_size  = fde->fde_stat.fs_size;
       sf->sf_mtime = fde->fde_stat.fs_mtime;
       sf->sf_url = rstr_dup(fde->fde_url);
-      LIST_INSERT_SORTED(&sfl, sf, sf_link, sf_cmp);
+      LIST_INSERT_SORTED(&sfl, sf, sf_link, sf_cmp, scanned_file_t);
     }
 
     fa_dir_free(fd);

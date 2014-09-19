@@ -40,7 +40,7 @@ LIST_HEAD(ftp_connection_list, ftp_connection);
 // Parked connections
 static struct ftp_connection_list ftp_connections;
 static hts_mutex_t ftp_global_mutex;
-static int id_tally;
+static atomic_t id_tally;
 
 /**
  *
@@ -81,9 +81,9 @@ typedef struct ftp_file {
 
 } ftp_file_t;
 
-#define FTP_TRACE(x...) do {                  \
+#define FTP_TRACE(x, ...) do {                 \
     if(gconf.enable_ftp_client_debug)         \
-      TRACE(TRACE_DEBUG, "FTP", x);           \
+      TRACE(TRACE_DEBUG, "FTP", x, ##__VA_ARGS__);           \
   } while(0)
 
 /**
@@ -215,7 +215,7 @@ fc_connect(const char *hostname, int port,
 
   fc = calloc(1, sizeof(ftp_connection_t));
   fc->fc_tc = tc;
-  id = atomic_add(&id_tally, 1);
+  id = atomic_add_and_fetch(&id_tally, 1);
   fc->fc_id = id;
 
   // Check welcome message

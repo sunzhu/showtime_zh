@@ -25,10 +25,12 @@
 #include <stdlib.h>
 
 #include "config.h"
+#include "compiler.h"
 #include "event.h"
 #include "arch/threads.h"
 #include "misc/queue.h"
 #include "misc/rstr.h"
+#include "compiler.h"
 
 #if ENABLE_BUGHUNT
 #define PROP_DEBUG
@@ -46,7 +48,7 @@ TAILQ_HEAD(prop_notify_queue, prop_notify);
  *
  */
 typedef struct prop_vec {
-  int pv_refcount;
+  atomic_t pv_refcount;
   int pv_capacity;
   int pv_length;
   struct prop *pv_vec[0];
@@ -126,8 +128,7 @@ void prop_init_late(void);
 /**
  * Use with PROP_TAG_NAME_VECTOR
  */
-#define PNVEC(name...) (const char *[]){name, NULL}
-
+#define PNVEC(name, ...) (const char *[]){name, ##__VA_ARGS__, NULL}
 
 /**
  * Prop flags
@@ -173,19 +174,19 @@ enum {
 #endif
 };
 
-#define PROP_TAG_NAME(name...) \
- PROP_TAG_NAME_VECTOR, (const char *[]){name, NULL}
+#define PROP_TAG_NAME(name, ...) \
+  PROP_TAG_NAME_VECTOR, (const char *[]){ name, ##__VA_ARGS__, NULL }
 
 #ifdef PROP_SUB_RECORD_SOURCE
 
-prop_sub_t *prop_subscribe_ex(const char *file, int line, int flags,
-                              ...) __attribute__((__sentinel__(0)));
+prop_sub_t *prop_subscribe_ex(const char *file, int line,
+                              int flags, ...) attribute_null_sentinel;
 
 #define prop_subscribe(flags...) prop_subscribe_ex(__FILE__, __LINE__, flags)
 
 #else
 
-prop_sub_t *prop_subscribe(int flags, ...) __attribute__((__sentinel__(0)));
+prop_sub_t *prop_subscribe(int flags, ...) attribute_null_sentinel;
 
 #endif
 
@@ -195,7 +196,7 @@ void prop_sub_reemit(prop_sub_t *s);
 
 prop_t *prop_create_ex(prop_t *parent, const char *name,
 		       prop_sub_t *skipme, int noalloc, int incref)
-     __attribute__ ((malloc));
+     attribute_malloc;
 
 #define prop_create(parent, name) \
   prop_create_ex(parent, name, NULL, __builtin_constant_p(name), 0)
@@ -204,7 +205,7 @@ prop_t *prop_create_ex(prop_t *parent, const char *name,
   prop_create_ex(parent, name, NULL, __builtin_constant_p(name), 1)
 
 prop_t *prop_create_root_ex(const char *name, int noalloc)
-  __attribute__ ((malloc));
+  attribute_malloc;
 
 #define prop_create_root(name) \
   prop_create_root_ex(name, __builtin_constant_p(name))
@@ -212,7 +213,7 @@ prop_t *prop_create_root_ex(const char *name, int noalloc)
 prop_t *prop_create_after(prop_t *parent, const char *name, prop_t *after,
 			  prop_sub_t *skipme);
 
-prop_t *prop_create_multi(prop_t *p, ...)  __attribute__((__sentinel__(0)));
+prop_t *prop_create_multi(prop_t *p, ...) attribute_null_sentinel;
 
 void prop_destroy(prop_t *p);
 
@@ -230,14 +231,14 @@ void prop_req_move(prop_t *p, prop_t *before);
 
 void prop_setv_ex(prop_sub_t *skipme, prop_t *p, ...);
 
-#define prop_setv(p...) prop_setv_ex(NULL, p)
+#define prop_setv(p, ...) prop_setv_ex(NULL, p, ##__VA_ARGS__)
 
 void prop_set_ex(prop_t *p, const char *name, int noalloc, ...);
 
 void prop_setdn(prop_sub_t *skipme, prop_t *p, const char *str, ...);
 
-#define prop_set(p, name, type...) \
-  prop_set_ex(p, name, __builtin_constant_p(name), type)
+#define prop_set(p, name, type, ...) \
+  prop_set_ex(p, name, __builtin_constant_p(name), type, ##__VA_ARGS__)
 
 void prop_set_string_ex(prop_t *p, prop_sub_t *skipme, const char *str,
 			prop_str_type_t type);
@@ -278,7 +279,7 @@ void prop_set_link_ex(prop_t *p, prop_sub_t *skipme, const char *title,
     prop_set_string_ex(p, NULL, str, 0);	\
   } while(0)
 
-#define prop_set_stringf(p, fmt...) prop_set_stringf_ex(p, NULL, fmt)
+#define prop_set_stringf(p, fmt, ...) prop_set_stringf_ex(p, NULL, fmt, ##__VA_ARGS__)
 
 #define prop_set_float(p, v) prop_set_float_ex(p, NULL, v, 0)
 
@@ -302,9 +303,9 @@ void prop_copy_ex(prop_t *dst, prop_sub_t *skipme, prop_t *src);
 
 #define prop_copy(dst, src) prop_copy_ex(dst, NULL, src)
 
-rstr_t *prop_get_string(prop_t *p, ...) __attribute__((__sentinel__(0)));
+rstr_t *prop_get_string(prop_t *p, ...) attribute_null_sentinel;
 
-int prop_get_int(prop_t *p, ...) __attribute__((__sentinel__(0)));
+int prop_get_int(prop_t *p, ...) attribute_null_sentinel;
 
 char **prop_get_name_of_childs(prop_t *p);
 
@@ -326,20 +327,21 @@ void prop_enable_trace(prop_t *p);
 
 void prop_print_trace(prop_t *p);
 
+
 #else
 
 void prop_ref_dec(prop_t *p);
 
-prop_t *prop_ref_inc(prop_t *p) __attribute__ ((warn_unused_result));
+prop_t *prop_ref_inc(prop_t *p) attribute_unused_result;
 
 #endif
 
-prop_t *prop_xref_addref(prop_t *p) __attribute__ ((warn_unused_result));
+prop_t *prop_xref_addref(prop_t *p) attribute_unused_result;
 
 int prop_set_parent_ex(prop_t *p, prop_t *parent, prop_t *before, 
 		       prop_sub_t *skipme)
-     __attribute__ ((warn_unused_result));
-     
+     attribute_unused_result;
+
 #define prop_set_parent(p, parent) prop_set_parent_ex(p, parent, NULL, NULL)
 
 void prop_set_parent_vector(prop_vec_t *pv, prop_t *parent,
@@ -383,7 +385,7 @@ void prop_destroy_childs(prop_t *parent);
 void prop_void_childs(prop_t *parent);
 
 prop_t *prop_get_by_name(const char **name, int follow_symlinks, ...)
-     __attribute__((__sentinel__(0)));
+                              attribute_null_sentinel;
 
 void prop_request_new_child(prop_t *p);
 
@@ -428,7 +430,7 @@ void prop_notify_dispatch(struct prop_notify_queue *q, const char *tracename);
 
 void prop_courier_stop(prop_courier_t *pc);
 
-prop_t *prop_find(prop_t *parent, ...)  __attribute__((__sentinel__(0)));
+prop_t *prop_find(prop_t *parent, ...) attribute_null_sentinel;
 
 prop_t *prop_first_child(prop_t *p);
 
@@ -438,11 +440,9 @@ void prop_send_ext_event(prop_t *p, event_t *e);
 /**
  * Property vectors
  */
-prop_vec_t *prop_vec_create(int capacity) 
-  __attribute__ ((malloc));
+prop_vec_t *prop_vec_create(int capacity) attribute_malloc;
 
-prop_vec_t *prop_vec_append(prop_vec_t *pv, prop_t *p)
-  __attribute__ ((warn_unused_result));
+prop_vec_t *prop_vec_append(prop_vec_t *pv, prop_t *p) attribute_unused_result;
 
 prop_vec_t *prop_vec_addref(prop_vec_t *pv);
 
@@ -498,6 +498,8 @@ void prop_test(void);
 
 #ifdef PROP_DEBUG
 extern int prop_trace;
+void prop_track_sub(prop_sub_t *s);
 #endif
+
 
 #endif /* PROP_H__ */

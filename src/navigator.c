@@ -237,9 +237,10 @@ nav_create(prop_t *prop)
 
   hts_mutex_unlock(&nav_mutex);
 
-  static int initial_opened = 0;
+  static atomic_t initial_opened;
 
-  if(atomic_add(&initial_opened, 1) == 0 && gconf.initial_url != NULL) {
+  if(atomic_add_and_fetch(&initial_opened, 1) == 1 &&
+     gconf.initial_url != NULL) {
 
     hts_mutex_lock(&gconf.state_mutex);
     while(gconf.state_plugins_loaded == 0)
@@ -515,7 +516,8 @@ page_eventsink(void *opaque, event_t *e)
 {
   nav_page_t *np = opaque;
   if(event_is_type(e, EVENT_REDIRECT)) {
-    page_redirect(np, e->e_payload);
+    const event_payload_t *ep = (const event_payload_t *)e;
+    page_redirect(np, ep->payload);
   }
 }
 
@@ -697,9 +699,14 @@ nav_back(navigator_t *nav)
   if(np != NULL &&
      (prev = TAILQ_PREV(np, nav_page_queue, np_history_link)) != NULL) {
 
+    const int doclose = np->np_direct_close || gconf.enable_nav_always_close;
+
+    if(doclose)
+      prop_unlink(prop_create(np->np_prop_root, "origin"));
+
     nav_select(nav, prev, NULL);
 
-    if(np->np_direct_close || gconf.enable_nav_always_close)
+    if(doclose)
       nav_close(np, 1);
   }
 }

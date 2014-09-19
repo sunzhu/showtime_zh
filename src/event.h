@@ -195,13 +195,12 @@ typedef struct event_queue {
  *
  */
 typedef struct event {
-  int     e_refcount;
+  atomic_t e_refcount;
   int     e_mapped;
   struct prop *e_nav;
   event_type_t e_type_x;
   void (*e_dtor)(struct event *e);
   TAILQ_ENTRY(event) e_link;
-  char e_payload[0];
 } event_t;
 
 
@@ -212,6 +211,14 @@ typedef struct event_int {
   event_t h;
   int val;
 } event_int_t;
+
+/**
+ *
+ */
+typedef struct event_payload {
+  event_t h;
+  char payload[0];
+} event_payload_t;
 
 
 /**

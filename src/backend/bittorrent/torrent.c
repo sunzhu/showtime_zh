@@ -29,6 +29,7 @@
 #include "htsmsg/htsmsg.h"
 #include "bittorrent.h"
 #include "bencode.h"
+#include "misc/minmax.h"
 
 
 #define TORRENT_REQ_SIZE 16384
@@ -61,7 +62,7 @@ static void torrent_piece_destroy(torrent_t *to, torrent_piece_t *tp);
 
 static void
 torrent_trace(const torrent_t *t, const char *msg, ...)
- __attribute__((format(printf, 2, 3)));
+  attribute_printf(2, 3);
 
 static void
 torrent_trace(const torrent_t *t, const char *msg, ...)
@@ -86,7 +87,7 @@ torrent_trace(const torrent_t *t, const char *msg, ...)
 static void
 torrent_add_tracker(torrent_t *to, const char *url)
 {
-  torrent_tracker_t *tt;
+  tracker_torrent_t *tt;
 
   LIST_FOREACH(tt, &to->to_trackers, tt_torrent_link) {
     if(!strcmp(tt->tt_tracker->t_url, url))
@@ -185,8 +186,6 @@ torrent_create(buf_t *b, char *errbuf, size_t errlen)
 
   }
   htsmsg_release(doc);
-
-  to->to_refcount++;
   return to;
 }
 
@@ -200,6 +199,16 @@ block_destroy(torrent_block_t *tb)
   LIST_REMOVE(tb, tb_piece_link);
   assert(LIST_FIRST(&tb->tb_requests) == NULL);
   free(tb);
+}
+
+
+/**
+ *
+ */
+void
+torrent_retain(torrent_t *to)
+{
+  to->to_refcount++;
 }
 
 
@@ -679,7 +688,8 @@ torrent_piece_find(torrent_t *to, int piece_index)
   tp->tp_index = piece_index;
   TAILQ_INSERT_TAIL(&to->to_active_pieces, tp, tp_link);
   tp->tp_deadline = INT64_MAX;
-  LIST_INSERT_SORTED(&to->to_serve_order, tp, tp_serve_link, tp_deadline_cmp);
+  LIST_INSERT_SORTED(&to->to_serve_order, tp, tp_serve_link, tp_deadline_cmp,
+                     torrent_piece_t);
 
   tp->tp_data = malloc(to->to_piece_length);
   tp->tp_piece_length = to->to_piece_length;
@@ -719,7 +729,8 @@ piece_update_deadline(torrent_t *to, torrent_piece_t *tp)
   tp->tp_deadline = deadline;
 
   LIST_REMOVE(tp, tp_serve_link);
-  LIST_INSERT_SORTED(&to->to_serve_order, tp, tp_serve_link, tp_deadline_cmp);
+  LIST_INSERT_SORTED(&to->to_serve_order, tp, tp_serve_link, tp_deadline_cmp,
+                     torrent_piece_t);
 }
 
 
@@ -1362,7 +1373,7 @@ torrent_piece_verify_hash(torrent_t *to, torrent_piece_t *tp)
   uint8_t digest[20];
   sha1_decl(shactx);
 
-  to->to_refcount++;
+  torrent_retain(to);
   tp->tp_refcount++;
 
   hts_mutex_unlock(&bittorrent_mutex);

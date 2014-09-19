@@ -135,7 +135,7 @@ typedef struct frame_info {
  *
  */
 typedef struct media_codec {
-  int refcount;
+  atomic_t refcount;
   struct media_format *fw;
   int codec_id;
 
@@ -378,7 +378,7 @@ typedef struct media_track_mgr {
  * Media pipe
  */
 typedef struct media_pipe {
-  int mp_refcount;
+  atomic_t mp_refcount;
 
   const char *mp_name;
 
@@ -561,13 +561,15 @@ struct media_format;
  *
  */
 typedef struct media_codec_params {
+  const void *extradata;
+  size_t extradata_size;
+
   unsigned int width;
   unsigned int height;
   unsigned int profile;
   unsigned int level;
-  int cheat_for_speed;
-  const void *extradata;
-  size_t extradata_size;
+  int cheat_for_speed : 1;
+  int broken_aud_placement : 1;
   unsigned int sar_num;
   unsigned int sar_den;
 
@@ -598,8 +600,7 @@ void media_register_codec(codec_def_t *cd);
     .open = open_,						   \
     .prio = prio_						   \
   };								   \
-  static void  __attribute__((constructor))			   \
-  HTS_JOIN(registercodecdef, __LINE__)(void)			   \
+  INITIALIZER(HTS_JOIN(registercodecdef, __LINE__))                \
   { media_register_codec(&HTS_JOIN(codecdef, __LINE__)); }
 
 
@@ -607,7 +608,7 @@ void media_register_codec(codec_def_t *cd);
  *
  */
 typedef struct media_format {
-  int refcount;
+  atomic_t refcount;
   struct AVFormatContext *fctx;
 } media_format_t;
 
@@ -650,7 +651,7 @@ media_pipe_t *mp_create(const char *name, int flags);
 
 void mp_reinit_streams(media_pipe_t *mp);
 
-#define mp_ref_inc(mp) atomic_add(&(mp)->mp_refcount, 1)
+#define mp_ref_inc(mp) atomic_inc(&(mp)->mp_refcount)
 void mp_ref_dec(media_pipe_t *mp);
 
 int mb_enqueue_no_block(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb,

@@ -5,12 +5,7 @@
 
 static int initialized;
 static char buf[256];
-static hts_mutex_t mtx;
-
-static void __attribute__((constructor)) showtime_dataroot_init(void)
-{
-  hts_mutex_init(&mtx);
-}
+static HTS_MUTEX_DECL(mtx);
 
 const char *showtime_dataroot(void)
 {

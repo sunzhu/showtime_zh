@@ -64,6 +64,7 @@ task_thread(void *aux)
       num_task_threads_avail--;
       continue;
     }
+    TAILQ_REMOVE(&tasks, t, t_link);
 
     hts_mutex_unlock(&task_mutex);
     t->t_fn(t->t_opaque);
@@ -114,8 +115,7 @@ task_run(task_fn_t *fn, void *opaque)
 /**
  *
  */
-static void __attribute__((constructor))
-doinit(void)
+INITIALIZER(taskinit)
 {
   hts_mutex_init(&task_mutex);
   hts_cond_init(&task_cond, &task_mutex);

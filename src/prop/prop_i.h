@@ -157,7 +157,7 @@ struct prop {
    * Note: hp_xref which is another refcount protecting contents of the
    * entire property
    */
-  int hp_refcount;
+  atomic_t hp_refcount;
 
   /**
    * Property name. Protected by mutex
@@ -381,7 +381,7 @@ struct prop_sub {
    * Refcount. Not protected by mutex. Modification needs to be issued
    * using atomic ops.
    */
-  int hps_refcount;
+  atomic_t hps_refcount;
 
 
   /**
@@ -415,7 +415,14 @@ struct prop_sub {
 #endif
 };
 
+#ifdef PROP_DEBUG
+#define prop_ref_dec_locked(p) prop_ref_dec_traced_locked(p, __FILE__, __LINE__)
+
+void prop_ref_dec_traced_locked(prop_t *p, const char *file, int line);
+
+#else
 void prop_ref_dec_locked(prop_t *p);
+#endif
 
 prop_t *prop_create0(prop_t *parent, const char *name, prop_sub_t *skipme, 
 		     int flags);
