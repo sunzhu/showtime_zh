@@ -35,7 +35,7 @@ typedef struct fa_protocol {
 #define FAP_ALLOW_CACHE          0x2
 #define FAP_NO_PARKING           0x4
 
-  int fap_refcount;
+  atomic_t fap_refcount;
 
   void (*fap_init)(void);
 
@@ -246,8 +246,8 @@ void fileaccess_unregister_dynamic(fa_protocol_t *fap);
 
 void fileaccess_register_entry(fa_protocol_t *fap);
 
-#define FAP_REGISTER(name) \
-  static void  __attribute__((constructor)) fap_register_ ## name(void) { \
+#define FAP_REGISTER(name)                                              \
+  INITIALIZER(fap_register_ ## name) {                                  \
     fileaccess_register_entry(&fa_protocol_ ## name);			\
   }
 

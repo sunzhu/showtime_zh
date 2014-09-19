@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdarg.h>
 
 #include "misc/queue.h"
 #include "networking/http.h"
@@ -314,12 +315,12 @@ enum {
 #define FA_LOAD_REQUEST_HEADERS(a)      FA_LOAD_TAG_REQUEST_HEADERS, a
 #define FA_LOAD_RESPONSE_HEADERS(a)     FA_LOAD_TAG_RESPONSE_HEADERS, a
 
-buf_t *fa_load(const char *url, ...)  __attribute__((__sentinel__(0)));
+buf_t *fa_load(const char *url, ...) attribute_null_sentinel;
 
 buf_t *fa_load_and_close(fa_handle_t *fh);
 
 int fa_parent(char *dst, size_t dstlen, const char *url)
-  __attribute__ ((warn_unused_result));
+  attribute_unused_result;
 
 int fa_normalize(const char *url, char *dst, size_t dstlen);
 
@@ -379,6 +380,8 @@ fa_handle_t *fa_cmp_open(fa_handle_t *fa, const char *locafile);
 enum {
   HTTP_TAG_ARG = 1,
   HTTP_TAG_ARGINT,
+  HTTP_TAG_ARGINT64,
+  HTTP_TAG_ARGBIN,
   HTTP_TAG_ARGLIST,
   HTTP_TAG_RESULT_PTR,
   HTTP_TAG_ERRBUF,
@@ -397,6 +400,8 @@ enum {
 
 #define HTTP_ARG(a, b)                     HTTP_TAG_ARG, a, b
 #define HTTP_ARGINT(a, b)                  HTTP_TAG_ARGINT, a, b
+#define HTTP_ARGINT64(a, b)                HTTP_TAG_ARGINT64, a, b
+#define HTTP_ARGBIN(a, b, c)               HTTP_TAG_ARGBIN, a, b, c
 #define HTTP_ARGLIST(a)                    HTTP_TAG_ARGLIST, a
 #define HTTP_RESULT_PTR(a)                 HTTP_TAG_RESULT_PTR, a
 #define HTTP_ERRBUF(a, b)                  HTTP_TAG_ERRBUF, a, b
@@ -411,7 +416,22 @@ enum {
 #define HTTP_CONNECT_TIMEOUT(a)            HTTP_TAG_CONNECT_TIMEOUT, a
 #define HTTP_READ_TIMEOUT(a)               HTTP_TAG_READ_TIMEOUT, a
 
-int http_req(const char *url, ...)  __attribute__((__sentinel__(0)));
+#define HTTP_BUFFER_INTERNALLY             ((void *)-1)
+
+typedef struct http_req_aux http_req_aux_t;
+
+int http_req(const char *url, ...) attribute_null_sentinel;
+
+int http_reqv(const char *url, va_list ap,
+              void (*async_callback)(http_req_aux_t *hra, void *opaque,
+                                     int error),
+              void *async_opaque);
+
+buf_t *http_req_get_result(http_req_aux_t *hra);
+
+void http_req_release(http_req_aux_t *hra);
+
+http_req_aux_t *http_req_retain(http_req_aux_t *hra) attribute_unused_result;
 
 int http_client_oauth(struct http_auth_req *har,
 		      const char *consumer_key,

@@ -42,6 +42,7 @@
 #include "misc/str.h"
 #include "misc/callout.h"
 #include "usage.h"
+#include "misc/minmax.h"
 
 // http://msdn.microsoft.com/en-us/library/ee442092.aspx
 
@@ -49,9 +50,9 @@
 
 #define SMB_ECHO_INTERVAL 30
 
-#define SMBTRACE(x...) do {                     \
-    if(gconf.enable_smb_debug)                  \
-      trace(0, TRACE_DEBUG, "SMB", x);          \
+#define SMBTRACE(x, ...) do {                                  \
+    if(gconf.enable_smb_debug)                                 \
+      trace(0, TRACE_DEBUG, "SMB", x, ##__VA_ARGS__);          \
   } while(0)
 
 LIST_HEAD(cifs_connection_list, cifs_connection);

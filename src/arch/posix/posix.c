@@ -54,6 +54,7 @@ get_system_concurrency(void)
 #include <limits.h>
 #include <syslog.h>
 #include <sys/statvfs.h>
+#include <sys/time.h>
 #include <signal.h>
 #include "text/text.h"
 #include "showtime.h"
@@ -229,19 +230,6 @@ showtime_get_ts(void)
 #endif
 }
 
-/**
- *
- */
-int64_t
-arch_cache_avail_bytes(void)
-{
-  struct statvfs buf;
-
-  if(gconf.cache_path == NULL || statvfs(gconf.cache_path, &buf))
-    return 0;
-
-  return buf.f_bfree * buf.f_bsize;
-}
 
 /**
  *
@@ -283,7 +271,7 @@ hfree(void *ptr, size_t size)
 
 
 void
-my_localtime(const time_t *now, struct tm *tm)
+arch_localtime(const time_t *now, struct tm *tm)
 {
   localtime_r(now, tm);
 }

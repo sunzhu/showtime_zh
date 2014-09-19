@@ -68,7 +68,7 @@ vfs_fs_Read(sqlite3_file *id, void *pBuf, int amt, sqlite3_int64 offset)
 {
   vfsfile_t *vf = (vfsfile_t *)id;
   int got;
-  off_t pos = lseek(vf->fd, offset, SEEK_SET);
+  int64_t pos = lseek(vf->fd, offset, SEEK_SET);
   
   if(pos != offset)
     return SQLITE_IOERR;
@@ -93,7 +93,7 @@ vfs_fs_Write(sqlite3_file *id, const void *pBuf, int amt,sqlite3_int64 offset)
 {
   vfsfile_t *vf = (vfsfile_t *)id;
   int got;
-  off_t pos = lseek(vf->fd, offset, SEEK_SET);
+  int64_t pos = lseek(vf->fd, offset, SEEK_SET);
   
   if(pos != offset)
     return SQLITE_IOERR;
@@ -185,7 +185,7 @@ static int
 vfs_open(sqlite3_vfs *pVfs, const char *zName, sqlite3_file *id, int flags,
 	 int *pOutFlags)
 {
-  static int tmpfiletally;
+  static atomic_t tmpfiletally;
   char tmpfile[256];
   int v;
 
@@ -206,7 +206,7 @@ vfs_open(sqlite3_vfs *pVfs, const char *zName, sqlite3_file *id, int flags,
 
 
   if(zName == NULL) {
-    v = atomic_add(&tmpfiletally, 1);
+    v = atomic_add_and_fetch(&tmpfiletally, 1);
     snprintf(tmpfile, sizeof(tmpfile), "%s/sqlite.tmp.%d",
 	     gconf.cache_path, v);
     zName = tmpfile;

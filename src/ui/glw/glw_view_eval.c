@@ -870,7 +870,8 @@ eval_assign(glw_view_eval_context_t *ec, struct token *self, int how)
     if(ec->event == NULL || ec->event->e_type_x != EVENT_KEYDESC)
       return 0;
     b = eval_alloc(self, ec, TOKEN_RSTRING);
-    b->t_rstring = rstr_alloc(ec->event->e_payload);
+    const event_payload_t *ep = (const event_payload_t *)ec->event;
+    b->t_rstring = rstr_alloc(ep->payload);
   } else if(b->type == TOKEN_BLOCK) {
     glw_view_eval_context_t n;
 
@@ -1019,7 +1020,7 @@ static uint8_t signal_to_eval_mask[GLW_SIGNAL_num] = {
 /**
  *
  */
-static inline void
+static __inline void
 run_dynamics(glw_t *w, glw_view_eval_context_t *ec, int mask)
 {
   ec->w = w;
@@ -4035,7 +4036,7 @@ glwf_strftime(glw_view_eval_context_t *ec, struct token *self,
 
   t = token2int(a);
   if(t != 0) {
-    my_localtime(&t, &tm);
+    arch_localtime(&t, &tm);
     strftime(buf, sizeof(buf), rstr_get(b->t_rstring), &tm);
   } else {
     buf[0] = 0;

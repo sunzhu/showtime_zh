@@ -37,6 +37,7 @@
 #include "prop/prop.h"
 #include "showtime.h"
 #include "settings.h"
+#include "misc/minmax.h"
 
 // #define GLW_TRACK_REFRESH
 
@@ -643,9 +644,8 @@ typedef struct glw_class {
 
 void glw_register_class(glw_class_t *gc);
 
-#define GLW_REGISTER_CLASS(n) \
-static void  __attribute__((constructor)) widgetclassinit ## n(void) \
-{ static int cnt; if(!cnt) glw_register_class(&n); cnt++; }
+#define GLW_REGISTER_CLASS(n) INITIALIZER(glw_init_ ## n) { \
+    glw_register_class(&n); }
 
 const glw_class_t *glw_class_find_by_name(const char *name);
 
@@ -1073,7 +1073,7 @@ typedef struct glw {
 #define glw_have_f_constraint(w) (((w)->glw_flags & GLW_CONSTRAINT_F) \
                        && !((w)->glw_flags & GLW_CONSTRAINT_IGNORE_F))
 
-static inline int
+static __inline int
 glw_filter_constraints(const glw_t *w)
 {
   return (w->glw_flags & ~w->glw_flags2) & GLW_CONSTRAINT_FLAGS;
@@ -1264,21 +1264,21 @@ void glw_signal_handler_unregister(glw_t *w, glw_callback_t *func,
 
 void glw_signal0(glw_t *w, glw_signal_t sig, void *extra);
 
-static inline int
+static __inline int
 glw_send_event(glw_t *w, event_t *e)
 {
   const glw_class_t *gc = w->glw_class;
   return gc->gc_send_event != NULL && gc->gc_send_event(w, e);
 }
 
-static inline int
+static __inline int
 glw_send_pointer_event(glw_t *w, const glw_pointer_event_t *gpe)
 {
   const glw_class_t *gc = w->glw_class;
   return gc->gc_pointer_event != NULL && gc->gc_pointer_event(w, gpe);
 }
 
-static inline int
+static __inline int
 glw_bubble_event(glw_t *w, event_t *e)
 {
   const glw_class_t *gc = w->glw_class;
@@ -1423,7 +1423,7 @@ void glw_need_refresh0(glw_root_t *gr, int how, const char *file, int line);
 
 #else
 
-static inline void
+static __inline void
 glw_need_refresh(glw_root_t *gr, int how)
 {
   int flags = GLW_REFRESH_FLAG_LAYOUT;
@@ -1435,7 +1435,7 @@ glw_need_refresh(glw_root_t *gr, int how)
 
 #endif
 
-static inline void
+static __inline void
 glw_schedule_refresh(glw_root_t *gr, int64_t when)
 {
   gr->gr_scheduled_refresh = MIN(gr->gr_scheduled_refresh, when);

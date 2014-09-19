@@ -134,7 +134,7 @@ void asyncio_timer_arm(asyncio_timer_t *at, int64_t expire);
 
 void asyncio_timer_disarm(asyncio_timer_t *at);
 
-static inline int asyncio_timer_is_armed(const asyncio_timer_t *at)
+static __inline int asyncio_timer_is_armed(const asyncio_timer_t *at)
 {
   return at->at_expire != 0;
 }
@@ -156,3 +156,18 @@ asyncio_dns_req_t *asyncio_dns_lookup_host(const char *hostname,
 						      const void *data),
 					   void *opaque);
 
+
+/*************************************************************************
+ * HTTP(S)
+ *************************************************************************/
+
+typedef struct asyncio_http_req asyncio_http_req_t;
+struct http_req_aux;
+
+asyncio_http_req_t *asyncio_http_req(const char *url,
+                                     void (*cb)(struct http_req_aux *req,
+                                                void *opaque),
+                                     void *opaque,
+                                     ...);
+
+void asyncio_http_cancel(asyncio_http_req_t *req);

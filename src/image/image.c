@@ -42,7 +42,7 @@ image_alloc(int num_components)
 {
   image_t *im = calloc(1, sizeof(image_t) + sizeof(image_component_t) *
                         num_components);
-  im->im_refcount = 1;
+  atomic_set(&im->im_refcount, 1);
   im->im_num_components = num_components;
   return im;
 }
@@ -54,7 +54,7 @@ image_alloc(int num_components)
 image_t *
 image_retain(image_t *im)
 {
-  atomic_add(&im->im_refcount, 1);
+  atomic_inc(&im->im_refcount);
   return im;
 }
 
@@ -98,7 +98,7 @@ image_release(image_t *im)
   if(im == NULL)
     return;
 
-  if(atomic_add(&im->im_refcount, -1) > 1)
+  if(atomic_dec(&im->im_refcount))
     return;
 
   for(int i = 0; i < im->im_num_components; i++)
@@ -168,11 +168,12 @@ image_dump(const image_t *im, const char *prefix)
 image_t *
 image_coded_alloc(void **datap, size_t size, image_coded_type_t type)
 {
+  image_t *img;
   buf_t *b = buf_create(size);
   if(b == NULL)
     return NULL;
 
-  image_t *img = image_alloc(1);
+  img = image_alloc(1);
 
   img->im_components[0].type = IMAGE_CODED;
   image_component_coded_t *icc = &img->im_components[0].coded;

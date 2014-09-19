@@ -26,11 +26,11 @@
 #include <inttypes.h>
 #include <stdarg.h>
 #include <string.h>
-#include <sys/time.h>
-#include <time.h>
 
 #include "arch/threads.h"
 #include "misc/rstr.h"
+
+#include "compiler.h"
 
 #if __GNUC__ >= 4 && __GNUC_MINOR__ >=6
 #define static_assert(x, y) _Static_assert(x, y)
@@ -46,18 +46,15 @@ void showtime_fini(void);
 
 void showtime_swrefresh(void);
 
-extern void panic(const char *fmt, ...) __attribute__((noreturn, format(printf, 1, 2)));
+extern void panic(const char *fmt, ...)
+  attribute_printf(1,2) attribute_noreturn;
 
 extern const char *showtime_dataroot(void);
-
-#define HTS_GLUE(a, b) a ## b
-#define HTS_JOIN(a, b) HTS_GLUE(a, b)
 
 #define BYPASS_CACHE  ((int *)-1)
 #define DISABLE_CACHE ((int *)-2)
 #define NOT_MODIFIED ((void *)-1)
 
-#define ARRAYSIZE(x) (sizeof(x) / sizeof(x[0]))
 
 #define ONLY_CACHED(p) ((p) != BYPASS_CACHE && (p) != NULL)
 
@@ -74,13 +71,6 @@ struct prop;
 struct prop *nls_get_prop(const char *string);
 
 rstr_t *nls_get_rstringp(const char *string, const char *singularis, int val);
-
-#ifndef MIN
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#endif
-#ifndef MAX
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#endif
 
 #define URL_MAX 2048
 #define HOSTNAME_MAX 256 /* FQDN is max 255 bytes including ending dot */
@@ -124,7 +114,9 @@ void tracev(int flags, int level, const char *subsys, const char *fmt, va_list a
 
 void trace_arch(int level, const char *prefix, const char *buf);
 
-#define TRACE(level, subsys, fmt...) trace(0, level, subsys, fmt)
+#define TRACE(level, subsys, fmt, ...) \
+  trace(0, level, subsys, fmt, ##__VA_ARGS__)
+
 
 void hexdump(const char *pfx, const void *data, int len);
 
@@ -139,7 +131,7 @@ void hexdump(const char *pfx, const void *data, int len);
 })
 
 
-static inline unsigned int mystrhash(const char *s)
+static __inline unsigned int mystrhash(const char *s)
 {
   unsigned int v = 5381;
   while(*s)
@@ -147,14 +139,14 @@ static inline unsigned int mystrhash(const char *s)
   return v;
 }
 
-static inline void mystrset(char **p, const char *s)
+static __inline void mystrset(char **p, const char *s)
 {
   free(*p);
   *p = s ? strdup(s) : NULL;
 }
 
 
-static inline const char *mystrbegins(const char *s1, const char *s2)
+static __inline const char *mystrbegins(const char *s1, const char *s2)
 {
   while(*s2)
     if(*s1++ != *s2++)
@@ -162,7 +154,6 @@ static inline const char *mystrbegins(const char *s1, const char *s2)
   return s1;
 }
 
-void my_localtime(const time_t *timep, struct tm *tm);
 
 /*
  * Memory allocation wrappers
@@ -175,7 +166,7 @@ void *mymalloc(size_t size);
 
 void *myrealloc(void *ptr, size_t size);
 
-static inline void *myreallocf(void *ptr, size_t size)
+static __inline void *myreallocf(void *ptr, size_t size)
 {
   void *r = myrealloc(ptr, size);
   if(ptr != NULL && size > 0 && r == NULL)
@@ -328,8 +319,7 @@ extern inithelper_t *inithelpers;
     .group = group_,						   \
     .fn = func_							   \
   };								   \
-  static void  __attribute__((constructor))			   \
-  HTS_JOIN(inithelperctor, __LINE__)(void)			   \
+  INITIALIZER(HTS_JOIN(inithelperctor, __LINE__))                  \
   {								   \
     inithelper_t *ih = &HTS_JOIN(inithelper, __LINE__);		   \
     ih->next = inithelpers;					   \

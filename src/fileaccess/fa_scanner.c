@@ -43,9 +43,9 @@
 #include "metadata/playinfo.h"
 #include "metadata/metadata_str.h"
 
-#define SCAN_TRACE(x...) do {			\
-    if(gconf.enable_fa_scanner_debug)           \
-      TRACE(TRACE_DEBUG, "FA", x);              \
+#define SCAN_TRACE(x, ...) do {                                \
+    if(gconf.enable_fa_scanner_debug)                          \
+      TRACE(TRACE_DEBUG, "FA", x, ##__VA_ARGS__);              \
   } while(0)
 
 
@@ -61,7 +61,7 @@ typedef enum {
 
 
 typedef struct scanner {
-  int s_refcount;
+  atomic_t s_refcount;
 
   char *s_url;
   time_t s_mtime; // modifiaction time of s_url
@@ -211,6 +211,7 @@ static struct strtab postfixtab[] = {
   { "wma",             CONTENT_AUDIO },
   { "ogg",             CONTENT_AUDIO },
   { "spc",             CONTENT_AUDIO },
+  { "wav",             CONTENT_AUDIO },
 
   { "mkv",             CONTENT_VIDEO },
   { "avi",             CONTENT_VIDEO },
@@ -450,9 +451,8 @@ scanner_destroy(scanner_t *s)
 static void
 scanner_release(scanner_t *s)
 {
-  if(atomic_add(&s->s_refcount, -1) > 1)
+  if(atomic_dec(&s->s_refcount))
     return;
-  assert(s->s_refcount == 0);
   fa_unreference(s->s_ref);
   if(s->s_pnf != NULL)
     prop_nf_release(s->s_pnf);
@@ -913,7 +913,7 @@ add_indexed_option(scanner_t *s, prop_t *model)
     set_mode(s, BROWSER_DIR);
   }
   rstr_release(cur);
-  s->s_refcount++;
+  atomic_inc(&s->s_refcount);
   prop_subscribe(PROP_SUB_NO_INITIAL_UPDATE | PROP_SUB_TRACK_DESTROY,
                  PROP_TAG_CALLBACK, set_indexed_mode, s,
                  PROP_TAG_ROOT, options,
@@ -1011,7 +1011,7 @@ add_sort_option_type(scanner_t *s, prop_t *model)
     prop_nf_sort(s->s_pnf, "node.metadata.title", 0, 3, NULL, 1);
   }
   rstr_release(cur);
-  s->s_refcount++;
+  atomic_inc(&s->s_refcount);
   prop_subscribe(PROP_SUB_NO_INITIAL_UPDATE | PROP_SUB_TRACK_DESTROY,
                  PROP_TAG_CALLBACK, set_sort_order, s,
                  PROP_TAG_ROOT, options,
@@ -1082,7 +1082,7 @@ add_sort_option_dirfirst(scanner_t *s, prop_t *model)
 
   prop_nf_sort(s->s_pnf, v ? "node.type" : NULL, 0, 0, typemap, 1);
 
-  s->s_refcount++;
+  atomic_inc(&s->s_refcount);
   prop_subscribe(PROP_SUB_NO_INITIAL_UPDATE | PROP_SUB_TRACK_DESTROY,
 		 PROP_TAG_CALLBACK, set_sort_dirs, s,
 		 PROP_TAG_ROOT, value,
@@ -1143,7 +1143,7 @@ add_only_supported_files(scanner_t *s, prop_t *model,
 
   prop_link(_p("Show only supported files"), prop_create(m, "title"));
 
-  s->s_refcount++;
+  atomic_inc(&s->s_refcount);
   prop_subscribe(PROP_SUB_NO_INITIAL_UPDATE | PROP_SUB_TRACK_DESTROY,
 		 PROP_TAG_CALLBACK, set_only_supported_files, s,
 		 PROP_TAG_ROOT, value,
@@ -1182,7 +1182,7 @@ fa_scanner_page(const char *url, time_t url_mtime,
   /* One reference to the scanner thread
      and one to the scanner_stop subscription
   */
-  s->s_refcount = 2;
+  atomic_set(&s->s_refcount, 2);
 
   s->s_playme = rstr_alloc(playme);
 

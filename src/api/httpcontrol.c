@@ -31,6 +31,8 @@
 #include "backend/backend.h"
 #include "notifications.h"
 #include "fileaccess/fileaccess.h"
+#include "htsmsg/htsmsg.h"
+#include "htsmsg/htsmsg_json.h"
 
 #define STRINGIFY(A)  #A
 
@@ -496,7 +498,7 @@ extern void my_malloc_stats(void (*fn)(const char *fmt, ...));
 char hugebuf[1024 * 1024];
 int hugeptr;
 
-static void __attribute__((unused))memdumpf(const char *fmt, ...)
+static void memdumpf(const char *fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
@@ -702,6 +704,46 @@ hc_static(http_connection_t *hc, const char *remain, void *opaque,
   return hc_serve_file(hc, path, NULL);
 }
 
+/**
+ *
+ */
+static int
+hc_open_parameterized(http_connection_t *hc, const char *remain,
+                      void *opaque, http_cmd_t method)
+{
+  if(remain == NULL)
+    return 404;
+
+  htsmsg_t *msg = htsmsg_create_map();
+  http_req_args_fill_htsmsg(hc, msg);
+
+  htsbuf_queue_t buf;
+  htsbuf_queue_init(&buf, 0);
+
+  htsbuf_qprintf(&buf, "%s:%s", remain, htsmsg_json_serialize_to_str(msg, 0));
+  char *s = htsbuf_to_string(&buf);
+  event_dispatch(event_create_openurl(s, NULL, NULL, NULL, NULL, NULL));
+  free(s);
+  htsbuf_queue_flush(&buf);
+  htsmsg_release(msg);
+  return http_redirect(hc, "/");
+}
+
+#ifdef PROP_DEBUG
+/**
+ *
+ */
+static int
+hc_subtrack(http_connection_t *hc, const char *remain, void *opaque,
+	   http_cmd_t method)
+{
+  if(remain == NULL)
+    return 404;
+  void *ptr = (void *)(intptr_t)strtol(remain, NULL, 16);
+  prop_track_sub(ptr);
+  return 200;
+}
+#endif
 
 /**
  *
@@ -712,6 +754,7 @@ httpcontrol_init(void)
   http_path_add("/showtime/done", NULL, hc_done, 0);
   http_path_add("/showtime/image", NULL, hc_image, 0);
   http_path_add("/showtime/open", NULL, hc_open, 1);
+  http_path_add("/showtime/openparameterized", NULL, hc_open_parameterized, 0);
   http_path_add("/showtime/prop", NULL, hc_prop, 0);
   http_path_add("/showtime/input/action", NULL, hc_action, 0);
   http_path_add("/showtime/input/utf8", NULL, hc_utf8, 1);
@@ -725,6 +768,9 @@ httpcontrol_init(void)
   http_path_add("/", NULL, hc_root, 1);
   http_path_add("/favicon.ico", NULL, hc_favicon, 1);
   http_path_add("/showtime/static", NULL, hc_static, 0);
+#ifdef PROP_DEBUG
+  http_path_add("/subtrack", NULL, hc_subtrack, 0);
+#endif
 }
 
 INITME(INIT_GROUP_API, httpcontrol_init);

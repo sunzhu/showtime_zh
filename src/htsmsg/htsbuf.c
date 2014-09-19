@@ -21,7 +21,6 @@
 
 #include <assert.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
@@ -29,6 +28,7 @@
 #include "htsbuf.h"
 #include "showtime.h"
 #include "misc/rstr.h"
+#include "misc/minmax.h"
 
 /**
  *
@@ -85,7 +85,7 @@ htsbuf_append(htsbuf_queue_t *hq, const void *buf, size_t len)
     c = MIN(hd->hd_data_size - hd->hd_data_len, len);
     memcpy(hd->hd_data + hd->hd_data_len, buf, c);
     hd->hd_data_len += c;
-    buf += c;
+    buf = (const char *)buf + c;
     len -= c;
   }
   if(len == 0)
@@ -142,7 +142,7 @@ htsbuf_read(htsbuf_queue_t *hq, void *buf, size_t len)
     memcpy(buf, hd->hd_data + hd->hd_data_off, c);
 
     r += c;
-    buf += c;
+    buf = (char *)buf + c;
     len -= c;
     hd->hd_data_off += c;
     hq->hq_size -= c;
@@ -190,7 +190,7 @@ htsbuf_peek(htsbuf_queue_t *hq, void *buf, size_t len)
     memcpy(buf, hd->hd_data + hd->hd_data_off, c);
 
     r += c;
-    buf += c;
+    buf = (char *)buf + c;
     len -= c;
 
     hd = TAILQ_NEXT(hd, hd_link);
@@ -264,23 +264,6 @@ htsbuf_appendq(htsbuf_queue_t *hq, htsbuf_queue_t *src)
 
 
 void
-htsbuf_dump_raw_stderr(htsbuf_queue_t *hq)
-{
-  htsbuf_data_t *hd;
-  char n = '\n';
-
-  TAILQ_FOREACH(hd, &hq->hq_q, hd_link) {
-    if(write(2, hd->hd_data + hd->hd_data_off,
-	     hd->hd_data_len - hd->hd_data_off)
-       != hd->hd_data_len - hd->hd_data_off)
-      break;
-  }
-  if(write(2, &n, 1) != 1)
-    return;
-}
-
-
-void
 htsbuf_hexdump(htsbuf_queue_t *hq, const char *prefix)
 {
   char *r = malloc(hq->hq_size);
@@ -329,12 +312,14 @@ htsbuf_append_and_escape_xml(htsbuf_queue_t *hq, const char *s)
 /**
  *
  */
-void
-htsbuf_append_and_escape_url(htsbuf_queue_t *hq, const char *s)
+static void
+htsbuf_append_and_escape_url0(htsbuf_queue_t *hq, const char *s, const char *e)
 {
   const char *c = s;
-  const char *e = s + strlen(s);
   char C;
+  char buf[4];
+  static const char hexchars[16] = "0123456789ABCDEF";
+
   if(e == s)
     return;
 
@@ -351,8 +336,6 @@ htsbuf_append_and_escape_url(htsbuf_queue_t *hq, const char *s)
        C == '-') {
       esc = NULL;
     } else {
-      static const char hexchars[16] = "0123456789ABCDEF";
-      char buf[4];
       buf[0] = '%';
       buf[1] = hexchars[(C >> 4) & 0xf];
       buf[2] = hexchars[C & 0xf];;
@@ -371,6 +354,26 @@ htsbuf_append_and_escape_url(htsbuf_queue_t *hq, const char *s)
       break;
     }
   }
+}
+
+
+/**
+ *
+ */
+void
+htsbuf_append_and_escape_url(htsbuf_queue_t *hq, const char *s)
+{
+  htsbuf_append_and_escape_url0(hq, s, s + strlen(s));
+}
+
+
+/**
+ *
+ */
+void
+htsbuf_append_and_escape_url_len(htsbuf_queue_t *hq, const char *s, size_t len)
+{
+  htsbuf_append_and_escape_url0(hq, s, s + len);
 }
 
 

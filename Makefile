@@ -73,6 +73,7 @@ SRCS += src/showtime.c \
 	src/blobcache_file.c \
 	src/i18n.c \
 	src/prop/prop_core.c \
+	src/prop/prop_test.c \
 	src/prop/prop_nodefilter.c \
 	src/prop/prop_tags.c \
 	src/prop/prop_vector.c \
@@ -332,6 +333,8 @@ SRCS                     += \
 	src/backend/bittorrent/torrent_stats.c \
 	src/backend/bittorrent/torrent_settings.c \
 	src/backend/bittorrent/tracker.c \
+	src/backend/bittorrent/tracker_udp.c \
+	src/backend/bittorrent/tracker_http.c \
 	src/backend/bittorrent/bencode.c \
 
 

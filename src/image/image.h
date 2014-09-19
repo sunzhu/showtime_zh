@@ -24,6 +24,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "arch/atomic.h"
+#include "compiler.h"
+
 struct buf;
 
 /**
@@ -128,7 +131,7 @@ typedef struct image_component {
  *
  */
 typedef struct image {
-  int im_refcount;
+  atomic_t im_refcount;
 
   uint16_t im_width;
   uint16_t im_height;
@@ -151,9 +154,9 @@ typedef struct image {
 /**
  *
  */
-image_t *image_alloc(int num_components) __attribute__ ((malloc));
+image_t *image_alloc(int num_components) attribute_malloc;
 
-image_t *image_retain(image_t *img)  __attribute__ ((warn_unused_result));
+image_t *image_retain(image_t *img) attribute_unused_result;
 
 void image_release(image_t *img);
 
@@ -204,7 +207,7 @@ image_t *svg_decode(struct buf *buf, const image_meta_t *im,
 /**
  *
  */
-static inline image_component_t *
+static __inline image_component_t *
 image_find_component(image_t *img, image_component_type_t type)
 {
   if(img == NULL)

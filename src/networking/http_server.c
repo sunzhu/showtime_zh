@@ -29,7 +29,7 @@
 
 #include <libavutil/base64.h>
 
-#define hsprintf(fmt...) // printf(fmt)
+#define hsprintf(fmt, ...) // printf(fmt, ##__VA_ARGS__)
 
 #if ENABLE_POSIX_NETWORKING
 #include <netinet/tcp.h>  // for TCP_ defines
@@ -178,7 +178,7 @@ http_path_add(const char *path, void *opaque, http_callback_t *callback,
   hp->hp_opaque = opaque;
   hp->hp_callback = callback;
   hp->hp_leaf = leaf;
-  LIST_INSERT_SORTED(&http_paths, hp, hp_link, hp_cmp);
+  LIST_INSERT_SORTED(&http_paths, hp, hp_link, hp_cmp, http_path_t);
   return hp;
 }
 
@@ -1208,6 +1208,18 @@ http_server_init(void)
     if(!gconf.disable_upnp)
       upnp_init();
   }
+}
+
+/**
+ *
+ */
+void
+http_req_args_fill_htsmsg(http_connection_t *hc, htsmsg_t *msg)
+{
+  http_header_t *hh;
+
+  LIST_FOREACH(hh, &hc->hc_req_args, hh_link)
+    htsmsg_add_str(msg, hh->hh_key, hh->hh_value);
 }
 
 INITME(INIT_GROUP_ASYNCIO, http_server_init);
