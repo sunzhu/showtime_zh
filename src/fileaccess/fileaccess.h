@@ -95,7 +95,9 @@ typedef struct fa_dir_entry {
   char fde_bound_to_metadb;
   struct fa_stat fde_stat;
 
+#if ENABLE_METADATA
   struct metadata *fde_md;
+#endif
 
 } fa_dir_entry_t;
 
@@ -170,6 +172,7 @@ typedef struct fa_open_extra {
   struct prop *foe_stats;
   struct cancellable *foe_c;
   int foe_open_timeout; // In ms
+  int foe_protocol_error; // Protocol error (HTTP can set 404 here, etc)
 } fa_open_extra_t;
 
 
@@ -260,7 +263,7 @@ fa_handle_t *fa_notify_start(const char *url, void *opaque,
 
 void fa_notify_stop(fa_handle_t *fh);
 
-void fa_ffmpeg_error_to_txt(int err, char *buf, size_t buflen);
+void fa_libav_error_to_txt(int err, char *buf, size_t buflen);
 
 void fa_scanner_page(const char *url, time_t mtime, 
                      prop_t *model, const char *playme,

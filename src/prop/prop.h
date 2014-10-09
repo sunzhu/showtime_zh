@@ -67,7 +67,7 @@ typedef enum {
   PROP_SET_INT,
   PROP_SET_FLOAT,
   PROP_SET_DIR,
-  PROP_SET_RLINK,
+  PROP_SET_URI,
   PROP_ADOPT_RSTRING,
 
   PROP_ADD_CHILD,
@@ -112,13 +112,19 @@ typedef void (prop_callback_destroyed_t)(void *opaque, struct prop_sub *s);
 
 typedef void (prop_trampoline_t)(struct prop_sub *s, prop_event_t event, ...);
 
-typedef void (prop_lockmgr_t)(void *ptr, int lock);
+typedef enum {
+  PROP_LOCK_UNLOCK,
+  PROP_LOCK_LOCK,
+  PROP_LOCK_TRY,
+  PROP_LOCK_RETAIN,
+  PROP_LOCK_RELEASE,
+} prop_lock_op_t;
 
+typedef int (prop_lockmgr_t)(void *ptr, prop_lock_op_t op);
 
 /**
  *
  */
-
 prop_t *prop_get_global(void);
 
 void prop_init(void);
@@ -167,7 +173,7 @@ enum {
   PROP_TAG_ROOT,
   PROP_TAG_NAMED_ROOT,
   PROP_TAG_MUTEX,
-  PROP_TAG_EXTERNAL_LOCK,
+  PROP_TAG_LOCKMGR,
   PROP_TAG_NAMESTR,
 #ifdef PROP_SUB_RECORD_SOURCE
   PROP_TAG_SOURCE,
@@ -269,8 +275,8 @@ void prop_set_int_clipping_range(prop_t *p, int min, int max);
 
 void prop_set_void_ex(prop_t *p, prop_sub_t *skipme);
 
-void prop_set_link_ex(prop_t *p, prop_sub_t *skipme, const char *title,
-		      const char *url);
+void prop_set_uri_ex(prop_t *p, prop_sub_t *skipme, const char *title,
+                     const char *url);
 
 #define prop_set_string(p, str) do {		\
   if(__builtin_constant_p(str))			\
@@ -293,7 +299,7 @@ void prop_set_link_ex(prop_t *p, prop_sub_t *skipme, const char *title,
 
 #define prop_set_void(p) prop_set_void_ex(p, NULL)
 
-#define prop_set_link(p, title, link) prop_set_link_ex(p, NULL, title, link)
+#define prop_set_uri(p, title, uri) prop_set_uri_ex(p, NULL, title, uri)
 
 #define prop_set_rstring(p, rstr) prop_set_rstring_ex(p, NULL, rstr)
 

@@ -114,8 +114,8 @@ pb_getProperty(JSContext *cx, JSObject *obj, jsval id, jsval *vp)
     case PROP_RSTRING:
       *vp = STRING_TO_JSVAL(JS_NewStringCopyZ(cx, rstr_get(c->hp_rstring)));
       break;
-    case PROP_LINK:
-      *vp = STRING_TO_JSVAL(JS_NewStringCopyZ(cx, rstr_get(c->hp_link_rtitle)));
+    case PROP_URI:
+      *vp = STRING_TO_JSVAL(JS_NewStringCopyZ(cx, rstr_get(c->hp_uri_title)));
       break;
 
     case PROP_FLOAT:
@@ -235,7 +235,9 @@ js_openURL(JSContext *cx, JSObject *obj, uintN argc,
   if (!JS_ConvertArguments(cx, argc, argv, "s/ss", &url, &view, &how))
     return JS_FALSE;
 
-  event_t *e = event_create_openurl(url, view, NULL, NULL, how, NULL);
+  event_t *e = event_create_openurl(.url  = url,
+                                    .view = view,
+                                    .how  = how);
   prop_send_ext_event(JS_GetPrivate(cx, obj), e);
   event_release(e);
   return JS_TRUE;

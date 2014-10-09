@@ -32,7 +32,7 @@
 #include "arch/arch.h"
 #include "arch/threads.h"
 
-#include "media.h"
+#include "media/media.h"
 #include "audio2/audio_ext.h"
 #include "backend/backend.h"
 #include "navigator.h"
@@ -117,7 +117,7 @@ fflog(void *ptr, int level, const char *fmt, va_list vl)
 {
   static char line[1024];
   AVClass *avc = ptr ? *(AVClass**)ptr : NULL;
-  if(!gconf.ffmpeglog)
+  if(!gconf.libavlog)
     return;
 
   if(level < AV_LOG_WARNING)
@@ -133,7 +133,7 @@ fflog(void *ptr, int level, const char *fmt, va_list vl)
     return;
   line[strlen(line)-1] = 0;
 
-  TRACE(level, avc ? avc->item_name(ptr) : "FFmpeg", "%s", line);
+  TRACE(level, avc ? avc->item_name(ptr) : "libav", "%s", line);
   line[0] = 0;
 }
 #endif
@@ -293,7 +293,9 @@ showtime_init(void)
   }
 
   /* Initialize sqlite3 */
+#if ENABLE_SQLITE
   db_init();
+#endif
 
   /* Initializte blob cache */
   blobcache_init();
@@ -311,12 +313,13 @@ showtime_init(void)
   kvstore_init();
 
   /* Metadata init */
+#if ENABLE_METADATA
   metadata_init();
   metadb_init();
-  subtitles_init();
-
-  /* Metadata decoration init */
   decoration_init();
+#endif
+
+  subtitles_init();
 
   /* Initialize keyring */
   keyring_init();
@@ -366,8 +369,10 @@ showtime_init(void)
   /* Video settings */
   video_settings_init();
 
+#if ENABLE_SPIDERMONKEY
   if(gconf.load_jsfile)
     js_load(gconf.load_jsfile);
+#endif
 
   /* Various interprocess communication stuff (D-Bus on Linux, etc) */
   init_group(INIT_GROUP_IPC);
@@ -413,7 +418,7 @@ parse_opts(int argc, char **argv)
 	     "   -d                - Enable debug output.\n"
 	     "   --no-ui           - Start without UI.\n"
 	     "   --fullscreen      - Start in fullscreen mode.\n"
-	     "   --ffmpeglog       - Print ffmpeg log messages.\n"
+	     "   --libav-log       - Print libav log messages.\n"
 	     "   --with-standby    - Enable system standby.\n"
 	     "   --with-poweroff   - Enable system power-off.\n"
 	     "   -s <path>         - Non-default Showtime settings path.\n"
@@ -452,8 +457,8 @@ parse_opts(int argc, char **argv)
       gconf.trace_level = TRACE_DEBUG;
       argc -= 1; argv += 1;
       continue;
-    } else if(!strcmp(argv[0], "--ffmpeglog")) {
-      gconf.ffmpeglog = 1;
+    } else if(!strcmp(argv[0], "--libav-log")) {
+      gconf.libavlog = 1;
       argc -= 1; argv += 1;
       continue;
     } else if(!strcmp(argv[0], "--no-ui")) {
@@ -516,6 +521,10 @@ parse_opts(int argc, char **argv)
       continue;
     } else if(!strcmp(argv[0], "-j") && argc > 1) {
       gconf.load_jsfile = argv[1];
+      argc -= 2; argv += 2;
+      continue;
+    } else if(!strcmp(argv[0], "--ecmascript") && argc > 1) {
+      gconf.load_ecmascript = argv[1];
       argc -= 2; argv += 2;
       continue;
     } else if (!strcmp(argv[0], "-v") && argc > 1) {
@@ -679,8 +688,10 @@ void
 showtime_fini(void)
 {
   prop_destroy_by_name(prop_get_global(), "popups");
+#if ENABLE_PLAYQUEUE
   playqueue_fini();
   TRACE(TRACE_DEBUG, "core", "Playqueue finished");
+#endif
   audio_fini();
   TRACE(TRACE_DEBUG, "core", "Audio finihsed");
   nav_fini();
@@ -691,8 +702,10 @@ showtime_fini(void)
   TRACE(TRACE_DEBUG, "core", "Slow shutdown hooks finished");
   blobcache_fini();
   TRACE(TRACE_DEBUG, "core", "Blobcache finished");
+#if ENABLE_METADATA
   metadb_fini();
   TRACE(TRACE_DEBUG, "core", "Metadb finished");
+#endif
   kvstore_fini();
   notifications_fini();
   usage_fini();

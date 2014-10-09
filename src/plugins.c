@@ -545,8 +545,10 @@ plugin_load(const char *url, char *errbuf, size_t errlen, int force,
       }
       snprintf(fullpath, sizeof(fullpath), "%s/%s", url, file);
 
+      int version = htsmsg_get_u32_or_default(ctrl, "apiversion", 1);
+
       hts_mutex_unlock(&plugin_mutex);
-      r = ecmascript_plugin_load(id, fullpath, errbuf, errlen);
+      r = ecmascript_plugin_load(id, fullpath, errbuf, errlen, version);
       hts_mutex_lock(&plugin_mutex);
       if(!r)
 	pl->pl_unload = plugin_unload_ecmascript;
@@ -1550,7 +1552,7 @@ plugins_view_add(plugin_t *pl,
 
   plugin_view_entry_t *pve = calloc(1, sizeof(plugin_view_entry_t));
   pve->pve_type_prop = prop_create_r(r, path);
-  prop_set_link(pve->pve_type_prop, title, path);
+  prop_set_uri(pve->pve_type_prop, title, path);
 
   LIST_INSERT_HEAD(&pl->pl_views, pve, pve_plugin_link);
   pve->pve_key = strdup(path);

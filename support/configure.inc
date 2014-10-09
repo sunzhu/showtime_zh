@@ -70,7 +70,6 @@ CONFIG_LIST="
  realpath
  trex
  emu_thread_specifics
- ps3_vdec
  libfontconfig
  readahead_cache
  sqlite_vfs
@@ -88,10 +87,30 @@ CONFIG_LIST="
  bspatch
  connman
  libntfs
- miner
  cedar
  audiotest
+ metadata
+ sqlite
+ kvstore
+ ftpclient
+ ftpserver
+ upnp
+ bittorrent
+ hls
+ icecast
+ usagereport
+ nativesmb
+ rar
+ playqueue
+ sid
+ htsp
+ media_settings
+ glw_settings
 "
+
+
+
+
 
 cleanup() {
     rm -rf $TMPDIR
@@ -313,9 +332,6 @@ EOF
 
 }
 
-enable libav
-enable xmp
-enable audiotest
 
 update_ext_submodule() {
     status=`git submodule status ext/$1 | cut -b 1`
@@ -566,3 +582,29 @@ EOF
 
     cleanup
 }
+
+
+#
+# Default enables
+#
+
+enable libav
+enable xmp
+enable audiotest
+enable metadata
+enable sqlite
+enable kvstore
+enable ftpclient
+enable ftpserver
+enable upnp
+enable bittorrent
+enable hls
+enable icecast
+enable usagereport
+enable nativesmb
+enable rar
+enable playqueue
+enable sid
+enable htsp
+enable media_settings
+enable glw_settings

@@ -916,27 +916,154 @@ glw_renderer_get_cache(glw_root_t *root, glw_renderer_t *gr)
 
 
 /**
+ *
+ */
+static void
+add_job(glw_root_t *gr,
+        const Mtx m,
+        const struct glw_backend_texture *t0,
+        const struct glw_backend_texture *t1,
+        const struct glw_rgb *rgb_mul,
+        const struct glw_rgb *rgb_off,
+        float alpha, float blur,
+        const float *vertices,
+        int num_vertices,
+        const uint16_t *indices,
+        int num_triangles,
+        int flags,
+        glw_program_args_t *gpa,
+        const glw_rctx_t *rc,
+        int16_t primitive_type,
+        int zoffset)
+{
+
+  if(gr->gr_num_render_jobs >= gr->gr_render_jobs_capacity) {
+    // Need more space
+    glw_render_job_t *old_jobs = gr->gr_render_jobs;
+    int old_capacity = gr->gr_render_jobs_capacity;
+
+    gr->gr_render_jobs_capacity = 100 + gr->gr_render_jobs_capacity * 2;
+
+
+    gr->gr_render_jobs = realloc(gr->gr_render_jobs,
+                                 sizeof(glw_render_job_t) *
+                                 gr->gr_render_jobs_capacity);
+
+    // Adjust pointers since we might have relocated job array
+    for(int i = 0; i < old_capacity; i++) {
+      gr->gr_render_order[i].job =
+        gr->gr_render_order[i].job - old_jobs + gr->gr_render_jobs;
+    }
+
+    gr->gr_render_order = realloc(gr->gr_render_order,
+                                  sizeof(glw_render_order_t) *
+                                  gr->gr_render_jobs_capacity);
+
+
+  }
+
+  struct glw_render_job   *rj = gr->gr_render_jobs  + gr->gr_num_render_jobs;
+  struct glw_render_order *ro = gr->gr_render_order + gr->gr_num_render_jobs;
+
+  if(m == NULL) {
+    rj->eyespace = 1;
+  } else {
+    rj->eyespace = 0;
+    glw_mtx_copy(rj->m, m);
+  }
+
+  rj->width  = rc->rc_width;
+  rj->height = rc->rc_height;
+
+  rj->gpa = gpa;
+  rj->t0 = t0;
+  rj->t1 = t1;
+  rj->primitive_type = primitive_type;
+  ro->zindex = GLW_CLAMP(rc->rc_zindex + zoffset, INT16_MIN, INT16_MAX);
+  ro->job = rj;
+
+  switch(gr->gr_blendmode) {
+  case GLW_BLEND_NORMAL:
+    rj->rgb_mul = *rgb_mul;
+    rj->alpha = alpha;
+    break;
+
+  case GLW_BLEND_ADDITIVE:
+    rj->rgb_mul.r = rgb_mul->r * alpha;
+    rj->rgb_mul.g = rgb_mul->g * alpha;
+    rj->rgb_mul.b = rgb_mul->b * alpha;
+    rj->alpha = 1;
+    break;
+  }
+
+  if(rgb_off != NULL) {
+    rj->rgb_off = *rgb_off;
+    flags |= GLW_RENDER_COLOR_OFFSET;
+  } else {
+    rj->rgb_off.r = 0;
+    rj->rgb_off.g = 0;
+    rj->rgb_off.b = 0;
+  }
+
+  rj->blur = blur;
+  rj->blendmode = gr->gr_blendmode;
+  rj->frontface = gr->gr_frontface;
+
+  int vnum = indices ? num_triangles * 3 : num_vertices;
+
+  if(gr->gr_vertex_offset + vnum > gr->gr_vertex_buffer_capacity) {
+    gr->gr_vertex_buffer_capacity = 100 + vnum +
+      gr->gr_vertex_buffer_capacity * 2;
+
+    gr->gr_vertex_buffer = realloc(gr->gr_vertex_buffer,
+				     sizeof(float) * VERTEX_SIZE * 
+				     gr->gr_vertex_buffer_capacity);
+  }
+
+  float *vdst = gr->gr_vertex_buffer + gr->gr_vertex_offset * VERTEX_SIZE;
+
+  if(indices != NULL) {
+    int i;
+    for(i = 0; i < num_triangles * 3; i++) {
+      const float *v = &vertices[indices[i] * VERTEX_SIZE];
+      memcpy(vdst, v, VERTEX_SIZE * sizeof(float));
+      vdst += VERTEX_SIZE;
+    }
+  } else {
+    memcpy(vdst, vertices, num_vertices * VERTEX_SIZE * sizeof(float));
+  }
+
+  rj->flags = flags;
+  rj->vertex_offset = gr->gr_vertex_offset;
+  rj->num_vertices = vnum;
+  gr->gr_vertex_offset += vnum;
+  gr->gr_num_render_jobs++;
+}
+
+
+/**
  * This is the entry point of the rendering pipeline
  */
 void
 glw_renderer_draw(glw_renderer_t *gr, glw_root_t *root,
 		  const glw_rctx_t *rc,
 		  const struct glw_backend_texture *tex,
+		  const struct glw_backend_texture *tex2,
 		  const struct glw_rgb *rgb_mul,
 		  const struct glw_rgb *rgb_off,
 		  float alpha, float blur,
-		  glw_program_t *p)
+		  glw_program_args_t *gpa)
 {
   rgb_mul = rgb_mul ?: &white;
 
-  int flags = 
+  int flags =
     gr->gr_color_attributes ? GLW_RENDER_COLOR_ATTRIBUTES : 0;
 
   if(root->gr_need_sw_clip || root->gr_active_faders ||
      root->gr_stencil_width) {
     glw_renderer_cache_t *grc = glw_renderer_get_cache(root, gr);
 
-    if(gr->gr_dirty || 
+    if(gr->gr_dirty ||
        memcmp(grc->grc_mtx, rc->rc_mtx, sizeof(Mtx)) ||
        glw_renderer_clippers_cmp(grc, root) ||
        glw_renderer_stencilers_cmp(grc, root) ||
@@ -950,20 +1077,41 @@ glw_renderer_draw(glw_renderer_t *gr, glw_root_t *root,
     if(grc->grc_colored)
       flags |= GLW_RENDER_COLOR_ATTRIBUTES;
 
-    root->gr_render(root, NULL, tex, root->gr_stencil_texture,
-		    rgb_mul, rgb_off, alpha, blur,
-		    grc->grc_vertices, grc->grc_num_vertices,
-		    NULL, 0, flags, p, rc);
+    if(root->gr_stencil_width)
+      tex2 = root->gr_stencil_texture;
+
+    add_job(root, NULL, tex, tex2,
+            rgb_mul, rgb_off, alpha, blur,
+            grc->grc_vertices, grc->grc_num_vertices,
+            NULL, 0, flags, gpa, rc, GLW_DRAW_TRIANGLES, rc->rc_zindex);
   } else {
-    root->gr_render(root, rc->rc_mtx, tex, NULL, rgb_mul, rgb_off, alpha, blur,
-		    gr->gr_vertices, gr->gr_num_vertices,
-		    gr->gr_indices,  gr->gr_num_triangles,
-		    flags, p, rc);
+    add_job(root, rc->rc_mtx, tex, tex2, rgb_mul, rgb_off, alpha, blur,
+            gr->gr_vertices, gr->gr_num_vertices,
+            gr->gr_indices,  gr->gr_num_triangles,
+            flags, gpa, rc, GLW_DRAW_TRIANGLES, rc->rc_zindex);
   }
   gr->gr_dirty = 0;
 }
 
 
+const static float box_vertices[4][12] = {
+  { -1,-1, 0, 0, 1, 1, 1, 1},
+  {  1,-1, 0, 0, 1, 1, 1, 1},
+  {  1, 1, 0, 0, 1, 1, 1, 1},
+  { -1, 1, 0, 0, 1, 1, 1, 1},
+};
+
+/**
+ *
+ */
+void
+glw_wirebox(glw_root_t *root, const glw_rctx_t *rc)
+{
+  add_job(root, rc->rc_mtx, NULL, NULL, &white, NULL, 1, 0,
+          &box_vertices[0][0], 4,
+          NULL, 0,
+          0, NULL, rc, GLW_DRAW_LINE_LOOP, INT16_MAX);
+}
 
 
 /**
@@ -1133,3 +1281,67 @@ glw_fader_disable(glw_root_t *gr, int which)
   gr->gr_active_faders &= ~(1 << which);
 }
 
+
+
+/**
+ *
+ */
+void
+glw_frontface(struct glw_root *gr, char how)
+{
+  gr->gr_frontface = how;
+}
+
+
+
+/**
+ *
+ */
+void
+glw_blendmode(struct glw_root *gr, int mode)
+{
+  gr->gr_blendmode = mode;
+}
+
+
+/**
+ *
+ */
+static int
+render_order_cmp(const void *A, const void *B)
+{
+  const glw_render_order_t *a = A;
+  const glw_render_order_t *b = B;
+  if(a->zindex != b->zindex)
+    return a->zindex - b->zindex;
+
+  const glw_render_job_t *aj = a->job;
+  const glw_render_job_t *bj = b->job;
+
+  if(aj->t0 < bj->t0)
+    return -1;
+
+  if(aj->t0 > bj->t0)
+    return 1;
+
+  return 0;
+
+}
+
+
+/**
+ *
+ */
+void
+glw_renderer_render(glw_root_t *gr)
+{
+  // Sort items to render in order:
+
+  //  Front to back
+  //   Try to minimize texture switchers
+
+  qsort(gr->gr_render_order, gr->gr_num_render_jobs,
+        sizeof(glw_render_order_t), render_order_cmp);
+
+  gr->gr_be_render_unlocked(gr);
+}

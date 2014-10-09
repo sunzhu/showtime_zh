@@ -87,10 +87,49 @@ typedef struct glw_renderer {
 #define GLW_RENDERER_CACHES 4
 
   glw_renderer_cache_t *gr_cache[GLW_RENDERER_CACHES];
-  
+
 } glw_renderer_t;
 
 
+struct glw_program_args {
+  glw_program_t *gpa_prog;
+  void *gpa_aux;
+  void (*gpa_load_uniforms)(glw_root_t *gr, glw_program_t *prog, void *aux,
+                            const struct glw_render_job *rj);
+  void (*gpa_load_texture)(glw_root_t *gr, glw_program_t *prog, void *aux,
+                           const struct glw_backend_texture *t, int num);
+};
+
+
+/**
+ * Render job
+ */
+typedef struct glw_render_job {
+  Mtx m;
+  const struct glw_backend_texture *t0;
+  const struct glw_backend_texture *t1;
+  struct glw_program_args *gpa;
+  struct glw_rgb rgb_mul;
+  struct glw_rgb rgb_off;
+  float alpha;
+  float blur;
+  int vertex_offset;
+  int16_t num_vertices;
+  int16_t width;
+  int16_t height;
+  int16_t primitive_type;
+  char blendmode;
+  char frontface;
+  char eyespace;
+  char flags;
+} glw_render_job_t;
+
+
+typedef struct glw_render_order {
+  glw_render_job_t *job;
+  int16_t zindex;
+
+} glw_render_order_t;
 
 /**
  * Public render interface abstraction
@@ -124,9 +163,10 @@ void glw_renderer_vtx_col_reset(glw_renderer_t *gr);
 void glw_renderer_draw(glw_renderer_t *gr, glw_root_t *root,
 		       const glw_rctx_t *rc,
 		       const struct glw_backend_texture *tex,
+		       const struct glw_backend_texture *tex2,
 		       const struct glw_rgb *rgb_mul,
 		       const struct glw_rgb *rgb_off,
 		       float alpha, float blur,
-		       glw_program_t *p);
+		       glw_program_args_t *gpa);
 
 void glw_vtmp_resize(glw_root_t *gr, int num_float);

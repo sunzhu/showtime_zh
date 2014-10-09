@@ -69,6 +69,7 @@ typedef enum {
   TOKEN_RSTRING,               // A ref allocated string
   TOKEN_CSTRING,               // A compile time constant string
   TOKEN_FLOAT,
+  TOKEN_EM,                    // Element (1em == $ui.size)
   TOKEN_INT,
   TOKEN_IDENTIFIER,
   TOKEN_FUNCTION,              //
@@ -77,7 +78,8 @@ typedef enum {
                                // when token is free'd
   TOKEN_PROPERTY_NAME,
   TOKEN_PROPERTY_SUBSCRIPTION,
-  TOKEN_OBJECT_ATTRIBUTE,
+  TOKEN_RESOLVED_ATTRIBUTE,
+  TOKEN_UNRESOLVED_ATTRIBUTE,
   TOKEN_VOID,                 // Void property
   TOKEN_DIRECTORY,            // Directory property
   /* Synthetic tokens (after parser) */
@@ -87,7 +89,7 @@ typedef enum {
   TOKEN_NOP,
   TOKEN_VECTOR_FLOAT,
   TOKEN_EVENT,
-  TOKEN_LINK,                  // A link with title and url
+  TOKEN_URI,                   // A link with title and url
   TOKEN_VECTOR,                // List of tokens
   TOKEN_MOD_FLAGS,
   TOKEN_num,
@@ -158,9 +160,9 @@ typedef struct token {
     struct prop *prop;
 
     struct {
-      rstr_t *rtitle;
-      rstr_t *rurl;
-    } link;
+      rstr_t *title;
+      rstr_t *uri;
+    } uri;
 
     struct {
       rstr_t *rstr;
@@ -190,9 +192,8 @@ typedef struct token {
 #define t_func_arg        u.farg
 #define t_gem             u.gem
 #define t_prop            u.prop
-#define t_pixmap          u.pixmap
-#define t_link_rtitle     u.link.rtitle
-#define t_link_rurl       u.link.rurl
+#define t_uri_title       u.uri.title
+#define t_uri             u.uri.uri
 
 } token_t;
 
@@ -302,9 +303,13 @@ void glw_view_print_tree(token_t *f, int indent);
 
 token_t *glw_view_function_resolve(glw_root_t *gr, errorinfo_t *ei, token_t *t);
 
-int glw_view_attrib_resolve(token_t *t);
+void glw_view_attrib_resolve(token_t *t);
 
 void glw_view_attrib_optimize(token_t *t, glw_root_t *gr);
+
+int glw_view_unresolved_attribute_set(glw_view_eval_context_t *ec,
+                                      const char *attrib,
+                                      struct token *t);
 
 int glw_view_seterr(errorinfo_t *ei, token_t *b, const char *fmt, ...);
 

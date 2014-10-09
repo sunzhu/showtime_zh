@@ -100,6 +100,7 @@ typedef enum {
 
   ACTION_ZOOM_UI_INCR,
   ACTION_ZOOM_UI_DECR,
+  ACTION_ZOOM_UI_RESET,
   ACTION_RELOAD_UI,
 
   ACTION_QUIT,
@@ -181,15 +182,6 @@ typedef enum {
 
 TAILQ_HEAD(event_q, event);
 
-/**
- *
- */
-typedef struct event_queue {
-  struct event_q eq_q;
-  hts_cond_t eq_cond;
-  hts_mutex_t eq_mutex;
-} event_queue_t;
-
 
 /**
  *
@@ -246,6 +238,19 @@ typedef struct event_openurl {
 } event_openurl_t;
 
 
+/**
+ *
+ */
+typedef struct event_openurl_args {
+  const char *url;
+  const char *view;
+  struct prop *origin;
+  struct prop *model;
+  const char *how;
+  const char *parent_url;
+} event_openurl_args_t;
+
+
 
 /**
  *
@@ -261,6 +266,21 @@ typedef struct event_playurl {
   char *how;
   char *parent_url;
 } event_playurl_t;
+
+
+/**
+ *
+ */
+typedef struct event_playurl_args {
+  const char *url;
+  int primary;
+  int priority;
+  int no_audio;
+  struct prop *origin;
+  struct prop *model;
+  const char *how;
+  const char *parent_url;
+} event_playurl_args_t;
 
 
 /**
@@ -325,14 +345,15 @@ void event_addref(event_t *e);
 
 event_t *event_create_str(event_type_t et, const char *url);
 
-event_t *event_create_playurl(const char *url, int primary, int priority,
-			      int no_audio, struct prop *model,
-			      const char *how, struct prop *origin,
-                              const char *parent_url);
+event_t *event_create_playurl_args(const event_playurl_args_t *args);
 
-event_t *event_create_openurl(const char *url, const char *view,
-			      struct prop *origin, struct prop *model,
-			      const char *how, const char *parent_url);
+#define event_create_playurl(x, ...) \
+  event_create_playurl_args(&(const event_playurl_args_t) { x, ##__VA_ARGS__})
+
+event_t *event_create_openurl_args(const event_openurl_args_t *args);
+
+#define event_create_openurl(x, ...) \
+  event_create_openurl_args(&(const event_openurl_args_t) { x, ##__VA_ARGS__})
 
 event_t *event_create_playtrack(struct prop *track,
 				struct prop *psource,
