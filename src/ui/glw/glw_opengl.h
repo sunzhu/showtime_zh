@@ -71,7 +71,7 @@ struct glw_program {
   GLint  gp_attribute_position;
   GLint  gp_attribute_texcoord;
   GLint  gp_attribute_color;
- 
+
   // Uniforms
   GLint  gp_uniform_modelview;
   GLint  gp_uniform_color;
@@ -82,9 +82,7 @@ struct glw_program {
   GLint  gp_uniform_time;
   GLint  gp_uniform_resolution;
 
-
   GLint  gp_uniform_t[6];
-
 };
 
 
@@ -92,17 +90,8 @@ struct glw_program {
 
 typedef struct glw_backend_root {
 
-  enum {
-    GLW_OPENGL_TEXTURE_SIMPLE,
-    GLW_OPENGL_TEXTURE_RECTANGLE,
-    GLW_OPENGL_TEXTURE_NPOT
-  } gbr_texmode;
-
-  int gbr_primary_texture_mode; // GL_TEXTURE_2D or GL_TEXTURE_RECTANGLE_EXT
-
   struct glw_program *gbr_current;
 
-  
   /**
    * Video renderer
    */
@@ -124,21 +113,6 @@ typedef struct glw_backend_root {
   struct glw_program *gbr_renderer_flat;
   struct glw_program *gbr_renderer_flat_stencil;
 
-  int gbr_blendmode;
-  int gbr_frontface;
-  int gbr_delayed_rendering;
-
-  /**
-   * Delayed rendering (For rendering without holding glw_mutex)
-   */
-  int gbr_num_render_jobs;
-  int gbr_render_jobs_capacity;
-  struct render_job *gbr_render_jobs;
-
-  float *gbr_vertex_buffer;
-  int gbr_vertex_buffer_capacity;
-  int gbr_vertex_offset;
-
   GLuint gbr_vbo;
 
 #if ENABLE_VDPAU
@@ -156,25 +130,23 @@ typedef struct glw_backend_root {
 
 } glw_backend_root_t;
 
+#define GLW_DRAW_TRIANGLES GL_TRIANGLES
+#define GLW_DRAW_LINE_LOOP GL_LINE_LOOP
 
 /**
  *
  */
 typedef struct glw_backend_texture {
-  GLuint tex;
+  GLuint textures[3];
   uint16_t width;
   uint16_t height;
-  char type;
-#define GLW_TEXTURE_TYPE_NORMAL   0
-#define GLW_TEXTURE_TYPE_NO_ALPHA 1
+  int gltype;
 } glw_backend_texture_t;
 
 #define glw_tex_width(gbt) ((gbt)->width)
 #define glw_tex_height(gbt) ((gbt)->height)
 
-#define glw_can_tnpo2(gr) (gr->gr_be.gbr_texmode != GLW_OPENGL_TEXTURE_SIMPLE)
-
-#define glw_is_tex_inited(n) ((n)->tex != 0)
+#define glw_is_tex_inited(n) ((n)->textures[0] != 0)
 
 int glw_opengl_init_context(struct glw_root *gr);
 

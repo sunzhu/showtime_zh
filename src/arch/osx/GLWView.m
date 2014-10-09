@@ -82,6 +82,7 @@ static const struct {
   
   /* only used for fullscreen, in windowed mode we dont get events with
    * NSCommandKeyMask set */
+  { '0',                      NSCommandKeyMask, ACTION_ZOOM_UI_RESET },
   { '+',                      NSCommandKeyMask, ACTION_ZOOM_UI_INCR },
   { '-',                      NSCommandKeyMask, ACTION_ZOOM_UI_DECR },
   { 'f',                      NSCommandKeyMask, ACTION_FULLSCREEN_TOGGLE },
@@ -359,7 +360,8 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
 
     if(refresh) {
       glw_rctx_t rc;
-      glw_rctx_init(&rc, gr->gr_width, gr->gr_height, 1);
+      int zmax = 0;
+      glw_rctx_init(&rc, gr->gr_width, gr->gr_height, 1, &zmax);
       glw_layout0(gr->gr_universe, &rc);
 
       if(refresh & GLW_REFRESH_FLAG_RENDER) {

@@ -40,7 +40,7 @@ extern pool_t *sub_pool;
 TAILQ_HEAD(prop_queue, prop);
 LIST_HEAD(prop_list, prop);
 LIST_HEAD(prop_sub_list, prop_sub);
-
+TAILQ_HEAD(prop_sub_dispatch_queue, prop_sub_dispatch);
 
 
 /**
@@ -99,9 +99,9 @@ typedef struct prop_notify {
     } rstr;
     struct event *e;
     struct {
-      rstr_t *rtitle;
-      rstr_t *rurl;
-    } link;
+      rstr_t *title;
+      rstr_t *uri;
+    } uri;
     const char *str;
 
   } u;
@@ -115,8 +115,8 @@ typedef struct prop_notify {
 #define hpn_rstrtype u.rstr.type
 #define hpn_cstring u.str
 #define hpn_ext_event  u.e
-#define hpn_link_rtitle u.link.rtitle
-#define hpn_link_rurl   u.link.rurl
+#define hpn_uri_title u.uri.title
+#define hpn_uri       u.uri.uri
 
   prop_t *hpn_prop2;
   int hpn_flags;
@@ -135,8 +135,7 @@ typedef enum {
   PROP_CSTRING,
   PROP_FLOAT,
   PROP_INT,
-  PROP_PIXMAP,
-  PROP_LINK,
+  PROP_URI,
   PROP_ZOMBIE, /* Destroyed can never be changed again */
 } prop_type_t;
 
@@ -286,9 +285,9 @@ struct prop {
     } c;
     struct pixmap *pixmap;
     struct {
-      rstr_t *rtitle;
-      rstr_t *rurl;
-    } link;
+      rstr_t *title;
+      rstr_t *uri;
+    } uri;
   } u;
 
 #define hp_cstring   u.cstr
@@ -299,14 +298,38 @@ struct prop {
 #define hp_childs   u.c.childs
 #define hp_selected u.c.selected
 #define hp_pixmap   u.pixmap
-#define hp_link_rtitle u.link.rtitle
-#define hp_link_rurl   u.link.rurl
+#define hp_uri_title u.uri.title
+#define hp_uri       u.uri.uri
 
 #ifdef PROP_DEBUG
   SIMPLEQ_HEAD(, prop_ref_trace) hp_ref_trace;
 #endif
 
 };
+
+
+/**
+ * This struct is used in the global dispatch (ie, where we don't
+ * have a appointed courier) to maintain partial ordering of
+ * notifications.
+ *
+ * Basically we need to make sure that we don't deliver notifications
+ * out of order to subscriptions which could happen if we just
+ * spawn a bunch of thread that dequeues notifications without
+ * any control.
+ *
+ * With this struct we make sure that a single subscription can only
+ * get served from a thread at a time.
+ */
+typedef struct prop_sub_dispatch {
+
+  struct prop_notify_queue psd_notifications;
+
+  TAILQ_ENTRY(prop_sub_dispatch) psd_link;
+
+  struct prop_sub_dispatch_queue psd_wait_queue;
+} prop_sub_dispatch_t;
+
 
 
 /**
@@ -344,9 +367,16 @@ struct prop_sub {
   prop_trampoline_t *hps_trampoline;
 
   /**
-   * Pointer to courier, May never be changed. Not protected by mutex
+   * Pointer to dispatch structure
+   *
+   * If hps_global_dispatch is set this points to prop_sub_dispatch when
+   *  there are active notifications on this subscription. If notifications
+   *  are pendning it will be NULL
+   *
+   * If hps_global_dispatch is not set this points to a prop_courier
+   *
    */
-  prop_courier_t *hps_courier;
+  void *hps_dispatch;
 
   /**
    * Lock to be held when invoking callback. It must also be held
@@ -397,6 +427,7 @@ struct prop_sub {
    */
   uint8_t hps_pending_unlink : 1;
   uint8_t hps_multiple_origins : 1;
+  uint8_t hps_global_dispatch : 1;
 
   /**
    * Flags as passed to prop_subscribe(). May never be changed
@@ -467,6 +498,6 @@ void prop_set_string_exl(prop_t *p, prop_sub_t *skipme, const char *str,
 
 void prop_sub_ref_dec_locked(prop_sub_t *s);
 
-void prop_dispatch_one(prop_notify_t *n);
+int prop_dispatch_one(prop_notify_t *n, int lockmode);
 
 #endif // PROP_I_H__

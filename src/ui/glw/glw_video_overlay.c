@@ -20,7 +20,7 @@
  */
 
 #include "showtime.h"
-#include "media.h"
+#include "media/media.h"
 #include "glw_video_common.h"
 #include "glw_video_overlay.h"
 #include "glw_texture.h"
@@ -305,6 +305,8 @@ glw_video_overlay_render(glw_video_t *gv, const glw_rctx_t *frc,
     else
       rc0 = *frc;
 
+    glw_zinc(&rc0);
+
     // Never to user displacement if in DVD menu, it will fail
     if(!gv->gv_spu_in_menu)
       glw_Translatef(&rc0,
@@ -405,7 +407,7 @@ glw_video_overlay_render(glw_video_t *gv, const glw_rctx_t *frc,
       }
 
       glw_renderer_draw(&gvo->gvo_renderer, gr, &rc0,
-			&gvo->gvo_texture, NULL, NULL,
+			&gvo->gvo_texture, NULL, NULL, NULL,
 			gvo->gvo_alpha * rc0.rc_alpha, 0, NULL);
       break;
 
@@ -605,8 +607,8 @@ spu_repaint(glw_video_t *gv, dvdspu_t *d)
 
   glw_renderer_init_quad(&gvo->gvo_renderer);
 
-  float w = gr->gr_normalized_texture_coords ? 1.0 : width;
-  float h = gr->gr_normalized_texture_coords ? 1.0 : height;
+  const float w = 1.0;
+  const float h = 1.0;
   glw_renderer_t *r = &gvo->gvo_renderer;
   
   glw_renderer_vtx_pos(r, 0, d->d_x1, d->d_y2, 0.0f);
@@ -702,8 +704,8 @@ gvo_create_from_vo_bitmap(glw_video_t *gv, video_overlay_t *vo)
 
   glw_renderer_init_quad(&gvo->gvo_renderer);
 
-  float w = gr->gr_normalized_texture_coords ? 1.0 : W;
-  float h = gr->gr_normalized_texture_coords ? 1.0 : H;
+  const float w = 1.0;
+  const float h = 1.0;
     
   glw_renderer_t *r = &gvo->gvo_renderer;
     
@@ -802,7 +804,7 @@ gvo_create_from_vo_text(glw_video_t *gv, video_overlay_t *vo)
 
   gc->gc_freeze(w);
 
-  gc->gc_set_int(w, GLW_ATTRIB_DEFAULT_SIZE,
+  gc->gc_set_int(w, GLW_ATTRIB_SIZE,
 		 gv->w.glw_root->gr_current_size * 1.5);
 
   if(gvo->gvo_abspos) {

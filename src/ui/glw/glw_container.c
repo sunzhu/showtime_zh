@@ -20,6 +20,7 @@
  */
 
 #include "glw.h"
+#include "glw_navigation.h"
 
 typedef struct glw_container {
   glw_t w;
@@ -36,11 +37,16 @@ typedef struct glw_container {
 
 } glw_container_t;
 
-#define glw_parent_size   glw_parent_val[0].i32
-#define glw_parent_pos    glw_parent_val[1].f
-#define glw_parent_scale  glw_parent_val[2].f
-#define glw_parent_fade   glw_parent_val[3].f
-#define glw_parent_inited glw_parent_val[4].i32
+
+typedef struct glw_container_item {
+  float pos;
+  float scale;
+  float fade;
+  int16_t size;
+  char inited;
+} glw_container_item_t;
+
+
 /**
  *
  */
@@ -70,7 +76,7 @@ glw_container_x_constraints(glw_container_t *co, glw_t *skip)
     cflags |= f & (GLW_CONSTRAINT_X | GLW_CONSTRAINT_Y);
 
     if(co->w.glw_flags2 & GLW2_DEBUG)
-      printf("%c%c%c %d %d %f\n",
+      printf("%c%c%c %-4d %-4d %f\n",
 	     f & GLW_CONSTRAINT_X ? 'X' : ' ',
 	     f & GLW_CONSTRAINT_Y ? 'Y' : ' ',
 	     f & GLW_CONSTRAINT_W ? 'W' : ' ',
@@ -135,16 +141,24 @@ glw_container_x_layout(glw_t *w, const glw_rctx_t *rc)
 {
   glw_container_t *co = (glw_container_t *)w;
   glw_t *c;
-  glw_rctx_t rc0 = *rc;
   int width = co->width;
-  float IW; 
+  float IW;
   int weightavail;  // Pixels available for weighted childs
   float pos;        // Current position
   float fixscale;   // Scaling to apply to fixed width requests
                     // Used if the available width < sum of requested width
+  glw_rctx_t rc_f, rc0;
 
   if(co->w.glw_alpha < 0.01f)
     return;
+
+  if(w->glw_flags2 & GLW2_LAYOUTFIXED_X) {
+    rc_f = *rc;
+    rc_f.rc_width = w->glw_req_size_x;
+    rc = &rc_f;
+  }
+
+  rc0 = *rc;
 
   rc0.rc_height = rc->rc_height - co->co_padding[1] - co->co_padding[3];
 
@@ -215,12 +229,12 @@ glw_container_x_layout(glw_t *w, const glw_rctx_t *rc)
     
     rc0.rc_width = right - left;
 
-    c->glw_parent_pos = -1.0f + (right + left) * IW;
-    c->glw_parent_scale = rc0.rc_width * IW;
-      
-    c->glw_norm_weight = c->glw_parent_scale;
+    glw_container_item_t *cd = glw_parent_data(c, glw_container_item_t);
 
-    c->glw_parent_size = right - left;
+    cd->pos = -1.0f + (right + left) * IW;
+    cd->scale = rc0.rc_width * IW;
+      
+    cd->size = right - left;
     glw_layout0(c, &rc0);
     left = right + co->co_spacing;
     pos += co->co_spacing;
@@ -361,15 +375,17 @@ glw_container_y_layout(glw_t *w, const glw_rctx_t *rc)
 
     float cw = 0;
 
+    glw_container_item_t *cd = glw_parent_data(c, glw_container_item_t);
+
     if(c->glw_flags & GLW_HIDDEN) {
       if(!(co->w.glw_flags2 & GLW2_AUTOFADE)) {
-	c->glw_parent_fade = 0;
+	cd->fade = 0;
 	continue;
       }
 
-      glw_lp(&c->glw_parent_fade, co->w.glw_root, 0, 0.25);
-      if(c->glw_parent_fade < 0.01) {
-	c->glw_parent_inited = 0;
+      glw_lp(&cd->fade, co->w.glw_root, 0, 0.25);
+      if(cd->fade < 0.01) {
+	cd->inited = 0;
 	continue;
       }
     }
@@ -394,36 +410,34 @@ glw_container_y_layout(glw_t *w, const glw_rctx_t *rc)
 
       if(c->glw_flags & GLW_RETIRED) {
 
-	glw_lp(&c->glw_parent_fade, co->w.glw_root, 0, 0.25);
-	if(c->glw_parent_fade < 0.01) {
+	glw_lp(&cd->fade, co->w.glw_root, 0, 0.25);
+	if(cd->fade < 0.01) {
 	  glw_destroy(c);
 	  continue;
 	}
 	
       } else if(!(c->glw_flags & GLW_HIDDEN)) {
-	glw_lp(&c->glw_parent_fade, co->w.glw_root, 1, 0.25);
+	glw_lp(&cd->fade, co->w.glw_root, 1, 0.25);
       }
 
-      if(c->glw_parent_inited) {
-	glw_lp(&c->glw_parent_pos, co->w.glw_root, (bottom + top) * IH, 0.25);
+      if(cd->inited) {
+	glw_lp(&cd->pos, co->w.glw_root, (bottom + top) * IH, 0.25);
       } else {
-	c->glw_parent_pos = (bottom + top) * IH;
+	cd->pos = (bottom + top) * IH;
 	if(!(c->glw_flags & GLW_HIDDEN))
-	  c->glw_parent_inited = 1;
+	  cd->inited = 1;
       }
-      c->glw_parent_scale = rc0.rc_height * IH * c->glw_parent_fade;
-      c->glw_parent_size = rc0.rc_height;
+      cd->scale = rc0.rc_height * IH * cd->fade;
+      cd->size = rc0.rc_height;
 
     } else {
 
-      c->glw_parent_fade = 1;
-      c->glw_parent_pos = (bottom + top) * IH;
-      c->glw_parent_scale = rc0.rc_height * IH;
-      c->glw_parent_size = rc0.rc_height;
+      cd->fade = 1;
+      cd->pos = (bottom + top) * IH;
+      cd->scale = rc0.rc_height * IH;
+      cd->size = rc0.rc_height;
 
     }
-
-    c->glw_norm_weight = c->glw_parent_scale;
 
     glw_layout0(c, &rc0);
     top = bottom + co->co_spacing;
@@ -448,8 +462,20 @@ glw_container_z_constraints(glw_t *w, glw_t *skip)
     if(c->glw_flags & GLW_HIDDEN || c == skip)
       continue;
 
-    if(!(c->glw_class->gc_flags & GLW_UNCONSTRAINED))
+    if(c->glw_flags & GLW_CONSTRAINT_FLAGS)
       break;
+  }
+
+  if(c == NULL) {
+
+    TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
+
+      if(c->glw_flags & GLW_HIDDEN || c == skip)
+        continue;
+
+      if(!(c->glw_class->gc_flags & GLW_UNCONSTRAINED))
+        break;
+    }
   }
 
   if(c != NULL)
@@ -515,17 +541,19 @@ glw_container_y_render(glw_t *w, const glw_rctx_t *rc)
       c = rr ? TAILQ_PREV(c, glw_queue, glw_parent_link) : 
 	TAILQ_NEXT(c, glw_parent_link)) {
 
-    if(c->glw_parent_fade < 0.01)
+    glw_container_item_t *cd = glw_parent_data(c, glw_container_item_t);
+
+    if(cd->fade < 0.01)
       continue;
 
     rc0 = *rc;
-    rc0.rc_alpha = alpha * c->glw_parent_fade;
-    rc0.rc_sharpness  = sharpness * c->glw_parent_fade;
+    rc0.rc_alpha = alpha * cd->fade;
+    rc0.rc_sharpness  = sharpness * cd->fade;
 
-    rc0.rc_height = c->glw_parent_size;
+    rc0.rc_height = cd->size;
     
-    glw_Translatef(&rc0, 0, 1.0 - c->glw_parent_pos, 0);
-    glw_Scalef(&rc0, 1.0, c->glw_parent_scale, c->glw_parent_scale);
+    glw_Translatef(&rc0, 0, 1.0 - cd->pos, 0);
+    glw_Scalef(&rc0, 1.0, cd->scale, cd->scale);
 
     glw_render0(c, &rc0);
   }
@@ -542,11 +570,18 @@ glw_container_x_render(glw_t *w, const glw_rctx_t *rc)
   float alpha = rc->rc_alpha * w->glw_alpha;
   float sharpness = rc->rc_sharpness * w->glw_sharpness;
   glw_container_t *co = (glw_container_t *)w;
-  glw_rctx_t rc0;
+  glw_rctx_t rc0, rc_f;
+  const int rr = w->glw_flags2 & GLW2_REVERSE_RENDER;
 
   if(alpha < 0.01f)
     return;
-  
+
+  if(w->glw_flags2 & GLW2_LAYOUTFIXED_X) {
+    rc_f = *rc;
+    rc_f.rc_width = w->glw_req_size_x;
+    rc = &rc_f;
+  }
+
   if(glw_is_focusable(w))
     glw_store_matrix(w, rc);
 
@@ -560,7 +595,12 @@ glw_container_x_render(glw_t *w, const glw_rctx_t *rc)
     rc = &rc1;
   }
 
-  TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
+  for(c = rr ? TAILQ_LAST(&w->glw_childs, glw_queue) :
+	TAILQ_FIRST(&w->glw_childs);
+      c;
+      c = rr ? TAILQ_PREV(c, glw_queue, glw_parent_link) : 
+	TAILQ_NEXT(c, glw_parent_link)) {
+
     if(c->glw_flags & GLW_HIDDEN)
       continue;
 
@@ -568,10 +608,12 @@ glw_container_x_render(glw_t *w, const glw_rctx_t *rc)
     rc0.rc_alpha = alpha;
     rc0.rc_sharpness = sharpness;
 
-    rc0.rc_width = c->glw_parent_size;
-    
-    glw_Translatef(&rc0, c->glw_parent_pos, 0, 0);
-    glw_Scalef(&rc0, c->glw_parent_scale, 1.0, c->glw_parent_scale);
+    glw_container_item_t *cd = glw_parent_data(c, glw_container_item_t);
+
+    rc0.rc_width = cd->size;
+
+    glw_Translatef(&rc0, cd->pos, 0, 0);
+    glw_Scalef(&rc0, cd->scale, 1.0, cd->scale);
 
     glw_render0(c, &rc0);
   }
@@ -587,24 +629,29 @@ glw_container_z_render(glw_t *w, const glw_rctx_t *rc)
   glw_t *c;
   float alpha = rc->rc_alpha * w->glw_alpha;
   float sharpness  = rc->rc_sharpness  * w->glw_sharpness;
-
+  int zmax = 0;
   glw_rctx_t rc0;
 
   if(alpha < 0.01f)
     return;
-  
+
   if(glw_is_focusable(w))
     glw_store_matrix(w, rc);
 
   rc0 = *rc;
   rc0.rc_alpha = alpha;
   rc0.rc_sharpness = sharpness;
+  rc0.rc_zmax = &zmax;
 
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
     if(c->glw_flags & GLW_HIDDEN)
       continue;
+
+    rc0.rc_zindex = MAX(zmax, rc->rc_zindex);
     glw_render0(c, &rc0);
+    glw_zinc(&rc0);
   }
+  *rc->rc_zmax = MAX(*rc->rc_zmax, zmax);
 }
 
 
@@ -717,38 +764,38 @@ retire_child(glw_t *w, glw_t *c)
   }
 }
 
+
+
 /**
  *
  */
 static glw_class_t glw_container_x = {
   .gc_name = "container_x",
   .gc_instance_size = sizeof(glw_container_t),
+  .gc_parent_data_size = sizeof(glw_container_item_t),
   .gc_flags = GLW_CAN_HIDE_CHILDS,
   .gc_set_int = glw_container_set_int,
   .gc_layout = glw_container_x_layout,
   .gc_render = glw_container_x_render,
   .gc_signal_handler = glw_container_x_callback,
-  .gc_child_orientation = GLW_ORIENTATION_HORIZONTAL,
-  .gc_nav_search_mode = GLW_NAV_SEARCH_BY_ORIENTATION,
   .gc_default_alignment = LAYOUT_ALIGN_LEFT,
   .gc_set_int16_4 = container_set_int16_4,
-  .gc_send_event = glw_event_distribute_to_childs,
+  .gc_bubble_event = glw_navigate_horizontal,
 };
 
 static glw_class_t glw_container_y = {
   .gc_name = "container_y",
   .gc_instance_size = sizeof(glw_container_t),
+  .gc_parent_data_size = sizeof(glw_container_item_t),
   .gc_flags = GLW_CAN_HIDE_CHILDS,
   .gc_set_int = glw_container_set_int,
   .gc_layout = glw_container_y_layout,
   .gc_render = glw_container_y_render,
   .gc_signal_handler = glw_container_y_callback,
-  .gc_child_orientation = GLW_ORIENTATION_VERTICAL,
-  .gc_nav_search_mode = GLW_NAV_SEARCH_BY_ORIENTATION,
   .gc_default_alignment = LAYOUT_ALIGN_TOP,
   .gc_set_int16_4 = container_set_int16_4,
   .gc_retire_child = retire_child,
-  .gc_send_event = glw_event_distribute_to_childs,
+  .gc_bubble_event = glw_navigate_vertical,
 };
 
 static glw_class_t glw_container_z = {
@@ -759,7 +806,6 @@ static glw_class_t glw_container_z = {
   .gc_layout = glw_container_z_layout,
   .gc_render = glw_container_z_render,
   .gc_signal_handler = glw_container_z_callback,
-  .gc_send_event = glw_event_distribute_to_childs,
 };
 
 

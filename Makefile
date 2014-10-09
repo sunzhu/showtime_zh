@@ -25,7 +25,7 @@ include ${C}/config.default
 BUILDDIR ?= ${C}/build.${BUILD}
 
 # All targets deps on Makefile, but we can comment that out during dev:ing
-ALLDEPS=${BUILDDIR}/config.mak Makefile support/${OS}.mk
+ALLDEPS=${BUILDDIR}/config.mak Makefile src/arch/${OS}/${OS}.mk
 
 ALLDEPS += ${STAMPS}
 
@@ -59,17 +59,14 @@ SRCS += src/showtime.c \
 	src/backend/backend.c \
 	src/backend/backend_prop.c \
 	src/backend/search.c \
-	src/media.c \
 	src/event.c \
 	src/keyring.c \
 	src/settings.c \
 	src/service.c \
 	src/notifications.c \
-	src/playqueue.c \
 	src/keymapper.c \
 	src/plugins.c \
 	src/upgrade.c \
-	src/usage.c \
 	src/blobcache_file.c \
 	src/i18n.c \
 	src/prop/prop_core.c \
@@ -80,23 +77,30 @@ SRCS += src/showtime.c \
 	src/prop/prop_grouper.c \
 	src/prop/prop_concat.c \
 	src/prop/prop_reorder.c \
-	src/metadata/metadata.c \
-	src/metadata/metadata_str.c \
-	src/metadata/metadata_sources.c \
-	src/metadata/mlp.c \
-	src/metadata/metadb.c \
+	src/prop/prop_linkselected.c \
 	src/metadata/playinfo.c \
-	src/metadata/decoration.c \
-	src/metadata/browsemdb.c \
+	src/db/kvstore.c \
+
+SRCS +=	src/media/media.c \
+	src/media/media_buf.c \
+	src/media/media_track.c \
+	src/media/media_queue.c \
+	src/media/media_codec.c \
+	src/media/media_event.c \
+
+SRCS-${CONFIG_MEDIA_SETTINGS} += src/media/media_settings.c
 
 SRCS-${CONFIG_LIBAV} += src/libav.c
 
 SRCS-${CONFIG_EMU_THREAD_SPECIFICS} += src/arch/emu_thread_specifics.c
 
-BUNDLES += resources/metadb
-BUNDLES += resources/kvstore
+
 
 SRCS-$(CONFIG_WEBPOPUP) += src/ui/webpopup.c
+
+SRCS-$(CONFIG_USAGEREPORT) += src/usage.c
+
+SRCS-$(CONFIG_PLAYQUEUE) += src/playqueue.c
 
 ##############################################################
 # Images
@@ -137,12 +141,36 @@ SRCS-${CONFIG_TREX} += ext/trex/trex.c
 SRCS-${CONFIG_BSPATCH} += ext/bspatch/bspatch.c
 
 ##############################################################
+# Metadata system
+##############################################################
+
+SRCS-$(CONFIG_METADATA) += src/metadata/metadb.c \
+			   src/metadata/mlp.c \
+			   src/metadata/metadata_sources.c \
+			   src/metadata/browsemdb.c \
+			   src/metadata/decoration.c \
+			   src/metadata/metadata.c \
+			   src/metadata/metadata_str.c \
+
+SRCS-$(CONFIG_METADATA) += src/fileaccess/fa_indexer.c \
+			   src/fileaccess/fa_probe.c \
+			   src/fileaccess/fa_scanner.c
+
+SRCS-$(CONFIG_METADATA) += src/api/lastfm.c \
+			   src/api/tmdb.c \
+			   src/api/tvdb.c \
+
+
+BUNDLES-$(CONFIG_METADATA) += resources/metadb
+
+
+##############################################################
 # Sqlite3
 ##############################################################
 SRCS-${CONFIG_SQLITE_INTERNAL} += ext/sqlite/sqlite3.c
 
-SRCS += src/db/db_support.c \
-	src/db/kvstore.c \
+SRCS-$(CONFIG_SQLITE) += src/db/db_support.c
+
 
 
 ${BUILDDIR}/ext/sqlite/sqlite3.o : CFLAGS = -O2 ${SQLITE_CFLAGS_cfg} \
@@ -162,6 +190,8 @@ ${BUILDDIR}/ext/sqlite/sqlite3.o : CFLAGS = -O2 ${SQLITE_CFLAGS_cfg} \
 
 SRCS-$(CONFIG_SQLITE_VFS) += src/db/vfs.c
 
+BUNDLES-$(CONFIG_KVSTORE) += resources/kvstore
+
 ##############################################################
 # HTSMSG
 ##############################################################
@@ -179,31 +209,23 @@ SRCS +=	src/htsmsg/htsbuf.c \
 SRCS += src/fileaccess/fileaccess.c \
 	src/fileaccess/fa_vfs.c \
 	src/fileaccess/fa_fs.c \
-	src/fileaccess/fa_rar.c \
 	src/fileaccess/fa_http.c \
 	src/fileaccess/fa_zip.c \
 	src/fileaccess/fa_zlib.c \
 	src/fileaccess/fa_bundle.c \
-	src/fileaccess/fa_sidfile.c \
-	src/fileaccess/fa_nativesmb.c \
 	src/fileaccess/fa_buffer.c \
 	src/fileaccess/fa_slice.c \
 	src/fileaccess/fa_bwlimit.c \
 	src/fileaccess/fa_cmp.c \
 	src/fileaccess/fa_aes.c \
 	src/fileaccess/fa_imageloader.c \
-	src/fileaccess/fa_indexer.c \
 
-
-
-SRCS += src/fileaccess/fa_ftp.c \
-	src/fileaccess/ftpparse.c \
+SRCS-$(CONFIG_FTPCLIENT) += src/fileaccess/fa_ftp.c \
+			    src/fileaccess/ftpparse.c \
 
 SRCS-$(CONFIG_LIBAV) += \
-	src/fileaccess/fa_probe.c \
 	src/fileaccess/fa_libav.c \
 	src/fileaccess/fa_backend.c \
-	src/fileaccess/fa_scanner.c \
 	src/fileaccess/fa_video.c \
 	src/fileaccess/fa_audio.c \
 
@@ -213,8 +235,12 @@ SRCS-$(CONFIG_LOCATEDB)        += src/fileaccess/fa_locatedb.c
 SRCS-$(CONFIG_SPOTLIGHT)       += src/fileaccess/fa_spotlight.c
 SRCS-$(CONFIG_READAHEAD_CACHE) += src/fileaccess/fa_cache.c
 SRCS-$(CONFIG_LIBNTFS)         += src/fileaccess/fa_ntfs.c
+SRCS-$(CONFIG_NATIVESMB)       += src/fileaccess/fa_nativesmb.c
+SRCS-$(CONFIG_RAR)             += src/fileaccess/fa_rar.c
+SRCS-$(CONFIG_SID)             += src/fileaccess/fa_sidfile.c \
+				  ext/audio/sid.c
 
-SRCS += ext/audio/sid.c
+BUNDLES += resources/fileaccess
 
 ##############################################################
 # Service Discovery
@@ -226,8 +252,6 @@ SRCS-$(CONFIG_BONJOUR) 	+= src/sd/bonjour.c
 
 ${BUILDDIR}/src/sd/avahi.o : CFLAGS = $(CFLAGS_AVAHI) -Wall -Werror  ${OPTFLAGS}
 
-BUNDLES += resources/tvheadend
-BUNDLES += resources/fileaccess
 
 
 ##############################################################
@@ -235,9 +259,6 @@ BUNDLES += resources/fileaccess
 ##############################################################
 SRCS += 		src/api/xmlrpc.c \
 			src/api/soap.c \
-			src/api/lastfm.c \
-			src/api/tmdb.c \
-			src/api/tvdb.c \
 
 SRCS-$(CONFIG_HTTPSERVER) += src/api/httpcontrol.c
 SRCS-$(CONFIG_HTTPSERVER) += src/api/stpp.c
@@ -248,14 +269,15 @@ SRCS-$(CONFIG_AIRPLAY) += src/api/airplay.c
 ##############################################################
 SRCS += src/networking/net_common.c \
 	src/networking/http.c \
-	src/networking/ftp_server.c \
+
+SRCS-$(CONFIG_FTPSERVER) += src/networking/ftp_server.c
 
 SRCS-$(CONFIG_POLARSSL) += src/networking/net_polarssl.c
 SRCS-$(CONFIG_OPENSSL)  += src/networking/net_openssl.c
 
 SRCS-$(CONFIG_HTTPSERVER) += src/networking/http_server.c
-SRCS-$(CONFIG_HTTPSERVER) += src/networking/ssdp.c
-SRCS-$(CONFIG_HTTPSERVER) += \
+
+SRCS-$(CONFIG_UPNP) +=  src/networking/ssdp.c \
 			src/upnp/upnp.c \
 			src/upnp/upnp_control.c \
 			src/upnp/upnp_event.c \
@@ -278,7 +300,6 @@ SRCS += src/video/video_playback.c \
 	src/video/h264_annexb.c \
 
 SRCS-$(CONFIG_VDPAU)    += src/video/vdpau.c
-SRCS-$(CONFIG_PS3_VDEC) += src/video/ps3_vdec.c
 SRCS-$(CONFIG_VDA)      += src/video/vda.c
 
 SRCS-$(CONFIG_CEDAR) += \
@@ -324,7 +345,7 @@ SRCS-$(CONFIG_CDDA)      += src/backend/dvd/cdda.c
 ##############################################################
 # Bittorrent
 ##############################################################
-SRCS                     += \
+SRCS-$(CONFIG_BITTORRENT) += \
 	src/backend/bittorrent/bt_backend.c \
 	src/backend/bittorrent/fa_torrent.c \
 	src/backend/bittorrent/torrent.c \
@@ -341,17 +362,19 @@ SRCS                     += \
 ##############################################################
 # TV
 ##############################################################
-SRCS  += src/backend/htsp/htsp.c \
+SRCS-$(CONFIG_HTSP)  += src/backend/htsp/htsp.c
+
+BUNDLES-$(CONFIG_HTSP) += resources/tvheadend
 
 ##############################################################
 # TV
 ##############################################################
-SRCS  += src/backend/hls/hls.c \
+SRCS-$(CONFIG_HLS)  += src/backend/hls/hls.c \
 
 ##############################################################
 # Icecast
 ##############################################################
-SRCS  += src/backend/icecast/icecast.c \
+SRCS-$(CONFIG_ICECAST)  += src/backend/icecast/icecast.c \
 
 ##############################################################
 # Spotify
@@ -371,7 +394,7 @@ SRCS-${CONFIG_LIBSIDPLAY2} += \
 # GLW user interface
 ##############################################################
 SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
-			src/ui/glw/glw_settings.c \
+			src/ui/glw/glw_style.c \
 			src/ui/glw/glw_renderer.c \
 			src/ui/glw/glw_event.c \
 			src/ui/glw/glw_view.c \
@@ -384,11 +407,10 @@ SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
 			src/ui/glw/glw_view_loader.c \
 			src/ui/glw/glw_dummy.c \
 			src/ui/glw/glw_container.c \
+			src/ui/glw/glw_cursor.c \
 			src/ui/glw/glw_list.c \
 			src/ui/glw/glw_clist.c \
 			src/ui/glw/glw_array.c \
-			src/ui/glw/glw_grid.c \
-			src/ui/glw/glw_gridrow.c \
 			src/ui/glw/glw_deck.c \
 			src/ui/glw/glw_playfield.c \
 			src/ui/glw/glw_layer.c \
@@ -399,13 +421,11 @@ SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
 			src/ui/glw/glw_throbber.c  \
 			src/ui/glw/glw_slideshow.c \
 			src/ui/glw/glw_freefloat.c \
-			src/ui/glw/glw_multitile.c \
 			src/ui/glw/glw_transitions.c \
 			src/ui/glw/glw_navigation.c \
 			src/ui/glw/glw_texture_loader.c \
 			src/ui/glw/glw_image.c \
 			src/ui/glw/glw_text_bitmap.c \
-			src/ui/glw/glw_fx_texrot.c \
 			src/ui/glw/glw_bloom.c \
 			src/ui/glw/glw_cube.c \
 			src/ui/glw/glw_displacement.c \
@@ -421,19 +441,18 @@ SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
 			src/ui/glw/glw_math.c \
 			src/ui/glw/glw_underscan.c \
 
+SRCS-$(CONFIG_GLW_SETTINGS) += 	  src/ui/glw/glw_settings.c
+
 SRCS-$(CONFIG_GLW_FRONTEND_X11)	  += src/ui/glw/glw_x11.c \
 				     src/ui/linux/x11_common.c
 
-SRCS-$(CONFIG_GLW_BACKEND_OPENGL) += src/ui/glw/glw_opengl_common.c \
-                                     src/ui/glw/glw_opengl_shaders.c \
-                                     src/ui/glw/glw_opengl_ff.c \
+SRCS-$(CONFIG_GLW_BACKEND_OPENGL) += src/ui/glw/glw_opengl_shaders.c \
                                      src/ui/glw/glw_opengl_ogl.c \
                                      src/ui/glw/glw_texture_opengl.c \
                                      src/ui/glw/glw_video_opengl.c \
                                      src/ui/glw/glw_video_vdpau.c \
 
-SRCS-$(CONFIG_GLW_BACKEND_OPENGL_ES) += src/ui/glw/glw_opengl_common.c \
-                                        src/ui/glw/glw_opengl_shaders.c \
+SRCS-$(CONFIG_GLW_BACKEND_OPENGL_ES) += src/ui/glw/glw_opengl_shaders.c \
                                         src/ui/glw/glw_opengl_es.c \
                                         src/ui/glw/glw_texture_opengl.c \
 
@@ -696,31 +715,30 @@ ${BUILDDIR}/ext/libntfs_ext/source/%.o : CFLAGS = -Wall ${OPTFLAGS} \
 SRCS-${CONFIG_TLSF} += ext/tlsf/tlsf.c
 
 ##############################################################
-# Miner
-##############################################################
-
-SRCS-${CONFIG_MINER} += ext/miner/miner.c \
-
-##############################################################
 # Duktape
 ##############################################################
 
 SRCS += ext/duktape/duktape.c \
 	src/ecmascript/ecmascript.c \
 	src/ecmascript/es_service.c \
-	src/ecmascript/es_page.c \
+	src/ecmascript/es_stats.c \
+	src/ecmascript/es_route.c \
+	src/ecmascript/es_searcher.c \
 	src/ecmascript/es_prop.c \
 	src/ecmascript/es_io.c \
 	src/ecmascript/es_string.c \
 	src/ecmascript/es_htsmsg.c \
-	src/ecmascript/es_metadata.c \
+	src/ecmascript/es_native_obj.c \
+	src/ecmascript/es_root.c \
+	src/ecmascript/es_hook.c \
+	src/ecmascript/es_timer.c \
 
-#	src/ecmascript/es_hook.c \
+SRCS-$(CONFIG_METADATA) += src/ecmascript/es_metadata.c
 
 ${BUILDDIR}/ext/duktape/%.o : CFLAGS = -Wall ${OPTFLAGS} \
- -fstrict-aliasing -std=c99  -DDUK_OPT_ASSERTIONS
+ -fstrict-aliasing -std=c99  -DDUK_OPT_ASSERTIONS #-DDUK_OPT_DEBUG -DDUK_OPT_DPRINT -DDUK_OPT_DDPRINT -DDUK_OPT_DDDPRINT
 
-include support/${OS}.mk
+include src/arch/${OS}/${OS}.mk
 
 ##############################################################
 ##############################################################

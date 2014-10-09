@@ -33,7 +33,7 @@
 #include "showtime.h"
 #include "fa_audio.h"
 #include "event.h"
-#include "media.h"
+#include "media/media.h"
 #include "fileaccess.h"
 #include "fa_libav.h"
 #include "notifications.h"
@@ -241,7 +241,7 @@ be_file_playaudio(const char *url, media_pipe_t *mp,
       
       if(r != 0) {
 	char msg[100];
-	fa_ffmpeg_error_to_txt(r, msg, sizeof(msg));
+	fa_libav_error_to_txt(r, msg, sizeof(msg));
 	TRACE(TRACE_ERROR, "Audio", "Playback error: %s", msg);
 
 	while((e = mp_wait_for_empty_queues(mp)) != NULL) {

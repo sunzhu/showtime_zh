@@ -102,7 +102,8 @@ typedef struct glw_image {
   int gi_switch_cnt;
   int gi_switch_tgt;
 
-  glw_program_t *gi_prog;
+  glw_program_args_t gi_gpa;
+
   rstr_t *gi_fs;
 
 } glw_image_t;
@@ -162,7 +163,7 @@ glw_image_dtor(glw_t *w)
     glw_tex_deref(w->glw_root, gi->gi_pending);
   glw_renderer_free(&gi->gi_gr);
   rstr_release(gi->gi_fs);
-  glw_destroy_program(w->glw_root, gi->gi_prog);
+  glw_destroy_program(w->glw_root, gi->gi_gpa.gpa_prog);
 }
 
 
@@ -193,32 +194,29 @@ glw_icon_dtor(glw_t *w)
 /**
  *
  */
-static void 
+static void
 render_child_simple(glw_t *w, glw_rctx_t *rc)
 {
   glw_rctx_t rc0 = *rc;
-  glw_t *c;
+  glw_t *c = TAILQ_FIRST(&w->glw_childs);
 
-  if((c = TAILQ_FIRST(&w->glw_childs)) != NULL) {
-    rc0.rc_alpha = rc->rc_alpha * w->glw_alpha;
-    glw_render0(c, &rc0);
-  }
+  rc0.rc_alpha = rc->rc_alpha * w->glw_alpha;
+  glw_render0(c, &rc0);
 }
 
 /**
  *
  */
-static void 
+static void
 render_child_autocentered(glw_image_t *gi, const glw_rctx_t *rc)
 {
   glw_t *c;
   glw_rctx_t rc0;
 
-  if((c = TAILQ_FIRST(&gi->w.glw_childs)) == NULL)
-    return;
+  c = TAILQ_FIRST(&gi->w.glw_childs);
 
   rc0 = *rc;
-  
+
   glw_reposition(&rc0,
 		 gi->gi_box_left + gi->gi_automargin_left,
 		 rc->rc_height - gi->gi_box_top - gi->gi_automargin_top,
@@ -262,8 +260,9 @@ glw_image_render(glw_t *w, const glw_rctx_t *rc)
   glw_rctx_t rc0;
   
   if(gi->gi_recompile) {
-    glw_destroy_program(w->glw_root, gi->gi_prog);
-    gi->gi_prog = glw_make_program(w->glw_root, NULL, rstr_get(gi->gi_fs));
+    glw_destroy_program(w->glw_root, gi->gi_gpa.gpa_prog);
+    gi->gi_gpa.gpa_prog =
+      glw_make_program(w->glw_root, NULL, rstr_get(gi->gi_fs));
     gi->gi_recompile = 0;
   }
 
@@ -294,8 +293,10 @@ glw_image_render(glw_t *w, const glw_rctx_t *rc)
     if(glw_is_focusable(w))
       glw_store_matrix(w, &rc0);
 
-    if(w->glw_class == &glw_frontdrop)
+    if(w->glw_class == &glw_frontdrop && TAILQ_FIRST(&w->glw_childs) != NULL) {
       render_child_simple(w, &rc0);
+      glw_zinc(&rc0);
+    }
 
     if(alpha_self > 0.01f) {
 
@@ -303,40 +304,48 @@ glw_image_render(glw_t *w, const glw_rctx_t *rc)
 	glw_blendmode(w->glw_root, GLW_BLEND_ADDITIVE);
 
       glw_renderer_draw(&gi->gi_gr, w->glw_root, &rc0,
-			&glt->glt_texture,
+			&glt->glt_texture, NULL,
 			&gi->gi_col_mul, rgb_off, alpha_self, blur,
-			gi->gi_prog);
+			gi->gi_gpa.gpa_prog ? &gi->gi_gpa : NULL);
 
       if(gi->gi_bitmap_flags & GLW_IMAGE_ADDITIVE)
 	glw_blendmode(w->glw_root, GLW_BLEND_NORMAL);
     }
 
-    if(w->glw_class != &glw_frontdrop)
+    if(w->glw_class != &glw_frontdrop && TAILQ_FIRST(&w->glw_childs) != NULL) {
+      glw_zinc(&rc0);
       render_child_simple(w, &rc0);
+    }
 
   } else {
 
-    if(glw_is_focusable(w))
-      glw_store_matrix(w, rc);
+    rc0 = *rc;
 
-    if(w->glw_class == &glw_frontdrop)
-      render_child_autocentered(gi, rc);
+    if(glw_is_focusable(w))
+      glw_store_matrix(w, &rc0);
+
+    if(w->glw_class == &glw_frontdrop && TAILQ_FIRST(&w->glw_childs) != NULL) {
+      render_child_autocentered(gi, &rc0);
+      glw_zinc(&rc0);
+    }
 
     if(glt && glw_is_tex_inited(&glt->glt_texture) && alpha_self > 0.01f) {
 
       if(gi->gi_bitmap_flags & GLW_IMAGE_ADDITIVE)
 	glw_blendmode(w->glw_root, GLW_BLEND_ADDITIVE);
 
-      glw_renderer_draw(&gi->gi_gr, w->glw_root, rc,
-			&glt->glt_texture,
+      glw_renderer_draw(&gi->gi_gr, w->glw_root, &rc0,
+			&glt->glt_texture, NULL,
 			&gi->gi_col_mul, rgb_off, alpha_self, blur,
-			gi->gi_prog);
+			gi->gi_gpa.gpa_prog ? &gi->gi_gpa : NULL);
 
       if(gi->gi_bitmap_flags & GLW_IMAGE_ADDITIVE)
 	glw_blendmode(w->glw_root, GLW_BLEND_NORMAL);
     }
-    if(w->glw_class != &glw_frontdrop)
-      render_child_autocentered(gi, rc);
+    if(w->glw_class != &glw_frontdrop && TAILQ_FIRST(&w->glw_childs) != NULL) {
+      glw_zinc(&rc0);
+      render_child_autocentered(gi, &rc0);
+    }
   }
 }
 
@@ -430,30 +439,15 @@ glw_image_layout_tesselated(glw_root_t *gr, const glw_rctx_t *rc,
     update_box(gi);
   }
 
-  if(gr->gr_normalized_texture_coords) {
+  tex[1][0] = 0.0f + (float)gi->gi_border[0]  / glt->glt_xs;
+  tex[2][0] = glt->glt_s - (float)gi->gi_border[2] / glt->glt_xs;
+  tex[0][0] = gi->gi_bitmap_flags & GLW_IMAGE_BORDER_LEFT ? 0.0f : tex[1][0];
+  tex[3][0] = gi->gi_bitmap_flags & GLW_IMAGE_BORDER_RIGHT ? glt->glt_s : tex[2][0];
 
-    tex[1][0] = 0.0f + (float)gi->gi_border[0]  / glt->glt_xs;
-    tex[2][0] = glt->glt_s - (float)gi->gi_border[2] / glt->glt_xs;
-    tex[0][0] = gi->gi_bitmap_flags & GLW_IMAGE_BORDER_LEFT ? 0.0f : tex[1][0];
-    tex[3][0] = gi->gi_bitmap_flags & GLW_IMAGE_BORDER_RIGHT ? glt->glt_s : tex[2][0];
-
-    tex[0][1] = 0.0f;
-    tex[1][1] = 0.0f + (float)gi->gi_border[1]    / glt->glt_ys;
-    tex[2][1] = glt->glt_t - (float)gi->gi_border[3] / glt->glt_ys;
-    tex[3][1] = glt->glt_t;
-
-  } else {
-
-    tex[1][0] = gi->gi_border[0];
-    tex[2][0] = glt->glt_xs - gi->gi_border[2];
-    tex[0][0] = gi->gi_bitmap_flags & GLW_IMAGE_BORDER_LEFT  ? 0.0f : tex[1][0];
-    tex[3][0] = gi->gi_bitmap_flags & GLW_IMAGE_BORDER_RIGHT ? glt->glt_xs : tex[2][0];
-
-    tex[0][1] = 0.0f;
-    tex[1][1] = gi->gi_border[1];
-    tex[2][1] = glt->glt_ys - gi->gi_border[3];
-    tex[3][1] = glt->glt_ys;
-  }
+  tex[0][1] = 0.0f;
+  tex[1][1] = 0.0f + (float)gi->gi_border[1]    / glt->glt_ys;
+  tex[2][1] = glt->glt_t - (float)gi->gi_border[3] / glt->glt_ys;
+  tex[3][1] = glt->glt_t;
 
   BL = gi->gi_border[0];
   BR = gi->gi_border[2];
@@ -501,13 +495,9 @@ settexcoord(glw_renderer_t *gr, int c, float s0, float t0,
   float s = s0 * m[0] + t0 * m[1];
   float t = s0 * m[2] + t0 * m[3];
 
-  if(root->gr_normalized_texture_coords) {
-    s = (s + 1.0) * 0.5;
-    t = (t + 1.0) * 0.5;
-  } else {
-    s = (s + 1.0) * 0.5 * glt->glt_xs;
-    t = (t + 1.0) * 0.5 * glt->glt_ys;
-  }
+  s = (s + 1.0) * 0.5;
+  t = (t + 1.0) * 0.5;
+
   glw_renderer_vtx_st(gr, c, s, t);
 }
 
@@ -591,8 +581,8 @@ static void
 glw_image_layout_repeated(glw_root_t *gr, const glw_rctx_t *rc,
                           glw_image_t *gi, glw_loadable_texture_t *glt)
 {
-  float xs = gr->gr_normalized_texture_coords ? glt->glt_s : glt->glt_xs;
-  float ys = gr->gr_normalized_texture_coords ? glt->glt_t : glt->glt_ys;
+  float xs = glt->glt_s;
+  float ys = glt->glt_t;
 
   glw_renderer_vtx_pos(&gi->gi_gr, 0, -1.0, -1.0, 0.0);
   glw_renderer_vtx_st (&gi->gi_gr, 0, 0, ys);
@@ -1189,28 +1179,10 @@ mod_image_flags(glw_t *w, int set, int clr)
 /**
  *
  */
-static void
-mod_flags2(glw_t *w, int set, int clr)
-{
-  glw_image_t *gi = (void *)w;
-  if((set | clr) & GLW2_SHADOW) {
-    if(set & GLW2_SHADOW)
-      gi->gi_shadow = 4;
-    else
-      gi->gi_shadow = 0;
-    
-    gi->gi_update = 1;
-  }
-}
-
-
-/**
- *
- */
-static const rstr_t *
+static rstr_t *
 get_curname(glw_image_t *gi)
 {
-  const rstr_t *curname;
+  rstr_t *curname;
 
   if(gi->gi_pending_url != NULL)
     curname = gi->gi_pending_url;
@@ -1235,6 +1207,29 @@ set_pending(glw_image_t *gi, rstr_t *filename)
   gi->gi_pending_url = filename ? rstr_dup(filename) : rstr_alloc("");
 
 }
+
+
+/**
+ *
+ */
+static void
+mod_flags2(glw_t *w, int set, int clr)
+{
+  glw_image_t *gi = (void *)w;
+  if((set | clr) & GLW2_SHADOW) {
+    if(set & GLW2_SHADOW)
+      gi->gi_shadow = 4;
+    else
+      gi->gi_shadow = 0;
+
+    if(gi->gi_current || gi->gi_pending) {
+      rstr_t *curname = get_curname(gi);
+      if(curname != NULL)
+        set_pending(gi, curname);
+    }
+  }
+}
+
 
 /**
  *
@@ -1311,6 +1306,35 @@ set_sources(glw_t *w, rstr_t **filenames)
  *
  */
 static int
+glw_image_set_em(glw_t *w, glw_attribute_t attrib, float value)
+{
+  glw_image_t *gi = (glw_image_t *)w;
+
+  switch(attrib) {
+  case GLW_ATTRIB_SIZE:
+    if(w->glw_class != &glw_icon)
+      return -1;
+
+    if(gi->gi_size_scale == value)
+      return 0;
+
+    gi->gi_size_scale = value;
+
+    float siz = gi->gi_size_scale * w->glw_root->gr_current_size;
+    glw_set_constraints(w, siz, siz, 0, GLW_CONSTRAINT_X | GLW_CONSTRAINT_Y);
+    break;
+
+  default:
+    return -1;
+  }
+  return 1;
+}
+
+
+/**
+ *
+ */
+static int
 glw_image_set_float(glw_t *w, glw_attribute_t attrib, float value)
 {
   glw_image_t *gi = (glw_image_t *)w;
@@ -1349,17 +1373,7 @@ glw_image_set_float(glw_t *w, glw_attribute_t attrib, float value)
     break;
 
   case GLW_ATTRIB_SIZE_SCALE:
-    if(w->glw_class != &glw_icon)
-      return -1;
-
-    if(gi->gi_size_scale == value)
-      return 0;
-
-    gi->gi_size_scale = value;
-
-    float siz = gi->gi_size_scale * w->glw_root->gr_current_size;
-    glw_set_constraints(w, siz, siz, 0, GLW_CONSTRAINT_X | GLW_CONSTRAINT_Y);
-    break;
+    return glw_image_set_em(w, GLW_ATTRIB_SIZE, value);
 
   default:
     return -1;
@@ -1394,7 +1408,7 @@ glw_image_set_int(glw_t *w, glw_attribute_t attrib, int value)
     gi->gi_update = 1;
     break;
 
-  case GLW_ATTRIB_DEFAULT_SIZE:
+  case GLW_ATTRIB_SIZE:
     if(w->glw_class != &glw_icon)
       return -1;
 
@@ -1498,7 +1512,6 @@ static glw_class_t glw_image = {
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
   .gc_set_int16_4 = image_set_int16_4,
-  .gc_send_event = glw_event_distribute_to_childs,
 };
 
 GLW_REGISTER_CLASS(glw_image);
@@ -1515,6 +1528,7 @@ static glw_class_t glw_icon = {
   .gc_ctor = glw_icon_ctor,
   .gc_dtor = glw_icon_dtor,
   .gc_set_float = glw_image_set_float,
+  .gc_set_em = glw_image_set_em,
   .gc_set_int = glw_image_set_int,
   .gc_signal_handler = glw_image_callback,
   .gc_default_alignment = LAYOUT_ALIGN_CENTER,
@@ -1526,7 +1540,6 @@ static glw_class_t glw_icon = {
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
   .gc_set_int16_4 = image_set_int16_4,
-  .gc_send_event = glw_event_distribute_to_childs,
 };
 
 GLW_REGISTER_CLASS(glw_icon);
@@ -1554,7 +1567,6 @@ static glw_class_t glw_backdrop = {
   .gc_get_identity = get_identity,
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
-  .gc_send_event = glw_event_distribute_to_childs,
 };
 
 GLW_REGISTER_CLASS(glw_backdrop);
@@ -1583,7 +1595,6 @@ static glw_class_t glw_frontdrop = {
   .gc_get_identity = get_identity,
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
-  .gc_send_event = glw_event_distribute_to_childs,
 };
 
 GLW_REGISTER_CLASS(glw_frontdrop);
@@ -1611,7 +1622,6 @@ static glw_class_t glw_repeatedimage = {
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
   .gc_set_int16_4 = image_set_int16_4,
-  .gc_send_event = glw_event_distribute_to_childs,
 };
 
 GLW_REGISTER_CLASS(glw_repeatedimage);

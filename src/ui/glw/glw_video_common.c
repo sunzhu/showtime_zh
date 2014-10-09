@@ -24,7 +24,7 @@
 #include <libavutil/pixdesc.h>
 
 #include "showtime.h"
-#include "media.h"
+#include "media/media.h"
 #include "video/video_playback.h"
 #include "video/video_settings.h"
 
@@ -479,14 +479,17 @@ glw_video_play(glw_video_t *gv)
 
   mystrset(&gv->gv_current_url, gv->gv_pending_url ?: "");
 
-  e = event_create_playurl(gv->gv_current_url, 
-			   !!(gv->gv_flags & GLW_VIDEO_PRIMARY),
-			   gv->gv_priority,
-			   !!(gv->gv_flags & GLW_VIDEO_NO_AUDIO),
-			   gv->gv_model,
-			   gv->gv_how,
-			   gv->gv_origin,
-                           rstr_get(gv->gv_parent_url_x));
+  e = event_create_playurl(
+      .url        = gv->gv_current_url,
+      .primary    = !!(gv->gv_flags & GLW_VIDEO_PRIMARY),
+      .priority   = gv->gv_priority,
+      .no_audio   = !!(gv->gv_flags & GLW_VIDEO_NO_AUDIO),
+      .model      = gv->gv_model,
+      .how        = gv->gv_how,
+      .origin     = gv->gv_origin,
+      .parent_url = rstr_get(gv->gv_parent_url_x)
+      );
+
   mp_enqueue_event(gv->gv_mp, e);
   event_release(e);
 }
@@ -502,8 +505,12 @@ glw_video_dtor(glw_t *w)
   glw_video_t *gv = (glw_video_t *)w;
   video_decoder_t *vd = gv->gv_vd;
 
+  glw_renderer_free(&gv->gv_quad);
+
   prop_ref_dec(gv->gv_model);
   prop_ref_dec(gv->gv_origin);
+
+#if ENABLE_MEDIA_SETTINGS
   prop_unsubscribe(gv->gv_vo_scaling_sub);
   prop_unsubscribe(gv->gv_vo_displace_x_sub);
   prop_unsubscribe(gv->gv_vo_displace_y_sub);
@@ -512,6 +519,7 @@ glw_video_dtor(glw_t *w)
   prop_unsubscribe(gv->gv_fstretch_sub);
   prop_unsubscribe(gv->gv_vo_on_video_sub);
   prop_unsubscribe(gv->gv_vinterpolate_sub);
+#endif
 
   free(gv->gv_current_url);
   free(gv->gv_pending_url);
@@ -534,7 +542,7 @@ glw_video_dtor(glw_t *w)
   hts_cond_destroy(&gv->gv_init_cond);
   hts_mutex_destroy(&gv->gv_surface_mutex);
 
-  mp_ref_dec(gv->gv_mp);
+  mp_destroy(gv->gv_mp);
   gv->gv_mp = NULL;
 }
 
@@ -668,6 +676,9 @@ glw_video_ctor(glw_t *w)
   gv->gv_vd = video_decoder_create(gv->gv_mp);
   video_playback_create(gv->gv_mp);
 
+  gv->gv_vzoom = 100;
+
+#if ENABLE_MEDIA_SETTINGS
   prop_t *c = gv->gv_mp->mp_prop_ctrl;
 
   gv->gv_vo_scaling_sub =
@@ -733,6 +744,7 @@ glw_video_ctor(glw_t *w)
 		   PROP_TAG_ROOT, c,
                    PROP_TAG_NAME("ctrl", "vinterpolate"),
 		   NULL);
+#endif
 }
 
 
@@ -969,6 +981,15 @@ glw_video_render(glw_t *w, const glw_rctx_t *rc)
     event_t *e = event_create_int(EVENT_VIDEO_VISIBILITY, !gv->gv_invisible);
     mp_enqueue_event(gv->gv_mp, e);
     event_release(e);
+  }
+
+  if(!glw_renderer_initialized(&gv->gv_quad)) {
+    glw_renderer_init_quad(&gv->gv_quad);
+
+    glw_renderer_vtx_pos(&gv->gv_quad, 0, -1, -1, 0);
+    glw_renderer_vtx_pos(&gv->gv_quad, 1,  1, -1, 0);
+    glw_renderer_vtx_pos(&gv->gv_quad, 2,  1,  1, 0);
+    glw_renderer_vtx_pos(&gv->gv_quad, 3, -1,  1, 0);
   }
 
   hts_mutex_lock(&gv->gv_surface_mutex);

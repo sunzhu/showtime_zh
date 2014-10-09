@@ -472,9 +472,9 @@ js_prop_set_from_jsval(JSContext *cx, prop_t *p, jsval value)
       return;
     }
 
-    prop_set_link(p,
-		  JS_GetStringBytes(JS_ValueToString(cx, v1)),
-		  JS_GetStringBytes(JS_ValueToString(cx, v2)));
+    prop_set_uri(p,
+                 JS_GetStringBytes(JS_ValueToString(cx, v1)),
+                 JS_GetStringBytes(JS_ValueToString(cx, v2)));
     JS_LeaveLocalRootScope(cx);
   } else if(JSVAL_IS_STRING(value)) {
     js_prop_from_str(cx, p, value);
@@ -1387,13 +1387,23 @@ js_plugin_load(const char *id, const char *url, char *errbuf, size_t errlen)
 /**
  * Prop lockmanager for locking JS global context
  */
-static void
-js_lockmgr(void *ptr, int lock)
+static int
+js_lockmgr(void *ptr, prop_lock_op_t op)
 {
-  if(lock)
+  switch(op) {
+  case PROP_LOCK_LOCK:
+  case PROP_LOCK_TRY:
     JS_BeginRequest(ptr);
-  else
+    break;
+  case PROP_LOCK_UNLOCK:
     JS_EndRequest(ptr);
+    break;
+  case PROP_LOCK_RELEASE:
+  case PROP_LOCK_RETAIN:
+    break;
+  }
+
+  return 0;
 }
 
 

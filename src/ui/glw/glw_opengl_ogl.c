@@ -21,120 +21,6 @@
 
 #include "glw.h"
 
-const static float projection[16] = {
-  2.414213,0.000000,0.000000,0.000000,
-  0.000000,2.414213,0.000000,0.000000,
-  0.000000,0.000000,1.033898,-1.000000,
-  0.000000,0.000000,2.033898,0.000000
-};
-
-/**
- * return 1 if the extension is found, otherwise 0
- */
-static int
-check_gl_ext(const uint8_t *s, const char *func)
-{
-  int l = strlen(func);
-  char *v;
-  int x;
-
-  v = strstr((const char *)s, func);
-  x = v != NULL && v[l] < 33;
-
-  TRACE(TRACE_DEBUG, "OpenGL", "Feature \"%s\" %savailable",
-	func, x ? "" : "not ");
-  return x;
-}
-
-
-
-/**
- *
- */
-void
-glw_wirebox(glw_root_t *gr, const glw_rctx_t *rc)
-{
-  glw_backend_root_t *gbr = &gr->gr_be;
-  if(gbr->gbr_delayed_rendering)
-    return;
-
-  glw_load_program(gbr, NULL);
-
-  glMatrixMode(GL_PROJECTION);
-  glLoadMatrixf(projection);
-  glMatrixMode(GL_MODELVIEW);
-  glLoadMatrixf(glw_mtx_get(rc->rc_mtx));
-
-
-  glDisable(GL_TEXTURE_2D);
-  glBegin(GL_LINE_LOOP);
-  glColor4f(1,1,1,1);
-  glVertex3f(-1.0, -1.0, 0.0);
-  glVertex3f( 1.0, -1.0, 0.0);
-  glVertex3f( 1.0,  1.0, 0.0);
-  glVertex3f(-1.0,  1.0, 0.0);
-  glEnd();
-  glEnable(GL_TEXTURE_2D);
-}
-
-
-/**
- *
- */
-void
-glw_wirecube(glw_root_t *gr, const glw_rctx_t *rc)
-{
-  glw_backend_root_t *gbr = &gr->gr_be;
-  if(gbr->gbr_delayed_rendering)
-    return;
-
-  glw_load_program(gbr, gbr->gbr_renderer_flat);
-  glw_program_set_modelview(gbr, rc);
-  glw_program_set_uniform_color(gbr, 1,1,1,1);
-
-  glBegin(GL_LINE_LOOP);
-  glVertex3f(-1.0, -1.0, -1.0);
-  glVertex3f( 1.0, -1.0, -1.0);
-  glVertex3f( 1.0,  1.0, -1.0);
-  glVertex3f(-1.0,  1.0, -1.0);
-  glEnd();
-
-  glBegin(GL_LINE_LOOP);
-  glVertex3f(-1.0, -1.0,  1.0);
-  glVertex3f( 1.0, -1.0,  1.0);
-  glVertex3f( 1.0,  1.0,  1.0);
-  glVertex3f(-1.0,  1.0,  1.0);
-  glEnd();
-
-  glBegin(GL_LINE_LOOP);
-  glVertex3f(-1.0, -1.0,  1.0);
-  glVertex3f(-1.0, -1.0, -1.0);
-  glVertex3f(-1.0,  1.0, -1.0);
-  glVertex3f(-1.0,  1.0,  1.0);
-  glEnd();
-
-  glBegin(GL_LINE_LOOP);
-  glVertex3f( 1.0, -1.0,  1.0);
-  glVertex3f( 1.0, -1.0, -1.0);
-  glVertex3f( 1.0,  1.0, -1.0);
-  glVertex3f( 1.0,  1.0,  1.0);
-  glEnd();
-
-  glBegin(GL_LINE_LOOP);
-  glVertex3f( 1.0, -1.0,  1.0);
-  glVertex3f( 1.0, -1.0, -1.0);
-  glVertex3f(-1.0, -1.0, -1.0);
-  glVertex3f(-1.0, -1.0,  1.0);
-  glEnd();
-
-  glBegin(GL_LINE_LOOP);
-  glVertex3f( 1.0,  1.0,  1.0);
-  glVertex3f( 1.0,  1.0, -1.0);
-  glVertex3f(-1.0,  1.0, -1.0);
-  glVertex3f(-1.0,  1.0,  1.0);
-  glEnd();
-}
-
 
 
 /**
@@ -144,15 +30,15 @@ void
 glw_rtt_init(glw_root_t *gr, glw_rtt_t *grtt, int width, int height,
 	     int alpha)
 {
-  int m = gr->gr_be.gbr_primary_texture_mode;
+  const int m = GL_TEXTURE_2D;
   int mode;
 
   grtt->grtt_width  = width;
   grtt->grtt_height = height;
 
-  glGenTextures(1, &grtt->grtt_texture.tex);
-    
-  glBindTexture(m, grtt->grtt_texture.tex);
+  glGenTextures(1, grtt->grtt_texture.textures);
+
+  glBindTexture(m, grtt->grtt_texture.textures[0]);
   glTexParameteri(m, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(m, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(m, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -169,7 +55,7 @@ glw_rtt_init(glw_root_t *gr, glw_rtt_t *grtt, int width, int height,
   glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, grtt->grtt_framebuffer);
   glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT,
 			    GL_COLOR_ATTACHMENT0_EXT,
-			    m, grtt->grtt_texture.tex, 0);
+			    m, grtt->grtt_texture.textures[0], 0);
 
   glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 }
@@ -181,19 +67,18 @@ glw_rtt_init(glw_root_t *gr, glw_rtt_t *grtt, int width, int height,
 void
 glw_rtt_enter(glw_root_t *gr, glw_rtt_t *grtt, glw_rctx_t *rc)
 {
-  int m = gr->gr_be.gbr_primary_texture_mode;
-
   /* Save viewport */
   glGetIntegerv(GL_VIEWPORT, grtt->grtt_viewport);
 
-  glBindTexture(m, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
   glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, grtt->grtt_framebuffer);
   
   glViewport(0, 0, grtt->grtt_width, grtt->grtt_height);
 
   glClear(GL_COLOR_BUFFER_BIT);
 
-  glw_rctx_init(rc, grtt->grtt_width, grtt->grtt_height, 0);
+  abort();
+  glw_rctx_init(rc, grtt->grtt_width, grtt->grtt_height, 0, NULL);
 }
 
 
@@ -219,7 +104,7 @@ glw_rtt_restore(glw_root_t *gr, glw_rtt_t *grtt)
 void
 glw_rtt_destroy(glw_root_t *gr, glw_rtt_t *grtt)
 {
-  glDeleteTextures(1, &grtt->grtt_texture.tex);
+  glDeleteTextures(1, grtt->grtt_texture.textures);
   glDeleteFramebuffersEXT(1, &grtt->grtt_framebuffer);
 }
 
@@ -232,39 +117,12 @@ int
 glw_opengl_init_context(glw_root_t *gr)
 {
   GLint tu = 0;
-  glw_backend_root_t *gbr = &gr->gr_be;
-  const	GLubyte	*s;
-  /* Check OpenGL extensions we would like to have */
-
-  s = glGetString(GL_EXTENSIONS);
 
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glEnable(GL_CULL_FACE);
 
-  gbr->gbr_frontface = GLW_CCW;
-
   glPixelStorei(GL_UNPACK_ALIGNMENT, PIXMAP_ROW_ALIGN);
-
-  if(check_gl_ext(s, "GL_ARB_texture_non_power_of_two")) {
-    gbr->gbr_texmode = GLW_OPENGL_TEXTURE_NPOT;
-    gbr->gbr_primary_texture_mode = GL_TEXTURE_2D;
-    gr->gr_normalized_texture_coords = 1;
-
-#ifdef GL_TEXTURE_RECTANGLE_ARB
-  } else if(check_gl_ext(s, "GL_ARB_texture_rectangle")) {
-    gbr->gbr_texmode = GLW_OPENGL_TEXTURE_RECTANGLE;
-    gbr->gbr_primary_texture_mode = GL_TEXTURE_RECTANGLE_ARB;
-#endif
-
-  } else {
-    gbr->gbr_texmode = GLW_OPENGL_TEXTURE_SIMPLE;
-    gbr->gbr_primary_texture_mode = GL_TEXTURE_2D;
-    gr->gr_normalized_texture_coords = 1;
-    
-  }
-
-  glEnable(gbr->gbr_primary_texture_mode);
 
   glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &tu);
   if(tu < 6) {

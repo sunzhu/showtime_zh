@@ -63,7 +63,7 @@ int display_status = DISPLAY_STATUS_ON;
 int cec_we_are_not_active;
 extern int auto_ui_shutdown;
 static int runmode;
-
+static int ctrlc;
 
 /**
  *
@@ -364,6 +364,18 @@ the_alarm(int x)
 /**
  *
  */
+static void
+doexit(int x)
+{
+  if(ctrlc)
+    exit(0);
+  ctrlc = 1;
+}
+
+
+/**
+ *
+ */
 static glw_root_t *
 ui_create(void)
 {
@@ -391,6 +403,10 @@ ui_create(void)
   sigset_t set;
   sigemptyset(&set);
   sigaddset(&set, SIGALRM);
+  sigaddset(&set, SIGTERM);
+  sigaddset(&set, SIGINT);
+  signal(SIGTERM, doexit);
+  signal(SIGINT, doexit);
   pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 
   gr->gr_prop_dispatcher = &prop_courier_poll_with_alarm;
@@ -407,6 +423,9 @@ static int
 ui_should_run(void)
 {
   if(runmode != RUNMODE_RUNNING)
+    return 0;
+
+  if(ctrlc)
     return 0;
 
   if(!auto_ui_shutdown)
@@ -554,13 +573,13 @@ ui_run(glw_root_t *gr, EGLDisplay dpy)
     int refresh = gr->gr_need_refresh;
     gr->gr_need_refresh = 0;
     if(refresh) {
+      int zmax = 0;
 
       glw_rctx_t rc;
 
       gr->gr_can_externalize = 1;
       gr->gr_externalize_cnt = 0;
-
-      glw_rctx_init(&rc, gr->gr_width, gr->gr_height, 1);
+      glw_rctx_init(&rc, gr->gr_width, gr->gr_height, 1, &zmax);
       glw_layout0(gr->gr_universe, &rc);
 
       if(refresh & GLW_REFRESH_FLAG_RENDER) {
@@ -621,7 +640,7 @@ rpi_mainloop(void)
 
   runmode = RUNMODE_RUNNING;
 
-  while(runmode != RUNMODE_EXIT) {
+  while(runmode != RUNMODE_EXIT && !ctrlc) {
     if(ui_should_run()) {
       showtime_swrefresh();
       ui_run(gr, dpy);

@@ -63,9 +63,10 @@ glw_view_token_free(glw_root_t *gr, token_t *t)
     break;
 
   case TOKEN_FLOAT:
+  case TOKEN_EM:
   case TOKEN_INT:
   case TOKEN_VECTOR_FLOAT:
-  case TOKEN_OBJECT_ATTRIBUTE:
+  case TOKEN_RESOLVED_ATTRIBUTE:
   case TOKEN_PROPERTY_SUBSCRIPTION:
   case TOKEN_VOID:
   case TOKEN_DIRECTORY:
@@ -114,6 +115,7 @@ glw_view_token_free(glw_root_t *gr, token_t *t)
 
   case TOKEN_RSTRING:
   case TOKEN_IDENTIFIER:
+  case TOKEN_UNRESOLVED_ATTRIBUTE:
     rstr_release(t->t_rstring);
     break;
   case TOKEN_PROPERTY_NAME:
@@ -125,9 +127,9 @@ glw_view_token_free(glw_root_t *gr, token_t *t)
     t->t_gem->gem_dtor(gr, t->t_gem);
     break;
 
-  case TOKEN_LINK:
-    rstr_release(t->t_link_rtitle);
-    rstr_release(t->t_link_rurl);
+  case TOKEN_URI:
+    rstr_release(t->t_uri_title);
+    rstr_release(t->t_uri);
     break;
 
   case TOKEN_num:
@@ -157,6 +159,7 @@ glw_view_token_copy(glw_root_t *gr, token_t *src)
 
   switch(src->type) {
   case TOKEN_FLOAT:
+  case TOKEN_EM:
     dst->t_float = src->t_float;
     break;
 
@@ -187,7 +190,7 @@ glw_view_token_copy(glw_root_t *gr, token_t *src)
     dst->t_num_args = src->t_num_args;
     break;
 
-  case TOKEN_OBJECT_ATTRIBUTE:
+  case TOKEN_RESOLVED_ATTRIBUTE:
     dst->t_attrib = src->t_attrib;
     break;
 
@@ -199,6 +202,7 @@ glw_view_token_copy(glw_root_t *gr, token_t *src)
     dst->t_rstrtype = src->t_rstrtype;
     // FALLTHRU
   case TOKEN_IDENTIFIER:
+  case TOKEN_UNRESOLVED_ATTRIBUTE:
     dst->t_rstring = rstr_dup(src->t_rstring);
     break;
 
@@ -246,9 +250,9 @@ glw_view_token_copy(glw_root_t *gr, token_t *src)
   case TOKEN_COLON:
     break;
 
-  case TOKEN_LINK:
-    dst->t_link_rtitle = rstr_dup(src->t_link_rtitle);
-    dst->t_link_rurl   = rstr_dup(src->t_link_rurl);
+  case TOKEN_URI:
+    dst->t_uri_title = rstr_dup(src->t_uri_title);
+    dst->t_uri   = rstr_dup(src->t_uri);
     break;
 
   case TOKEN_VECTOR_FLOAT:
@@ -373,8 +377,12 @@ token2name(token_t *t)
                rstr_get(t->t_pnvec[i]));
     return buf;
 
-  case TOKEN_OBJECT_ATTRIBUTE:
-    snprintf(buf, sizeof(buf), ".%s", t->t_attrib->name);
+  case TOKEN_RESOLVED_ATTRIBUTE:
+    snprintf(buf, sizeof(buf), "%s:", t->t_attrib->name);
+    return buf;
+
+  case TOKEN_UNRESOLVED_ATTRIBUTE:
+    snprintf(buf, sizeof(buf), "%s:", rstr_get(t->t_rstring));
     return buf;
 
   case TOKEN_IDENTIFIER:    return rstr_get(t->t_rstring);
@@ -382,6 +390,10 @@ token2name(token_t *t)
 
   case TOKEN_FLOAT:
     snprintf(buf, sizeof(buf), "%ff", t->t_float);
+    return buf;
+
+  case TOKEN_EM:
+    snprintf(buf, sizeof(buf), "%fem", t->t_float);
     return buf;
 
   case TOKEN_INT:
@@ -407,9 +419,9 @@ token2name(token_t *t)
   case TOKEN_RIGHT_BRACKET:  return "]";
   case TOKEN_DIRECTORY:  return "<directory>";
 
-  case TOKEN_LINK:
+  case TOKEN_URI:
     snprintf(buf, sizeof(buf), "Link<%s, %s>",
-	     rstr_get(t->t_link_rtitle), rstr_get(t->t_link_rurl));
+	     rstr_get(t->t_uri_title), rstr_get(t->t_uri));
     return buf;
 
   case TOKEN_VECTOR:

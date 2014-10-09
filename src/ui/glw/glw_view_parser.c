@@ -139,9 +139,11 @@ parse_shunting_yard(token_t *expr, errorinfo_t *ei, glw_root_t *gr)
     case TOKEN_RSTRING:
     case TOKEN_CSTRING:
     case TOKEN_FLOAT:
+    case TOKEN_EM:
     case TOKEN_INT:
     case TOKEN_IDENTIFIER:
-    case TOKEN_OBJECT_ATTRIBUTE:
+    case TOKEN_RESOLVED_ATTRIBUTE:
+    case TOKEN_UNRESOLVED_ATTRIBUTE:
     case TOKEN_BLOCK:
     case TOKEN_PROPERTY_REF:
     case TOKEN_PROPERTY_NAME:
@@ -298,7 +300,7 @@ optimize_attribute_assignment(token_t *t, token_t *prev, glw_root_t *gr)
 {
   if(t->type == TOKEN_RPN) {
     token_t *att = t->child;
-    if(att->type == TOKEN_OBJECT_ATTRIBUTE &&
+    if(att->type == TOKEN_RESOLVED_ATTRIBUTE &&
        att->next != NULL && att->next->next != NULL &&
        att->next->next->next == NULL &&
        att->next->next->type == TOKEN_ASSIGNMENT) {
@@ -388,6 +390,26 @@ parse_prep_expression(token_t *expr, errorinfo_t *ei, glw_root_t *gr)
       continue;
     }
 
+
+    /**
+     * Transform int/float "em" into TOKEN_EM
+     */
+
+    if((t->type == TOKEN_FLOAT || t->type == TOKEN_INT) &&
+       t1 != NULL && t1->type == TOKEN_IDENTIFIER &&
+       !strcmp(rstr_get(t1->t_rstring), "em")) {
+
+      if(t->type == TOKEN_INT)
+        t->t_float = t->t_int;
+
+      t->type = TOKEN_EM;
+
+      t->next = t1->next;
+      t = t1->next;
+      glw_view_token_free(gr, t1);
+      continue;
+    }
+
     /**
      * Transform '.name' into just 'name' and set its type to
      * object attribute
@@ -401,10 +423,7 @@ parse_prep_expression(token_t *expr, errorinfo_t *ei, glw_root_t *gr)
       t->t_rstring = t1->t_rstring;
       t1->t_rstring = NULL;
 
-      if(glw_view_attrib_resolve(t))
-	return glw_view_seterr(ei, t, "Unknown attribute: %s",
-				rstr_get(t->t_rstring));
-
+      glw_view_attrib_resolve(t);
       t->next = t1->next;
       t = t1->next;
       glw_view_token_free(gr, t1);
@@ -417,10 +436,7 @@ parse_prep_expression(token_t *expr, errorinfo_t *ei, glw_root_t *gr)
      */
     if(t->type == TOKEN_IDENTIFIER &&
        t1 != NULL && t1->type == TOKEN_COLON) {
-      if(glw_view_attrib_resolve(t))
-	return glw_view_seterr(ei, t, "Unknown attribute: %s",
-				rstr_get(t->t_rstring));
-
+      glw_view_attrib_resolve(t);
       t1->type = TOKEN_ASSIGNMENT;
       continue;
     }

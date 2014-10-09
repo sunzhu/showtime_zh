@@ -24,7 +24,7 @@
 
 #include "glw.h"
 #include "glw_renderer.h"
-#include "media.h"
+#include "media/media.h"
 #include "video/video_playback.h"
 #include "video/video_decoder.h"
 #include "misc/kalman.h"
@@ -74,7 +74,7 @@ typedef struct glw_video_surface {
   GLuint gvs_pbo[3];
   int gvs_size[3];
   int gvs_uploaded;
-  GLuint gvs_textures[3];
+  glw_backend_texture_t gvs_texture;
 #endif
 
 #if CONFIG_GLW_BACKEND_RSX
@@ -84,7 +84,6 @@ typedef struct glw_video_surface {
 #endif
 
 #if ENABLE_VDPAU
-  GLuint gvs_texture;
   int gvs_mapped;
   VdpOutputSurface gvs_vdpau_surface;
   GLvdpauSurfaceNV gvs_gl_surface;
@@ -101,6 +100,9 @@ typedef struct glw_video_surface {
 typedef struct glw_video {
 
   glw_t w;
+
+  glw_renderer_t gv_quad;
+  glw_program_args_t gv_gpa;
 
   int gv_width;
   int gv_height;
@@ -194,29 +196,27 @@ typedef struct glw_video {
   void *gv_aux;
 
 
-  // 
+  /**
+   * Settings that originate from media_pipe. However, we subscribe
+   * on them to get updates
+   */
+#if ENABLE_MEDIA_SETTINGS
   prop_sub_t *gv_vo_scaling_sub;
-  float gv_vo_scaling;
-
   prop_sub_t *gv_vo_displace_y_sub;
-  int gv_vo_displace_y;
-
   prop_sub_t *gv_vo_displace_x_sub;
-  int gv_vo_displace_x;
-
   prop_sub_t *gv_vo_on_video_sub;
-  int gv_vo_on_video;
-
   prop_sub_t *gv_vzoom_sub;
-  int gv_vzoom;
-
   prop_sub_t *gv_hstretch_sub;
-  int gv_hstretch;
-
   prop_sub_t *gv_fstretch_sub;
-  int gv_fstretch;
-
   prop_sub_t *gv_vinterpolate_sub;
+#endif
+  float gv_vo_scaling;
+  int gv_vo_displace_y;
+  int gv_vo_displace_x;
+  int gv_vo_on_video;
+  int gv_vzoom;
+  int gv_hstretch;
+  int gv_fstretch;
   int gv_vinterpolate;
 
   // DVD SPU stuff
@@ -316,10 +316,8 @@ void *glw_video_add_reap_task(glw_video_t *gv, size_t s, void *fn);
 /**
  *
  */
-void glw_render_video_quad(int interlace, int rectmode, int width, int height,
-                           int bob1, int bob2,
-                           glw_backend_root_t *gbr, glw_program_t *gp,
-                           const glw_video_t *gv, glw_rctx_t *rc);
+void glw_video_opengl_load_uniforms(glw_root_t *gr, glw_program_t *gp,
+                                    void *args, const glw_render_job_t *rj);
 
 #endif /* GLW_VIDEO_COMMON_H */
 

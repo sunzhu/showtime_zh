@@ -278,7 +278,8 @@ start_thread(const char *name, hts_thread_t *p,
   }
   
   if(gconf.enable_thread_debug)
-    TRACE(TRACE_DEBUG, "THREADS", "Created thread %s (0x%x)", name, *p);
+    trace(TRACE_NO_PROP, TRACE_DEBUG,
+          "THREADS", "Created thread %s (0x%x)", name, *p);
 
 }
 
@@ -725,6 +726,15 @@ hts_cond_wait_timeout(hts_cond_t *c, hts_mutex_t *m, int delay)
   panic("cond_wait_timeout(%p, %d) failed 0x%x", c, delay, r);
 }
 
+int
+hts_cond_wait_timeout_abs(hts_cond_t *c, hts_mutex_t *m, int64_t ts)
+{
+  ts = ts - showtime_get_ts();
+  if(ts <= 0)
+    return 1;
+
+  return hts_cond_wait_timeout(c, m, ts / 1000);
+}
 
 #else // condvar debugging
 

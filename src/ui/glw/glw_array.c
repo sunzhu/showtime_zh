@@ -20,7 +20,7 @@
  */
 
 #include "glw.h"
-
+#include "glw_navigation.h"
 
 typedef struct glw_array {
   glw_t w;
@@ -65,16 +65,21 @@ typedef struct glw_array {
 
 } glw_array_t;
 
-#define glw_parent_pos_x glw_parent_val[0].i32
-#define glw_parent_pos_y glw_parent_val[1].i32
+typedef struct glw_array_item {
 
-#define glw_parent_pos_fx glw_parent_val[2].f
-#define glw_parent_pos_fy glw_parent_val[3].f
+  int pos_y;
+  int pos_x;
 
-#define glw_parent_inst   glw_parent_val[4].i32
-#define glw_parent_height glw_parent_val[5].i32
+  float pos_fx;
+  float pos_fy;
 
-#define glw_parent_col    glw_parent_val[6].i32
+  uint16_t height;
+
+  uint8_t inst;
+  int8_t col;
+
+} glw_array_item_t;
+
 
 /**
  *
@@ -233,6 +238,8 @@ glw_array_layout(glw_t *w, const glw_rctx_t *rc)
     if(c->glw_flags & GLW_HIDDEN)
       continue;
 
+    glw_array_item_t *cd = glw_parent_data(c, glw_array_item_t);
+
     if(c->glw_flags & GLW_CONSTRAINT_D) {
       if(column != 0) {
 	ypos += rc0.rc_height + yspacing;
@@ -247,25 +254,25 @@ glw_array_layout(glw_t *w, const glw_rctx_t *rc)
       } else {
 	rc0.rc_height = a->child_height_px;
       }
-      c->glw_parent_col = -1;
+      cd->col = -1;
 
     } else {
       rc0.rc_width  = a->child_width_px;
       rc0.rc_height = a->child_height_px;
-      c->glw_parent_col = column;
+      cd->col = column;
     }
 
-    c->glw_parent_pos_y = ypos;
-    c->glw_parent_pos_x = column * (xspacing + a->child_width_px) + xpos;
-    c->glw_parent_height = rc0.rc_height;
+    cd->pos_y = ypos;
+    cd->pos_x = column * (xspacing + a->child_width_px) + xpos;
+    cd->height = rc0.rc_height;
 
-    if(c->glw_parent_inst) {
-      c->glw_parent_pos_fy = c->glw_parent_pos_y;
-      c->glw_parent_pos_fx = c->glw_parent_pos_x;
-      c->glw_parent_inst = 0;
+    if(cd->inst) {
+      cd->pos_fy = cd->pos_y;
+      cd->pos_fx = cd->pos_x;
+      cd->inst = 0;
     } else {
-      glw_lp(&c->glw_parent_pos_fy, w->glw_root, c->glw_parent_pos_y, 0.25);
-      glw_lp(&c->glw_parent_pos_fx, w->glw_root, c->glw_parent_pos_x, 0.25);
+      glw_lp(&cd->pos_fy, w->glw_root, cd->pos_y, 0.25);
+      glw_lp(&cd->pos_fx, w->glw_root, cd->pos_x, 0.25);
     }
 
     if(ypos - a->filtered_pos > -height &&
@@ -329,7 +336,9 @@ glw_array_layout(glw_t *w, const glw_rctx_t *rc)
     last->glw_flags2 |= GLW2_BOTTOM_EDGE | GLW2_RIGHT_EDGE;
     c = last;
     while((c = TAILQ_PREV(c, glw_queue, glw_parent_link)) != NULL) {
-      if(c->glw_parent_pos_y == last->glw_parent_pos_y)
+      glw_array_item_t *cd = glw_parent_data(c, glw_array_item_t);
+      glw_array_item_t *cdl = glw_parent_data(last, glw_array_item_t);
+      if(cd->pos_y == cdl->pos_y)
 	c->glw_flags2 |= GLW2_BOTTOM_EDGE;
       else
 	break;
@@ -357,11 +366,12 @@ glw_array_render_one(glw_array_t *a, glw_t *c, int width, int height,
 		     const glw_rctx_t *rc0, const glw_rctx_t *rc2)
 {
   glw_rctx_t rc3;
-  const float y = c->glw_parent_pos_fy - a->filtered_pos;
+  glw_array_item_t *cd = glw_parent_data(c, glw_array_item_t);
+  const float y = cd->pos_fy - a->filtered_pos;
   int ct, cb, ft, fb;
   glw_root_t *gr = a->w.glw_root;
   
-  int ch = c->glw_parent_height;
+  int ch = cd->height;
   int cw = a->child_width_px;
 
   if(c->glw_flags & GLW_CONSTRAINT_D)
@@ -396,10 +406,10 @@ glw_array_render_one(glw_array_t *a, glw_t *c, int width, int height,
 
   rc3 = *rc2;
   glw_reposition(&rc3,
-		 c->glw_parent_pos_fx,
-		 height - c->glw_parent_pos_fy,
-		 c->glw_parent_pos_fx + cw,
-		 height - c->glw_parent_pos_fy - ch);
+		 cd->pos_fx,
+		 height - cd->pos_fy,
+		 cd->pos_fx + cw,
+		 height - cd->pos_fy - ch);
 
   glw_render0(c, &rc3);
 
@@ -479,7 +489,7 @@ scroll_to_me(glw_array_t *a, glw_t *c)
 {
   glw_schedule_refresh(a->w.glw_root, 0);
 
-  while(c != NULL && c->glw_parent_col != 0)
+  while(c != NULL && glw_parent_data(c, glw_array_item_t)->col != 0)
     c = TAILQ_PREV(c, glw_queue, glw_parent_link);
 
   if(c == NULL)
@@ -527,7 +537,7 @@ glw_array_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
   case GLW_SIGNAL_CHILD_UNHIDDEN:
     c = extra;
     a->num_visible_childs++;
-    c->glw_parent_inst = 1;
+    glw_parent_data(c, glw_array_item_t)->inst = 1;
     break;
 
 
@@ -669,31 +679,6 @@ glw_array_set_float(glw_t *w, glw_attribute_t attrib, float value)
   return 1;
 }
 
-/**
- *
- */
-static int
-glw_array_get_next_row(glw_t *w, glw_t *c, int reverse)
-{
-  int current_col = c->glw_parent_col;
-  int cnt = 0;
-  if(reverse) {
-    while((c = glw_get_prev_n(c, 1)) != NULL) {
-      cnt++;
-      if(c->glw_parent_col == current_col)
-	return cnt;
-    }
-  } else {
-    while((c = glw_get_next_n(c, 1)) != NULL) {
-      cnt++;
-      if(c->glw_parent_col == current_col)
-	return cnt;
-    }
-  }
-
-  return 0;
-}
-
 
 /**
  *
@@ -716,21 +701,87 @@ glw_array_set_int16_4(glw_t *w, glw_attribute_t attrib, const int16_t *v)
 /**
  *
  */
+static glw_t *
+glw_array_get_next_row(glw_t *c, int reverse)
+{
+  int current_col = glw_parent_data(c, glw_array_item_t)->col;
+  if(reverse) {
+    while((c = glw_get_prev_n(c, 1)) != NULL) {
+      if(glw_parent_data(c, glw_array_item_t)->col == current_col &&
+         glw_get_focusable_child(c))
+	return c;
+    }
+  } else {
+    while((c = glw_get_next_n(c, 1)) != NULL) {
+      if(glw_parent_data(c, glw_array_item_t)->col == current_col &&
+         glw_get_focusable_child(c))
+	return c;
+    }
+  }
+
+  return NULL;
+}
+
+
+/**
+ *
+ */
+static int
+glw_array_bubble_event(struct glw *w, struct event *e)
+{
+  glw_array_t *a = (glw_array_t *)w;
+  glw_t *c = w->glw_focused;
+  const int may_wrap = glw_navigate_may_wrap(w);
+
+  if(c == NULL)
+    return 0;
+
+  if(event_is_action(e, ACTION_RIGHT)) {
+    return glw_navigate_step(c, 1, may_wrap);
+
+  } else if(event_is_action(e, ACTION_LEFT)) {
+    return glw_navigate_step(c, -1, may_wrap);
+
+  } else if(event_is_action(e, ACTION_UP)) {
+    return glw_focus_child(glw_array_get_next_row(c, 1));
+
+  } else if(event_is_action(e, ACTION_DOWN)) {
+    return glw_focus_child(glw_array_get_next_row(c, 0));
+
+  } else if(event_is_action(e, ACTION_MOVE_RIGHT)) {
+    return glw_navigate_move(c, 1);
+
+  } else if(event_is_action(e, ACTION_MOVE_LEFT)) {
+    return glw_navigate_move(c, -1);
+
+  } else if(event_is_action(e, ACTION_MOVE_DOWN)) {
+    return glw_navigate_move(c, a->xentries);
+
+  } else if(event_is_action(e, ACTION_MOVE_UP)) {
+    return glw_navigate_move(c, -a->xentries);
+  }
+
+  return 0;
+}
+
+
+/**
+ *
+ */
 static glw_class_t glw_array = {
   .gc_name = "array",
   .gc_instance_size = sizeof(glw_array_t),
+  .gc_parent_data_size = sizeof(glw_array_item_t),
   .gc_flags = GLW_NAVIGATION_SEARCH_BOUNDARY | GLW_CAN_HIDE_CHILDS,
-  .gc_nav_descend_mode = GLW_NAV_DESCEND_FOCUSED,
-  .gc_nav_search_mode = GLW_NAV_SEARCH_ARRAY,
   .gc_render = glw_array_render,
   .gc_ctor = glw_array_ctor,
   .gc_set_int = glw_array_set_int,
   .gc_set_float = glw_array_set_float,
   .gc_signal_handler = glw_array_callback,
-  .gc_get_next_row = glw_array_get_next_row,
   .gc_set_int16_4 = glw_array_set_int16_4,
   .gc_layout = glw_array_layout,
   .gc_pointer_event = glw_array_pointer_event,
+  .gc_bubble_event = glw_array_bubble_event,
 };
 
 GLW_REGISTER_CLASS(glw_array);

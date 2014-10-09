@@ -34,6 +34,7 @@
 #include "backend/backend_prop.h"
 #include "prop/prop_nodefilter.h"
 #include "prop/prop_concat.h"
+#include "prop/prop_linkselected.h"
 #include "htsmsg/htsmsg_store.h"
 #include "db/kvstore.h"
 #include "misc/minmax.h"
@@ -637,7 +638,8 @@ setting_create(int type, prop_t *model, int flags, ...)
 {
   setting_t *s = calloc(1, sizeof(setting_t));
   prop_courier_t *pc = NULL;
-  hts_mutex_t *mtx = NULL;
+  void *mtx = NULL;
+  void *lockmgr = NULL;
   int tag;
   const char *str;
   int initial_int = 0;
@@ -715,7 +717,11 @@ setting_create(int type, prop_t *model, int flags, ...)
       break;
 
     case SETTING_TAG_MUTEX:
-      mtx = va_arg(ap, hts_mutex_t *);
+      mtx = va_arg(ap, void *);
+      break;
+
+    case SETTING_TAG_LOCKMGR:
+      lockmgr = va_arg(ap, void *);
       break;
 
     case SETTING_TAG_HTSMSG:
@@ -909,6 +915,7 @@ setting_create(int type, prop_t *model, int flags, ...)
                      PROP_TAG_ROOT, s->s_val,
                      PROP_TAG_COURIER, pc,
                      PROP_TAG_MUTEX, mtx,
+                     PROP_TAG_LOCKMGR, lockmgr,
                      NULL);
 
     if(s->s_parent != NULL) {
@@ -918,6 +925,7 @@ setting_create(int type, prop_t *model, int flags, ...)
                        PROP_TAG_ROOT, s->s_parent->s_val,
                        PROP_TAG_COURIER, pc,
                        PROP_TAG_MUTEX, mtx,
+                       PROP_TAG_LOCKMGR, lockmgr,
                        NULL);
 
       s->s_inherited_origin_sub =
@@ -927,6 +935,7 @@ setting_create(int type, prop_t *model, int flags, ...)
                        PROP_TAG_NAME("setting", "origin"),
                        PROP_TAG_COURIER, pc,
                        PROP_TAG_MUTEX, mtx,
+                       PROP_TAG_LOCKMGR, lockmgr,
                        NULL);
     }
     break;
@@ -969,6 +978,7 @@ setting_create(int type, prop_t *model, int flags, ...)
                      PROP_TAG_ROOT, s->s_val,
                      PROP_TAG_COURIER, pc,
                      PROP_TAG_MUTEX, mtx,
+                     PROP_TAG_LOCKMGR, lockmgr,
                      NULL);
     break;
 
@@ -1003,8 +1013,10 @@ setting_create(int type, prop_t *model, int flags, ...)
         settings_string_callback_ng(s, name);
         rstr_release(name);
       }
-      prop_ref_dec(o);
+      s->s_current_value = o;
     }
+
+    prop_linkselected_create(s->s_val, s->s_root, "current", "value");
 
     s->s_sub =
       prop_subscribe(PROP_SUB_NO_INITIAL_UPDATE,
@@ -1012,6 +1024,7 @@ setting_create(int type, prop_t *model, int flags, ...)
                      PROP_TAG_ROOT, s->s_val,
                      PROP_TAG_COURIER, pc,
                      PROP_TAG_MUTEX, mtx,
+                     PROP_TAG_LOCKMGR, lockmgr,
                      NULL);
     break;
 
@@ -1022,6 +1035,7 @@ setting_create(int type, prop_t *model, int flags, ...)
                      PROP_TAG_ROOT, s->s_val,
                      PROP_TAG_COURIER, pc,
                      PROP_TAG_MUTEX, mtx,
+                     PROP_TAG_LOCKMGR, lockmgr,
                      NULL);
     break;
 

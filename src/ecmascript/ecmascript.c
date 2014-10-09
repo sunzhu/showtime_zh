@@ -19,9 +19,10 @@
  *  For more information, contact andreas@lonelycoder.com
  */
 
-
 #include "showtime.h"
+#include "arch/arch.h"
 #include "fileaccess/fileaccess.h"
+#include "backend/backend.h"
 
 #include "ecmascript.h"
 
@@ -36,6 +37,9 @@ static HTS_MUTEX_DECL(es_context_mutex);
 int
 es_prop_is_true(duk_context *ctx, int obj_idx, const char *id)
 {
+  if(!duk_is_object(ctx, obj_idx))
+    return 0;
+
   duk_get_prop_string(ctx, obj_idx, id);
   int r = duk_to_boolean(ctx, -1);
   duk_pop(ctx);
@@ -49,6 +53,9 @@ es_prop_is_true(duk_context *ctx, int obj_idx, const char *id)
 int
 es_prop_to_int(duk_context *ctx, int obj_idx, const char *id, int def)
 {
+  if(!duk_is_object(ctx, obj_idx))
+    return def;
+
   duk_get_prop_string(ctx, obj_idx, id);
   if(duk_is_number(ctx, -1))
     def = duk_to_int(ctx, -1);
@@ -63,13 +70,15 @@ es_prop_to_int(duk_context *ctx, int obj_idx, const char *id, int def)
 rstr_t *
 es_prop_to_rstr(duk_context *ctx, int obj_idx, const char *id)
 {
+  if(!duk_is_object(ctx, obj_idx))
+    return NULL;
+
   duk_get_prop_string(ctx, obj_idx, id);
   const char *str = duk_to_string(ctx, -1);
   rstr_t *r = rstr_alloc(str);
   duk_pop(ctx);
   return r;
 }
-
 
 
 /**
@@ -95,10 +104,10 @@ es_dumpstack(duk_context *ctx)
 es_context_t *
 es_get(duk_context *ctx)
 {
-  duk_push_global_object(ctx);
+  duk_push_global_stash(ctx);
   duk_get_prop_string(ctx, -1, "esctx");
   es_context_t *es = duk_get_pointer(ctx, -1);
-  duk_pop(ctx);
+  duk_pop_2(ctx);
   assert(es != NULL);
   return es;
 }
@@ -111,7 +120,6 @@ void *
 es_resource_alloc(const es_resource_class_t *erc)
 {
   es_resource_t *er = calloc(1, erc->erc_size);
-  atomic_set(&er->er_refcount, 1);
   er->er_class = erc;
   return er;
 }
@@ -121,10 +129,23 @@ es_resource_alloc(const es_resource_class_t *erc)
  *
  */
 void
-es_resource_init(es_resource_t *er, es_context_t *ec)
+es_resource_link(es_resource_t *er, es_context_t *ec)
 {
   er->er_ctx = es_context_retain(ec);
+  atomic_inc(&er->er_refcount);
   LIST_INSERT_HEAD(&ec->ec_resources, er, er_link);
+}
+
+
+/**
+ *
+ */
+void *
+es_resource_create(es_context_t *ec, const es_resource_class_t *erc)
+{
+  void *r = es_resource_alloc(erc);
+  es_resource_link(r, ec);
+  return r;
 }
 
 
@@ -136,7 +157,6 @@ es_resource_release(es_resource_t *er)
 {
   if(atomic_dec(&er->er_refcount))
     return;
-
   es_context_release(er->er_ctx);
   free(er);
 }
@@ -146,10 +166,49 @@ es_resource_release(es_resource_t *er)
  *
  */
 void
+es_resource_destroy(es_resource_t *er)
+{
+  hts_mutex_assert(&er->er_ctx->ec_mutex);
+  er->er_class->erc_destroy(er);
+}
+
+
+/**
+ *
+ */
+void
 es_resource_unlink(es_resource_t *er)
 {
+  hts_mutex_assert(&er->er_ctx->ec_mutex);
   LIST_REMOVE(er, er_link);
   es_resource_release(er);
+}
+
+
+/**
+ *
+ */
+void
+es_resource_push(duk_context *ctx, es_resource_t *er)
+{
+  es_resource_retain(er);
+  es_push_native_obj(ctx, ES_NATIVE_RESOURCE, er);
+}
+
+
+/**
+ *
+ */
+void *
+es_resource_get(duk_context *ctx, int obj_idx,
+                const es_resource_class_t *erc)
+{
+
+  es_resource_t *er = es_get_native_obj(ctx, obj_idx, ES_NATIVE_RESOURCE);
+  if(er->er_class != erc)
+    duk_error(ctx, DUK_ERR_ERROR, "Invalid resource class %s expected %s",
+              er->er_class->erc_name, erc->erc_name);
+  return er;
 }
 
 
@@ -159,7 +218,8 @@ es_resource_unlink(es_resource_t *er)
 static int
 es_resource_destroy_duk(duk_context *ctx)
 {
-  es_resource_destroy(duk_require_pointer(ctx, 0));
+  es_resource_t *er = es_get_native_obj(ctx, 0, ES_NATIVE_RESOURCE);
+  es_resource_destroy(er);
   return 0;
 }
 
@@ -168,20 +228,7 @@ es_resource_destroy_duk(duk_context *ctx)
  *
  */
 static int
-es_resource_release_duk(duk_context *ctx)
-{
-  es_resource_t *er = duk_require_pointer(ctx, 0);
-  es_resource_release(er);
-  return 0;
-}
-
-
-
-/**
- *
- */
-static int
-es_load_script(duk_context *ctx)
+es_compile(duk_context *ctx)
 {
   const char *path = duk_get_string(ctx, 0);
   char errbuf[256];
@@ -192,37 +239,67 @@ es_load_script(duk_context *ctx)
   if(buf == NULL)
     duk_error(ctx, DUK_ERR_ERROR, "Unable to load %s -- %s", path, errbuf);
 
-  duk_push_thread_new_globalenv(ctx);
-  duk_context *newctx = duk_require_context(ctx, -1);
-
-  duk_push_lstring(newctx, buf_cstr(buf), buf_len(buf));
+  duk_push_lstring(ctx, buf_cstr(buf), buf_len(buf));
   buf_release(buf);
 
-  duk_push_string(newctx, path);
+  duk_push_string(ctx, path);
 
-  duk_compile(newctx, 0);
-
-  int ret_obj = duk_push_object(ctx);
-  duk_xmove(ctx, newctx, 1);
-  duk_put_prop_string(ctx, ret_obj, "entry");
-
-  duk_push_global_object(newctx);
-
-  duk_xmove(ctx, newctx, 1);
-  duk_put_prop_string(ctx, ret_obj, "globalobject");
+  duk_compile(ctx, 0);
   return 1;
 }
 
 
+
+
 static const duk_function_list_entry fnlist_Showtime[] = {
-  { "load",                    es_load_script,          1 },
-
+  { "compile",                 es_compile,              1 },
   { "resourceDestroy",         es_resource_destroy_duk, 1 },
-  { "resourceRelease",         es_resource_release_duk, 1 },
-
-
   { NULL, NULL, 0}
 };
+
+
+
+/**
+ *
+ */
+static int
+tryload(duk_context *ctx, const char *path)
+{
+  char errbuf[256];
+  buf_t *buf = fa_load(path,
+                       FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
+                       NULL);
+
+  if(buf != NULL) {
+    duk_push_lstring(ctx, buf_cstr(buf), buf_len(buf));
+    buf_release(buf);
+    return 1;
+  }
+  return 0;
+}
+
+/**
+ *
+ */
+static int
+es_modsearch(duk_context *ctx)
+{
+  char path[512];
+
+  es_context_t *ec = es_get(ctx);
+  const char *id = duk_require_string(ctx, 0);
+
+  snprintf(path, sizeof(path), "%s/%s.js", ec->ec_path, id);
+  if(tryload(ctx, path))
+    return 1;
+
+  snprintf(path, sizeof(path),
+           "dataroot://resources/ecmascript/modules/%s.js", id);
+  if(tryload(ctx, path))
+    return 1;
+
+  duk_error(ctx, DUK_ERR_ERROR, "Can't find module %s", id);
+}
 
 
 /**
@@ -233,10 +310,17 @@ es_create_env(es_context_t *ec)
 {
   duk_context *ctx = ec->ec_duk;
 
-  duk_push_global_object(ctx);
+  duk_push_global_stash(ctx);
 
   duk_push_pointer(ctx, ec);
   duk_put_prop_string(ctx, -2, "esctx");
+
+  duk_push_object(ctx);
+  duk_put_prop_string(ctx, -2, "roots");
+
+  duk_pop(ctx); // global_stash
+
+  duk_push_global_object(ctx);
 
   int obj_idx = duk_push_object(ctx);
 
@@ -245,16 +329,84 @@ es_create_env(es_context_t *ec)
 
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_service);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_page);
+  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_route);
+  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_hook);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_prop);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_io);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_string);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_htsmsg);
+#if ENABLE_METADATA
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_metadata);
+#endif
 
   duk_put_prop_string(ctx, -2, "Showtime");
 
+
+  // Initialize modSearch helper
+
+  duk_get_prop_string(ctx, -1, "Duktape");
+  duk_push_c_function(ctx, es_modsearch, 4);
+  duk_put_prop_string(ctx, -2, "modSearch");
   duk_pop(ctx);
+
+  duk_put_function_list(ctx, -1, fnlist_Global_timer);
+
+  // Pop global object
+
+  duk_pop(ctx);
+}
+
+
+/**
+ *
+ */
+static void *
+es_mem_alloc(void *udata, duk_size_t size)
+{
+  es_context_t *ec = udata;
+  void *p = malloc(size);
+
+  if(p != NULL) {
+    ec->ec_mem_active += arch_malloc_size(p);
+    ec->ec_mem_peak = MAX(ec->ec_mem_peak, ec->ec_mem_active);
+  }
+  return p;
+}
+
+
+/**
+ *
+ */
+static void *
+es_mem_realloc(void *udata, void *ptr, duk_size_t size)
+{
+  es_context_t *ec = udata;
+  size_t prev = 0;
+
+  if(udata != NULL)
+    prev = arch_malloc_size(ptr);
+
+  ptr = realloc(ptr, size);
+  if(ptr != NULL) {
+    ec->ec_mem_active -= prev;
+    ec->ec_mem_active += arch_malloc_size(ptr);
+    ec->ec_mem_peak = MAX(ec->ec_mem_peak, ec->ec_mem_active);
+  }
+  return ptr;
+}
+
+
+/**
+ *
+ */
+static void
+es_mem_free(void *udata, void *ptr)
+{
+  es_context_t *ec = udata;
+  if(ptr == NULL)
+    return;
+  ec->ec_mem_active -= arch_malloc_size(ptr);
+  free(ptr);
 }
 
 
@@ -268,7 +420,9 @@ es_context_create(void)
   hts_mutex_init(&ec->ec_mutex);
   atomic_set(&ec->ec_refcount, 1);
 
-  ec->ec_duk = duk_create_heap_default();
+  ec->ec_duk = duk_create_heap(es_mem_alloc, es_mem_realloc, es_mem_free,
+                               ec, NULL);
+
   es_create_env(ec);
 
   return ec;
@@ -287,6 +441,15 @@ es_context_release(es_context_t *ec)
   hts_mutex_destroy(&ec->ec_mutex);
   TRACE(TRACE_DEBUG, "ECMASCRIPT", "%s fully unloaded", ec->ec_id);
   free(ec->ec_id);
+  free(ec->ec_path);
+
+  if(ec->ec_linked) {
+    hts_mutex_lock(&es_context_mutex);
+    es_num_contexts--;
+    LIST_REMOVE(ec, ec_link);
+    hts_mutex_unlock(&es_context_mutex);
+  }
+
   free(ec);
 }
 
@@ -413,7 +576,8 @@ es_get_env(duk_context *ctx)
  */
 int
 ecmascript_plugin_load(const char *id, const char *url,
-                       char *errbuf, size_t errlen)
+                       char *errbuf, size_t errlen,
+                       int version)
 {
   es_context_t *ec = es_context_create();
 
@@ -435,6 +599,7 @@ ecmascript_plugin_load(const char *id, const char *url,
   if(!fa_parent(parent, sizeof(parent), url)) {
     duk_push_string(ctx, parent);
     duk_put_prop_string(ctx, plugin_obj_idx, "path");
+    ec->ec_path = strdup(parent);
   }
 
   duk_put_prop_string(ctx, -2, "Plugin");
@@ -442,14 +607,18 @@ ecmascript_plugin_load(const char *id, const char *url,
   duk_pop(ctx);
 
   ec->ec_id = strdup(id);
-  atomic_inc(&ec->ec_refcount);
 
   hts_mutex_lock(&es_context_mutex);
   es_num_contexts++;
   LIST_INSERT_HEAD(&es_contexts, ec, ec_link);
+  ec->ec_linked = 1;
   hts_mutex_unlock(&es_context_mutex);
 
-  es_exec(ec, "dataroot://resources/ecmascript/api-v1.js");
+  if(version == 1) {
+    es_exec(ec, "dataroot://resources/ecmascript/legacy/api-v1.js");
+  } else {
+    es_exec(ec, url);
+  }
 
   es_context_end(ec);
 
@@ -457,6 +626,7 @@ ecmascript_plugin_load(const char *id, const char *url,
 
   return 0;
 }
+
 
 /**
  *
@@ -504,8 +674,10 @@ ecmascript_plugin_unload(const char *id)
   hts_mutex_lock(&es_context_mutex);
   LIST_FOREACH(ec, &es_contexts, ec_link) {
     if(!strcmp(id, ec->ec_id)) {
+      assert(ec->ec_linked);
       es_num_contexts--;
       LIST_REMOVE(ec, ec_link);
+      ec->ec_linked = 0;
       break;
     }
   }
@@ -522,3 +694,44 @@ ecmascript_plugin_unload(const char *id)
   es_context_end(ec);
   es_context_release(ec);
 }
+
+
+/**
+ *
+ */
+static void
+ecmascript_init(void)
+{
+  if(gconf.load_ecmascript == NULL)
+    return;
+
+  es_context_t *ec = es_context_create();
+  es_context_begin(ec);
+
+  ec->ec_id = strdup("cmdline");
+
+  hts_mutex_lock(&es_context_mutex);
+  es_num_contexts++;
+  ec->ec_linked = 1;
+  LIST_INSERT_HEAD(&es_contexts, ec, ec_link);
+  hts_mutex_unlock(&es_context_mutex);
+
+  es_exec(ec, gconf.load_ecmascript);
+
+  es_context_end(ec);
+  es_context_release(ec);
+}
+
+
+INITME(INIT_GROUP_API, ecmascript_init);
+
+/**
+ *
+ */
+static backend_t be_ecmascript = {
+  .be_flags  = BACKEND_OPEN_CHECKS_URI,
+  .be_open   = ecmascript_openuri,
+  .be_search = ecmascript_search,
+};
+
+BE_REGISTER(ecmascript);
