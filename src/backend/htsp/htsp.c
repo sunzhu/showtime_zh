@@ -876,7 +876,9 @@ htsp_worker_thread(void *aux)
 	htsp_queueStatus(hc, m);
       else if(!strcmp(method, "signalStatus"))
 	htsp_signalStatus(hc, m);
-      else if(!strcmp(method, "initialSyncCompleted")) {
+      else if(!strcmp(method, "timeshiftStatus")) {
+	/* nop for us */
+      } else if(!strcmp(method, "initialSyncCompleted")) {
 	/* nop for us */
       } else
 	TRACE(TRACE_INFO, "HTSP", "Unknown async method '%s' received",
@@ -1455,6 +1457,9 @@ htsp_subscriber(htsp_connection_t *hc, htsp_subscription_t *hs,
 
   prop_set_string(mp->mp_prop_playstatus, "play");
 
+  // With a set mq_stream mp_configure things that we don't use
+  // audio at all which might screw up A/V sync on some platforms (rpi)
+  mp->mp_audio.mq_stream = 0;
   mp_configure(mp, mp_flags, MP_BUFFER_DEEP, 0, "tv");
 
   if(primary)
@@ -1642,7 +1647,7 @@ htsp_file_update_meta(htsp_file_t *hf)
  *
  */
 static int64_t
-htsp_file_seek(fa_handle_t *fh, int64_t pos, int whence)
+htsp_file_seek(fa_handle_t *fh, int64_t pos, int whence, int lazy)
 {
   htsp_file_t *hf = (htsp_file_t *)fh;
   int64_t np;

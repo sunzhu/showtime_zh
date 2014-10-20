@@ -101,7 +101,14 @@ TAILQ_HEAD(dvdspu_queue, dvdspu);
 typedef struct frame_info {
   struct AVFrame *fi_avframe;
 
-  uint8_t *fi_data[4];
+
+  union {
+    uint8_t *ptr[4];
+    uint32_t u32[4];
+  } u;
+
+#define fi_data   u.ptr
+#define fi_u32    u.u32
 
   int fi_pitch[4];
 
@@ -152,11 +159,14 @@ typedef int (set_video_codec_t)(uint32_t type, struct media_codec *mc,
 typedef struct media_pipe {
   atomic_t mp_refcount;
 
+  LIST_ENTRY(media_pipe) mp_global_link;
+
   const char *mp_name;
 
   LIST_ENTRY(media_pipe) mp_stack_link;
   int mp_flags;
 #define MP_PRIMABLE         0x1
+#define MP_PRE_BUFFERING    0x2   // Enables pre-buffering
 #define MP_VIDEO            0x4
 #define MP_FLUSH_ON_HOLD    0x8
 #define MP_ALWAYS_SATISFIED 0x10
@@ -167,7 +177,28 @@ typedef struct media_pipe {
   AVRational mp_framerate;
 
   int mp_eof;   // End of file: We don't expect to need to read more data
-  int mp_hold;  // Paused
+  int mp_hold_flags; // Paused
+
+#define MP_HOLD_PAUSE         0x1  // The pause event from UI
+#define MP_HOLD_PRE_BUFFERING 0x2
+#define MP_HOLD_OS            0x4  // Operating system doing other stuff
+#define MP_HOLD_STREAM        0x8  // DVD VM pause, etc
+#define MP_HOLD_DISPLAY       0x10 // Display on/off
+
+  int mp_hold_gate;
+
+  /*
+   * Prebuffer logic
+   *
+   * When the queues are empty (initially, after a flush or due to
+   * underrun) and the MP_PRE_BUFFERING flag is set the media code
+   * will pause the stream (by asserting MP_HOLD_PRE_BUFFERING) until
+   * a certain threshold is reached.
+   *
+   * mp_pre_buffer_delay controls this delay
+   */
+  int mp_pre_buffer_delay; // in µs
+
 
   pool_t *mp_mb_pool;
 
@@ -312,7 +343,7 @@ typedef struct media_pipe {
    * Subtitle loader
    */
 
-  hts_thread_t mp_subtitle_loader_thread;
+  int mp_subtitle_loader_running;
   char *mp_subtitle_loader_url;
   int mp_subtitle_loader_status;
 
@@ -406,11 +437,21 @@ void mp_set_current_time(media_pipe_t *mp, int64_t ts, int epoch,
 			 int64_t delta);
 
 /**
- * Will pause/unpause the playback. (If hold == 1, then it's paused)
+ * Will pause the playback
  *
- * If pausing, an optional message can be passed (reason for the pause)
+ * @flag is one of MP_HOLD_xxx flags
+ *
+ * An optional message can be passed (reason for the pause)
  */
-void mp_set_playstatus_by_hold(media_pipe_t *mp, int hold, const char *msg);
+void mp_hold(media_pipe_t *mp, int flag, const char *msg);
+
+
+/**
+ * Will unpause the playback
+ *
+ * @flag is one of MP_HOLD_xxx flags
+ */
+void mp_unhold(media_pipe_t *mp, int flag);
 
 /**
  * Set current URL.
@@ -446,7 +487,32 @@ void mp_set_duration(media_pipe_t *mp, int64_t duration);
 
 void mp_set_cancellable(media_pipe_t *mp, struct cancellable *c);
 
+
+/**
+ * Can be used to pause/unpause all media pipelines using the given flag
+ */
+void media_global_hold(int on, int flag);
+
 /**
  * Internal helper
  */
 void mp_set_playstatus_by_hold_locked(media_pipe_t *mp, const char *msg);
+
+
+/**
+ * Do underrun processing when in pre-buffering mode
+ */
+void mp_underrun(media_pipe_t *mp);
+
+
+/**
+ * Check if an underrun has happened, must be called with mp_mutex locked
+ */
+static inline void
+mp_check_underrun(media_pipe_t *mp)
+{
+  if(mp->mp_flags & MP_PRE_BUFFERING &&
+     unlikely(TAILQ_FIRST(&mp->mp_video.mq_q_data) == NULL) &&
+     unlikely(TAILQ_FIRST(&mp->mp_audio.mq_q_data) == NULL))
+    mp_underrun(mp);
+}

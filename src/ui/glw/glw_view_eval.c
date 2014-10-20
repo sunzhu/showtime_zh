@@ -3017,6 +3017,9 @@ glwf_onEvent(glw_view_eval_context_t *ec, struct token *self,
       gem = glw_event_map_eval_block_create(ec, b);
       break;
 
+    case TOKEN_VOID:
+      goto disable;
+
     default:
       return glw_view_seterr(ec->ei, a, "onEvent: Second arg is invalid");
     }
@@ -3024,12 +3027,10 @@ glwf_onEvent(glw_view_eval_context_t *ec, struct token *self,
     gem->gem_action = action;
     glw_event_map_add(w, gem);
     return 0;
-    
-  } else {
-    
-    glw_event_map_remove_by_action(w, action);
-    return 0;
   }
+ disable:
+  glw_event_map_remove_by_action(w, action);
+  return 0;
 }
 
 
@@ -3237,8 +3238,7 @@ glwf_playTrackFromSource(glw_view_eval_context_t *ec, struct token *self,
   }
 
   r = eval_alloc(self, ec, TOKEN_EVENT);
-  event_t *ev = event_create_playtrack(a->t_prop, b->t_prop, dontskip);
-  r->t_gem = glw_event_map_external_create(ev);
+  r->t_gem = glw_event_map_playTrack_create(a->t_prop, b->t_prop, dontskip);
   eval_push(ec, r);
   return 0;
 }
@@ -3257,8 +3257,8 @@ glwf_enqueueTrack(glw_view_eval_context_t *ec, struct token *self,
     return -1;
 
   r = eval_alloc(self, ec, TOKEN_EVENT);
-  event_t *ev = event_create_playtrack(a->t_prop, NULL, 0);
-  r->t_gem = glw_event_map_external_create(ev);
+
+  r->t_gem = glw_event_map_playTrack_create(a->t_prop, NULL, 0);
   eval_push(ec, r);
   return 0;
 }
@@ -3277,17 +3277,20 @@ glwf_selectTrack(glw_view_eval_context_t *ec, struct token *self,
   const char *str;
 
   a = token_resolve(ec, a);
-  r = eval_alloc(self, ec, TOKEN_EVENT);
 
 
-  if(a && a->type == TOKEN_RSTRING)
+  if(a && a->type == TOKEN_RSTRING) {
     str = rstr_get(a->t_rstring);
-  else if(a && a->type == TOKEN_INT) {
+  } else if(a && a->type == TOKEN_INT) {
     snprintf(buf, sizeof(buf), "%d", a->t_int);
     str = buf;
   } else {
-    str = NULL;
+    r = eval_alloc(self, ec, TOKEN_VOID);
+    eval_push(ec, r);
+    return 0;
   }
+
+  r = eval_alloc(self, ec, TOKEN_EVENT);
   event_t *ev = event_create_select_track(str, type, 1);
   r->t_gem = glw_event_map_external_create(ev);
   eval_push(ec, r);

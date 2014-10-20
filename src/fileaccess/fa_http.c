@@ -33,6 +33,7 @@
 
 #include "keyring.h"
 #include "fileaccess.h"
+#include "http_client.h"
 #include "networking/net.h"
 #include "fa_proto.h"
 #include "task.h"
@@ -69,7 +70,7 @@ static uint8_t nonce[20];
  * continue to read and drop the data if the seek offset is below a
  * certain limit. SEEK_BY_READ_THRES is this limit.
  */
-#define SEEK_BY_READ_THRES 32768
+#define SEEK_BY_READ_THRES (256*1024)
 
 
 /**
@@ -101,7 +102,7 @@ TAILQ_HEAD(http_connection_queue , http_connection);
 static struct http_connection_queue http_connections;
 static int http_parked_connections;
 static hts_mutex_t http_connections_mutex;
-static int http_connection_tally;
+static atomic_t http_connection_tally;
 
 typedef struct http_connection {
   char hc_hostname[HOSTNAME_MAX];
@@ -175,13 +176,16 @@ typedef struct http_file {
   char hf_version;
 
   char hf_streaming; /* Optimize for streaming from start to end
-		      * rather than random seeking 
+		      * rather than random seeking
 		      */
 
   char hf_no_retries;
 
   char hf_req_compression;
-  
+
+  // Set if the filesize is known to never change
+  char hf_filesize_is_final;
+
   char hf_content_encoding;
 #define HTTP_CE_IDENTITY 0
 #define HTTP_CE_GZIP 1
@@ -227,42 +231,45 @@ http_connection_destroy(http_connection_t *hc, int dbg, const char *reason)
 static http_connection_t *
 http_connection_get(const char *hostname, int port, int ssl,
 		    char *errbuf, int errlen, int dbg, int timeout,
-                    cancellable_t *c)
+                    cancellable_t *c, int allow_reuse)
 {
   http_connection_t *hc, *next;
   tcpcon_t *tc;
-  int id;
-  time_t now;
 
-  time(&now);
+  if(allow_reuse) {
 
-  hts_mutex_lock(&http_connections_mutex);
+    time_t now;
 
-  for(hc = TAILQ_FIRST(&http_connections); hc != NULL; hc = next) {
-    next = TAILQ_NEXT(hc, hc_link);
+    time(&now);
 
-    if(now >= hc->hc_reuse_before) {
-      TAILQ_REMOVE(&http_connections, hc, hc_link);
-      http_parked_connections--;
-      http_connection_destroy(hc, dbg, "Keep alive expired");
-      continue;
+    hts_mutex_lock(&http_connections_mutex);
+
+    for(hc = TAILQ_FIRST(&http_connections); hc != NULL; hc = next) {
+      next = TAILQ_NEXT(hc, hc_link);
+
+      if(now >= hc->hc_reuse_before) {
+        TAILQ_REMOVE(&http_connections, hc, hc_link);
+        http_parked_connections--;
+        http_connection_destroy(hc, dbg, "Keep alive expired");
+        continue;
+      }
+
+      if(!strcmp(hc->hc_hostname, hostname) && hc->hc_port == port &&
+         hc->hc_ssl == ssl) {
+        TAILQ_REMOVE(&http_connections, hc, hc_link);
+        http_parked_connections--;
+        hts_mutex_unlock(&http_connections_mutex);
+        HTTP_TRACE(dbg, "Reusing connection to %s:%d (id=%d)",
+                   hc->hc_hostname, hc->hc_port, hc->hc_id);
+        hc->hc_reused = 1;
+        tcp_set_cancellable(hc->hc_tc, c);
+        return hc;
+      }
     }
-
-    if(!strcmp(hc->hc_hostname, hostname) && hc->hc_port == port &&
-       hc->hc_ssl == ssl) {
-      TAILQ_REMOVE(&http_connections, hc, hc_link);
-      http_parked_connections--;
-      hts_mutex_unlock(&http_connections_mutex);
-      HTTP_TRACE(dbg, "Reusing connection to %s:%d (id=%d)",
-		 hc->hc_hostname, hc->hc_port, hc->hc_id);
-      hc->hc_reused = 1;
-      tcp_set_cancellable(hc->hc_tc, c);
-      return hc;
-    }
+    hts_mutex_unlock(&http_connections_mutex);
   }
 
-  id = ++http_connection_tally;
-  hts_mutex_unlock(&http_connections_mutex);
+  const int id = atomic_add_and_fetch(&http_connection_tally, 1);
 
   if(errbuf == NULL || errlen == 0) {
     char xerrbuf[256];
@@ -278,7 +285,7 @@ http_connection_get(const char *hostname, int port, int ssl,
     tcp_connect_flags |= TCP_SSL;
 
   if((tc = tcp_connect(hostname, port, errbuf, errlen,
-                        timeout, tcp_connect_flags, c)) == NULL) {
+                       timeout, tcp_connect_flags, c)) == NULL) {
     HTTP_TRACE(dbg, "Connection to %s:%d failed -- %s", hostname, port, errbuf);
     return NULL;
   }
@@ -744,20 +751,6 @@ kvcomp(const void *A, const void *B)
   return strcmp(a[1], b[1]);
 }
 
-
-struct http_auth_req {
-  const char *har_method;
-  const char **har_parameters;
-  const http_file_t *har_hf;
-  struct http_header_list *har_headers;
-  struct http_header_list *har_cookies;
-  char *har_errbuf;
-  size_t har_errlen;
-  int har_force_fail;
-
-} http_auth_req_t;
-
-
 /**
  *
  */
@@ -1195,9 +1188,11 @@ hf_drain_bytes(http_file_t *hf, int64_t bytes)
   char chunkheader[100];
   http_connection_t *hc = hf->hf_connection;
 
-  if(!hf->hf_chunked_transfer)
+  if(!hf->hf_chunked_transfer) {
+    hf->hf_rsize -= bytes;
     return tcp_read_data(hc->hc_tc, NULL, bytes, NULL, NULL);
-  
+  }
+
   while(bytes > 0) {
     if(hf->hf_chunk_size == 0) {
       if(tcp_read_line(hc->hc_tc, chunkheader, sizeof(chunkheader)) < 0) {
@@ -1213,6 +1208,7 @@ hf_drain_bytes(http_file_t *hf, int64_t bytes)
 
     bytes -= read_size;
     hf->hf_chunk_size -= read_size;
+    hf->hf_rsize -= read_size;
 
     if(hf->hf_chunk_size == 0) {
       if(tcp_read_data(hc->hc_tc, chunkheader, 2, NULL, NULL))
@@ -1359,6 +1355,14 @@ http_read_response(http_file_t *hf, struct http_header_list *headers)
 
     if(!strcasecmp(argv[0], "Location")) {
       hf_set_location(hf, argv[1]);
+      continue;
+    }
+
+    if(!strcasecmp(argv[0], "Server")) {
+      // CDN network typically never change the size of a file
+      if(!strcasecmp(argv[1], "AkamaiGHost"))
+        hf->hf_filesize_is_final = 1;
+
       continue;
     }
 
@@ -1578,7 +1582,7 @@ http_set_read_timeout(fa_handle_t *fh, int ms)
  *
  */
 static int
-http_connect(http_file_t *hf, char *errbuf, int errlen)
+http_connect(http_file_t *hf, char *errbuf, int errlen, int allow_reuse)
 {
   char hostname[HOSTNAME_MAX];
   char proto[16];
@@ -1619,7 +1623,8 @@ http_connect(http_file_t *hf, char *errbuf, int errlen)
   const int timeout = hf->hf_connect_timeout ?: 30000;
 
   hf->hf_connection = http_connection_get(hostname, port, ssl, errbuf, errlen,
-					  hf->hf_debug, timeout, hf->hf_c);
+					  hf->hf_debug, timeout, hf->hf_c,
+                                          allow_reuse);
 
   if(hf->hf_read_timeout != 0 && hf->hf_connection != NULL)
     tcp_set_read_timeout(hf->hf_connection->hc_tc, hf->hf_read_timeout);
@@ -1645,7 +1650,7 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
 
   hf->hf_filesize = -1;
 
-  if(http_connect(hf, errbuf, errlen))
+  if(http_connect(hf, errbuf, errlen, 1))
     return -1;
 
   if(!probe && hf->hf_filesize != -1)
@@ -1819,17 +1824,6 @@ http_close(fa_handle_t *handle)
 
 
 /**
- *
- */
-static int
-http_seek_is_fast(fa_handle_t *handle)
-{
-  http_file_t *hf = (http_file_t *)handle;
-  return !hf->hf_no_ranges;
-}
-
-
-/**
  * Read from file
  */
 static int
@@ -1858,7 +1852,7 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
       if(hf->hf_no_retries)
         return -1;
 
-      if(http_connect(hf, NULL, 0))
+      if(http_connect(hf, NULL, 0, 1))
 	return -1;
       hc = hf->hf_connection;
     }
@@ -1941,14 +1935,21 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
 	  hf->hf_rsize = INT64_MAX;
 
 	if(hf->hf_pos != 0) {
-	  TRACE(TRACE_DEBUG, "HTTP", 
-		"Skipping by reading %"PRId64" bytes", hf->hf_pos);
+	  TRACE(TRACE_DEBUG, "HTTP",
+		"Skipping by reading %"PRId64" bytes, rsize=%"PRId64,
+                hf->hf_pos, hf->hf_rsize);
 
 	  if(hf_drain_bytes(hf, hf->hf_pos)) {
 	    http_detach(hf, 0, "Read error during drain");
 	    continue;
 	  }
+
+	  TRACE(TRACE_DEBUG, "HTTP",
+		"rsize is now = %"PRId64,
+                hf->hf_rsize);
 	}
+
+
 	break;
 
       case 416:
@@ -2066,7 +2067,7 @@ http_read(fa_handle_t *handle, void *buf, const size_t size)
  * Seek in file
  */
 static int64_t
-http_seek(fa_handle_t *handle, int64_t pos, int whence)
+http_seek(fa_handle_t *handle, int64_t pos, int whence, int lazy)
 {
   http_file_t *hf = (http_file_t *)handle;
   http_connection_t *hc = hf->hf_connection;
@@ -2096,6 +2097,9 @@ http_seek(fa_handle_t *handle, int64_t pos, int whence)
   if(np < 0)
     return -1;
 
+  if(hf->hf_filesize_is_final && hf->hf_filesize != -1 && np > hf->hf_filesize)
+    return -1;
+
   if(hf->hf_pos != np && hc != NULL) {
     hf->hf_consecutive_read = 0;
 
@@ -2104,7 +2108,7 @@ http_seek(fa_handle_t *handle, int64_t pos, int whence)
       int64_t d = np - hf->hf_pos;
       // We allow seek by reading if delta offset is small enough
 
-      if(d > 0 && (d < SEEK_BY_READ_THRES || hf->hf_no_ranges) &&
+      if(d > 0 && (d < SEEK_BY_READ_THRES || (hf->hf_no_ranges && !lazy)) &&
 	 d < hf->hf_rsize) {
 
 	if(!hf_drain_bytes(hf, d)) {
@@ -2112,10 +2116,19 @@ http_seek(fa_handle_t *handle, int64_t pos, int whence)
 	  hf->hf_rsize -= d;
 	  return np;
 	}
+        http_detach(hf, 0, "Disconnected while draining");
+        hf->hf_pos = np;
+        return np;
       }
+
+      if(lazy && hf->hf_no_ranges)
+        return -1;
+
       // Still got stale data on the socket, disconnect
       http_detach(hf, 0, "Seeking during streaming");
     }
+    if(lazy && hf->hf_no_ranges)
+      return -1;
   }
   hf->hf_pos = np;
 
@@ -2342,7 +2355,6 @@ static fa_protocol_t fa_protocol_http = {
   .fap_stat  = http_stat,
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
-  .fap_seek_is_fast = http_seek_is_fast,
   .fap_set_read_timeout = http_set_read_timeout,
 };
 
@@ -2363,7 +2375,6 @@ static fa_protocol_t fa_protocol_https = {
   .fap_stat  = http_stat,
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
-  .fap_seek_is_fast = http_seek_is_fast,
   .fap_set_read_timeout = http_set_read_timeout,
 };
 
@@ -2535,7 +2546,7 @@ dav_propfind(http_file_t *hf, fa_dir_t *fd, char *errbuf, size_t errlen,
   for(i = 0; i < 5; i++) {
 
     if(hf->hf_connection == NULL) 
-      if(http_connect(hf, errbuf, errlen))
+      if(http_connect(hf, errbuf, errlen, 1))
 	return -1;
 
     htsbuf_queue_init(&q, 0);
@@ -2682,7 +2693,6 @@ static fa_protocol_t fa_protocol_webdav = {
   .fap_stat  = dav_stat,
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
-  .fap_seek_is_fast = http_seek_is_fast,
   .fap_set_read_timeout = http_set_read_timeout,
 };
 FAP_REGISTER(webdav);
@@ -2702,7 +2712,6 @@ static fa_protocol_t fa_protocol_webdavs = {
   .fap_stat  = dav_stat,
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
-  .fap_seek_is_fast = http_seek_is_fast,
   .fap_set_read_timeout = http_set_read_timeout,
 };
 FAP_REGISTER(webdavs);
@@ -2978,8 +2987,7 @@ http_req_do(http_req_aux_t *hra)
 
  retry:
 
-
-  http_connect(hf, hra->errbuf, hra->errlen);
+  http_connect(hf, hra->errbuf, hra->errlen, !hra->post);
   if(hf->hf_connection == NULL)
     goto cleanup;
 

@@ -335,8 +335,15 @@ es_create_env(es_context_t *ec)
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_io);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_string);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_htsmsg);
+  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_misc);
 #if ENABLE_METADATA
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_metadata);
+#endif
+
+#if ENABLE_SQLITE
+  duk_push_object(ctx);
+  duk_put_function_list(ctx, -1, fnlist_Showtime_sqlite);
+  duk_put_prop_string(ctx, obj_idx, "sqlite");
 #endif
 
   duk_put_prop_string(ctx, -2, "Showtime");
