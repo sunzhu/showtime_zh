@@ -115,6 +115,14 @@ dvd_fa_stat(const char *url, struct stat *st)
 }
 
 
+static int64_t
+dvd_fa_seek(void *fh, int64_t pos, int whence)
+{
+  return fa_seek(fh, pos, whence);
+}
+
+
+
 /**
  *
  */
@@ -122,7 +130,7 @@ static struct svfs_ops faops = {
   .open = dvd_fa_open,
   .close = fa_close,
   .read = fa_read,
-  .seek = fa_seek,
+  .seek = dvd_fa_seek,
   .stat = dvd_fa_stat,
   .findfile = fa_findfile,
 };
@@ -808,8 +816,6 @@ dvd_play(const char *url, media_pipe_t *mp, char *errstr, size_t errlen,
 
   mp_configure(mp, MP_CAN_PAUSE | MP_CAN_EJECT,
 	       MP_BUFFER_SHALLOW, 0, "dvd");
-
-  mp_set_playstatus_by_hold(mp, dp->dp_hold, NULL);
 
   prop_set_int(mp->mp_prop_canSkipForward,  1);
   prop_set_int(mp->mp_prop_canSkipBackward, 1);

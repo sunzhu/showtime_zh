@@ -726,6 +726,7 @@ SRCS += ext/duktape/duktape.c \
 	src/ecmascript/es_searcher.c \
 	src/ecmascript/es_prop.c \
 	src/ecmascript/es_io.c \
+	src/ecmascript/es_misc.c \
 	src/ecmascript/es_string.c \
 	src/ecmascript/es_htsmsg.c \
 	src/ecmascript/es_native_obj.c \
@@ -734,6 +735,8 @@ SRCS += ext/duktape/duktape.c \
 	src/ecmascript/es_timer.c \
 
 SRCS-$(CONFIG_METADATA) += src/ecmascript/es_metadata.c
+
+SRCS-$(CONFIG_SQLITE) += src/ecmascript/es_sqlite.c
 
 ${BUILDDIR}/ext/duktape/%.o : CFLAGS = -Wall ${OPTFLAGS} \
  -fstrict-aliasing -std=c99  -DDUK_OPT_ASSERTIONS #-DDUK_OPT_DEBUG -DDUK_OPT_DPRINT -DDUK_OPT_DDPRINT -DDUK_OPT_DDDPRINT
