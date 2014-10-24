@@ -320,7 +320,7 @@ mtm_add_track(media_track_mgr_t *mtm, prop_t *root, media_track_t *before)
 
   prop_tag_set(root, mtm, mt);
   mt->mt_mtm = mtm;
-  mt->mt_root = root;
+  mt->mt_root = prop_ref_inc(root);
 
   mt->mt_isolang_score = -1;
   mt->mt_basescore = -1;
@@ -390,6 +390,7 @@ mt_destroy(media_track_mgr_t *mtm, media_track_t *mt)
   prop_unsubscribe(mt->mt_sub_basescore);
   prop_unsubscribe(mt->mt_sub_autosel);
   free(mt->mt_url);
+  prop_ref_dec(mt->mt_root);
   free(mt);
 }
 
@@ -447,6 +448,7 @@ mtm_update_tracks(void *opaque, prop_event_t event, ...)
 
   case PROP_SET_VOID:
     mtm_clear(mtm);
+    mtm_rethink(mtm);
     break;
 
   default:
@@ -496,7 +498,7 @@ mp_track_mgr_init(media_pipe_t *mp, media_track_mgr_t *mtm, prop_t *root,
   mtm->mtm_type = type;
 
   mtm->mtm_node_sub =
-    prop_subscribe(PROP_SUB_DEBUG,
+    prop_subscribe(0,
 		   PROP_TAG_CALLBACK, mtm_update_tracks, mtm,
                    PROP_TAG_LOCKMGR, mp_lockmgr,
                    PROP_TAG_MUTEX, mp,

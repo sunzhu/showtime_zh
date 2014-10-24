@@ -52,7 +52,7 @@ showtime_get_avtime(void)
 /**
  *
  */
-@interface Showtime : NSObject
+@interface Showtime : NSObject <NSFileManagerDelegate>
 {
   NSMenu *m_menubar;
 }
@@ -120,6 +120,7 @@ arch_exit(void)
 int
 arch_stop_req(void)
 {
+  [[NSApplication sharedApplication] terminate:nil];
   return 0;
 }
 
