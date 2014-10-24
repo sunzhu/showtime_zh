@@ -978,8 +978,11 @@ demuxer_get_segment(hls_t *h, hls_demuxer_t *hd)
         last = hd->hd_last_audio_pts;
 
         next = find_segment_by_pts(hv, fctx, base, last, hs->hs_astream);
-        if(next == NULL)
-          return HLS_SEGMENT_NYA;
+        if(next == NULL) {
+          hv->hv_current_seg = hs;
+          hd->hd_seq = 0;
+          goto again;
+        }
 
         ts_seg_search = 0;
 
@@ -1439,6 +1442,22 @@ hls_add_variant(hls_t *h, const char *url, hls_variant_t **hvp,
 {
   if(*hvp == NULL)
     *hvp = variant_create();
+
+  int bitrate = (*hvp)->hv_bitrate;
+
+  if(bitrate) {
+    hls_variant_t *hv;
+
+    TAILQ_FOREACH(hv, &hd->hd_variants, hv_link) {
+      if(hv->hv_bitrate == bitrate) {
+        HLS_TRACE(h, "Skipping duplicate bitrate %d via %s",
+                  bitrate, url);
+        variant_destroy(*hvp);
+        *hvp = NULL;
+        return;
+      }
+    }
+  }
 
   hls_variant_t *hv = *hvp;
 
