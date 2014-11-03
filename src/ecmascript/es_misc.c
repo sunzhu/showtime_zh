@@ -28,6 +28,10 @@
 #include "ui/webpopup.h"
 #endif
 
+#include "misc/str.h"
+#include "keyring.h"
+#include "notifications.h"
+
 /**
  *
  */
@@ -88,11 +92,234 @@ es_webpopup(duk_context *ctx)
   return 1;
 }
 
+
+/**
+ *
+ */
+static int
+es_entitydecode(duk_context *ctx)
+{
+  char *out = strdup(duk_safe_to_string(ctx, 0));
+  html_entities_decode(out);
+  duk_push_string(ctx, out);
+  free(out);
+  return 1;
+}
+
+
+/**
+ *
+ */
+static int
+es_queryStringSplit(duk_context *ctx)
+{
+  const char *str = duk_safe_to_string(ctx, 0);
+  char *s0, *s;
+  duk_push_object(ctx);
+
+  s0 = s = strdup(str);
+
+  while(s) {
+
+    char *k = s;
+    char *v = strchr(s, '=');
+    if(v == NULL)
+      break;
+
+    *v++ = 0;
+
+    if((s = strchr(v, '&')) != NULL)
+      *s++ = 0;
+
+    k = strdup(k);
+    v = strdup(v);
+
+    url_deescape(k);
+    url_deescape(v);
+
+    duk_push_string(ctx, v);
+    duk_put_prop_string(ctx, -2, k);
+    free(k);
+    free(v);
+  }
+  free(s0);
+  return 1;
+}
+
+
+/**
+ *
+ */
+static int
+es_escape(duk_context *ctx, int how)
+{
+  const char *str = duk_safe_to_string(ctx, 0);
+
+  size_t len = url_escape(NULL, 0, str, how);
+  char *r = malloc(len);
+  url_escape(r, len, str, how);
+
+  duk_push_lstring(ctx, r, len);
+  free(r);
+  return 1;
+}
+
+/**
+ *
+ */
+static int
+es_pathEscape(duk_context *ctx)
+{
+  return es_escape(ctx, URL_ESCAPE_PATH);
+}
+
+
+/**
+ *
+ */
+static int
+es_paramEscape(duk_context *ctx)
+{
+  return es_escape(ctx, URL_ESCAPE_PARAM);
+}
+
+
+/**
+ *
+ */
+static int
+es_getAuthCredentials(duk_context *ctx)
+{
+  char buf[256];
+  char *username, *password;
+  int r;
+
+  const char *source = duk_safe_to_string(ctx, 0);
+  const char *reason = duk_safe_to_string(ctx, 1);
+  int query          = duk_to_boolean(ctx, 2);
+  int forcetmp       = duk_to_boolean(ctx, 4);
+
+  const char *id = duk_is_string(ctx, 3) ? duk_to_string(ctx, 3) : NULL;
+
+  es_context_t *ec = es_get(ctx);
+
+  snprintf(buf, sizeof(buf), "plugin-%s%s%s", ec->ec_id,
+	   id ? "-" : "", id ?: "");
+
+  int flags = 0;
+  flags |= query    ? KEYRING_QUERY_USER : 0;
+  flags |= forcetmp ? 0 : KEYRING_SHOW_REMEMBER_ME | KEYRING_REMEMBER_ME_SET;
+
+  r = keyring_lookup(buf, &username, &password, NULL, NULL,
+		     source, reason, flags);
+
+  if(r == 1) {
+    duk_push_false(ctx);
+    return 1;
+  }
+
+  duk_push_object(ctx);
+
+  if(r == -1) {
+
+    duk_push_true(ctx);
+    duk_put_prop_string(ctx, -2, "rejected");
+  } else {
+
+    duk_push_string(ctx, username);
+    duk_put_prop_string(ctx, -2, "username");
+
+    duk_push_string(ctx, password);
+    duk_put_prop_string(ctx, -2, "password");
+  }
+  return 1;
+}
+
+
+/**
+ * This could be implemented in javscript instead
+ */
+static int
+es_message(duk_context *ctx)
+{
+  int r;
+
+  const char *message = duk_to_string(ctx, 0);
+  int ok     = duk_to_boolean(ctx, 1);
+  int cancel = duk_to_boolean(ctx, 2);
+
+  r = message_popup(message,
+		    (ok     ? MESSAGE_POPUP_OK : 0) |
+		    (cancel ? MESSAGE_POPUP_CANCEL : 0) |
+		    MESSAGE_POPUP_RICH_TEXT, NULL);
+
+  switch(r) {
+  case MESSAGE_POPUP_OK:
+    duk_push_true(ctx);
+    break;
+  case MESSAGE_POPUP_CANCEL:
+    duk_push_false(ctx);
+    break;
+  default:
+    duk_push_int(ctx, r);
+    break;
+  }
+  return 1;
+}
+
+
+/**
+ * This could be implemented in javscript instead
+ */
+static int
+es_textDialog(duk_context *ctx)
+{
+  int r;
+
+  const char *message = duk_to_string(ctx, 0);
+  int ok     = duk_to_boolean(ctx, 1);
+  int cancel = duk_to_boolean(ctx, 2);
+
+  char *input;
+
+  r = text_dialog(message, &input,
+		    (ok     ? MESSAGE_POPUP_OK : 0) |
+		    (cancel ? MESSAGE_POPUP_CANCEL : 0) |
+		    MESSAGE_POPUP_RICH_TEXT);
+
+  if(r == 1) {
+    duk_push_false(ctx);
+    return 1;
+  }
+
+  duk_push_object(ctx);
+
+  if(r == -1 || input == NULL) {
+    duk_push_true(ctx);
+    duk_put_prop_string(ctx, -2, "rejected");
+  } else {
+    duk_push_string(ctx, input);
+    duk_put_prop_string(ctx, -2, "input");
+  }
+  return 1;
+}
+
+
+
+
+
 /**
  * Showtime object exposed functions
  */
 const duk_function_list_entry fnlist_Showtime_misc[] = {
-  { "webpopup",              es_webpopup,      3 },
+  { "webpopup",              es_webpopup,         3 },
+  { "entityDecode",          es_entitydecode,     1 },
+  { "queryStringSplit",      es_queryStringSplit, 1 },
+  { "pathEscape",            es_pathEscape,       1 },
+  { "paramEscape",           es_paramEscape,      1 },
+  { "getAuthCredentials",    es_getAuthCredentials, 5 },
+  { "message",               es_message, 3 },
+  { "textDialog",            es_textDialog, 3 },
   { NULL, NULL, 0}
 };
  

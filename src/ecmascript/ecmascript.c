@@ -23,7 +23,7 @@
 #include "arch/arch.h"
 #include "fileaccess/fileaccess.h"
 #include "backend/backend.h"
-
+#include "htsmsg/htsmsg.h"
 #include "ecmascript.h"
 
 
@@ -129,11 +129,14 @@ es_resource_alloc(const es_resource_class_t *erc)
  *
  */
 void
-es_resource_link(es_resource_t *er, es_context_t *ec)
+es_resource_link(es_resource_t *er, es_context_t *ec, int permanent)
 {
   er->er_ctx = es_context_retain(ec);
   atomic_inc(&er->er_refcount);
-  LIST_INSERT_HEAD(&ec->ec_resources, er, er_link);
+  if(permanent)
+    LIST_INSERT_HEAD(&ec->ec_resources_permanent, er, er_link);
+  else
+    LIST_INSERT_HEAD(&ec->ec_resources_volatile, er, er_link);
 }
 
 
@@ -141,10 +144,11 @@ es_resource_link(es_resource_t *er, es_context_t *ec)
  *
  */
 void *
-es_resource_create(es_context_t *ec, const es_resource_class_t *erc)
+es_resource_create(es_context_t *ec, const es_resource_class_t *erc,
+                   int permanent)
 {
   void *r = es_resource_alloc(erc);
-  es_resource_link(r, ec);
+  es_resource_link(r, ec, permanent);
   return r;
 }
 
@@ -468,6 +472,7 @@ es_context_release(es_context_t *ec)
     hts_mutex_unlock(&es_context_mutex);
   }
 
+  free(ec->ec_manifest);
   free(ec);
 }
 
@@ -481,18 +486,6 @@ es_context_begin(es_context_t *ec)
   hts_mutex_lock(&ec->ec_mutex);
 }
 
-
-/**
- *
- */
-static void
-es_context_terminate(es_context_t *ec)
-{
-  duk_destroy_heap(ec->ec_duk);
-  ec->ec_duk = NULL;
-}
-
-
 /**
  *
  */
@@ -501,8 +494,16 @@ es_context_end(es_context_t *ec)
 {
   duk_gc(ec->ec_duk, 0);
 
-  if(LIST_FIRST(&ec->ec_resources) == NULL)
-    es_context_terminate(ec);
+  if(LIST_FIRST(&ec->ec_resources_permanent) == NULL) {
+    // No more permanent resources, attached. Terminate context
+
+    es_resource_t *er;
+    while((er = LIST_FIRST(&ec->ec_resources_volatile)) != NULL)
+      es_resource_destroy(er);
+
+    duk_destroy_heap(ec->ec_duk);
+    ec->ec_duk = NULL;
+  }
 
   hts_mutex_unlock(&ec->ec_mutex);
 }
@@ -595,10 +596,11 @@ es_get_env(duk_context *ctx)
 int
 ecmascript_plugin_load(const char *id, const char *url,
                        char *errbuf, size_t errlen,
-                       int version)
+                       int version, const char *manifest)
 {
   char path[PATH_MAX];
   es_context_t *ec = es_context_create(id);
+
 
   es_context_begin(ec);
 
@@ -613,6 +615,9 @@ ecmascript_plugin_load(const char *id, const char *url,
 
   duk_push_string(ctx, url);
   duk_put_prop_string(ctx, plugin_obj_idx, "url");
+
+  duk_push_string(ctx, manifest);
+  duk_put_prop_string(ctx, plugin_obj_idx, "manifest");
 
   if(!fa_parent(path, sizeof(path), url)) {
     duk_push_string(ctx, path);
@@ -702,7 +707,7 @@ ecmascript_plugin_unload(const char *id)
 
   es_context_begin(ec);
 
-  while((er = LIST_FIRST(&ec->ec_resources)) != NULL)
+  while((er = LIST_FIRST(&ec->ec_resources_permanent)) != NULL)
     es_resource_destroy(er);
 
   es_context_end(ec);

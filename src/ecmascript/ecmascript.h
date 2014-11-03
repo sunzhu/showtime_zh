@@ -41,10 +41,20 @@ typedef struct es_context {
 
   hts_mutex_t ec_mutex;
   duk_context *ec_duk;
-  struct es_resource_list ec_resources;
+
+  // Resource that will keep the duktape context alive
+  // This include stuff such as page routes, service handles, etc
+  struct es_resource_list ec_resources_permanent;
+
+  // Resources to be automatically flushed when the context dies
+  // This include stuff such as filedescriptors, database handles, etc
+  struct es_resource_list ec_resources_volatile;
 
   size_t ec_mem_active;
   size_t ec_mem_peak;
+
+
+  struct htsmsg *ec_manifest; // plugin.json
 
 } es_context_t;
 
@@ -106,11 +116,12 @@ void es_resource_release(es_resource_t *er);
 
 void es_resource_destroy(es_resource_t *er);
 
-void es_resource_link(es_resource_t *er, es_context_t *ec);
+void es_resource_link(es_resource_t *er, es_context_t *ec, int permanent);
 
 void es_resource_unlink(es_resource_t *er);
 
-void *es_resource_create(es_context_t *ec, const es_resource_class_t *erc);
+void *es_resource_create(es_context_t *ec, const es_resource_class_t *erc,
+                         int permanent);
 
 void es_resource_push(duk_context *ctx, es_resource_t *er);
 
@@ -149,7 +160,7 @@ void ecmascript_release_context_vector(es_context_t **v);
  */
 int ecmascript_plugin_load(const char *id, const char *fullpath,
                            char *errbuf, size_t errlen,
-                           int version);
+                           int version, const char *manifest);
 
 void ecmascript_plugin_unload(const char *id);
 
