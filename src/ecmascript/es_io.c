@@ -267,6 +267,31 @@ es_http_req(duk_context *ctx)
   ehr->ehr_min_expire = es_prop_to_int(ctx, 1, "cacheTime", 0);
   ehr->ehr_cache = es_prop_is_true(ctx, 1, "caching") || ehr->ehr_min_expire;
 
+
+  // -- Handle 'headers' argument
+
+  duk_get_prop_string(ctx, 1, "headers");
+
+  if(duk_is_object(ctx, -1)) {
+
+    duk_enum(ctx, -1, 0);
+
+    while(duk_next(ctx, -1, 1)) {
+      if(duk_is_object_coercible(ctx, -1)) {
+        const char *k = duk_safe_to_string(ctx, -2);
+        const char *v = duk_safe_to_string(ctx, -1);
+
+        http_header_add(&ehr->ehr_request_headers, k, v, 0);
+      }
+      duk_pop_2(ctx);
+    }
+    duk_pop(ctx); // Pop iterator
+  }
+  duk_pop(ctx); // pop headers object
+
+
+  // --- Handle 'postdata' argument
+
   duk_get_prop_string(ctx, 1, "postdata");
 
   if(duk_is_object(ctx, -1)) {
@@ -306,7 +331,7 @@ es_http_req(duk_context *ctx)
 
   }
 
-  duk_pop(ctx);
+  duk_pop(ctx); // pop postdata object
 
   /**
    * Extract args from control object
@@ -337,7 +362,7 @@ es_http_req(duk_context *ctx)
 
   if(duk_is_function(ctx, 2)) {
     // Async mode
-    es_resource_link(&ehr->super, ec);
+    es_resource_link(&ehr->super, ec, 1);
     es_root_register(ctx, 2, ehr);
     task_run(ehr_task, ehr);
     return 0;
@@ -463,7 +488,7 @@ es_http_inspector_create(duk_context *ctx)
   LIST_INSERT_SORTED(&http_inspectors, ehi, ehi_link, ehi_cmp,
                      es_http_inspector_t);
 
-  es_resource_link(&ehi->super, ec);
+  es_resource_link(&ehi->super, ec, 1);
 
   hts_mutex_unlock(&http_inspector_mutex);
 

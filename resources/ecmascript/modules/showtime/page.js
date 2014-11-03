@@ -72,6 +72,13 @@ function Page(root, flat) {
 }
 
 
+Page.prototype.error = function(msg) {
+  this.model.loading = false;
+  this.model.type = 'openerror';
+  this.model.error = msg;
+}
+
+
 Page.prototype.appendItem = function(url, type, metadata) {
   this.root.entries++;
 
@@ -79,6 +86,18 @@ Page.prototype.appendItem = function(url, type, metadata) {
   var root = item.root;
   root.url = url;
   root.type = type;
+  root.metadata = metadata;
+  Showtime.propSetParent(root, this.model.nodes);
+  return item;
+}
+
+Page.prototype.appendPassiveItem = function(type, data, metadata) {
+  this.root.entries++;
+
+  var item = new Item();
+  var root = item.root;
+  root.type = type;
+  root.data = data;
   root.metadata = metadata;
   Showtime.propSetParent(root, this.model.nodes);
   return item;

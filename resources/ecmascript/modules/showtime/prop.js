@@ -30,7 +30,12 @@ var propHandler = {
 
   set: function(obj, name, value) {
 
-    if(typeof value == 'object') {
+    if(typeof value == 'object' && value !== null) {
+
+      if('toRichString' in value) {
+        Showtime.propSetRichStr(obj, name, value.toRichString());
+        return;
+      }
 
       var x = Showtime.propGetChild(obj, name);
       if(typeof x !== 'object')
@@ -92,11 +97,13 @@ exports.createRoot = function() {
   return makeProp(Showtime.propCreate());
 }
 
-exports.subscribeValue = function(prop, callback) {
+exports.subscribeValue = function(prop, callback, ctrl) {
   return Showtime.propSubscribe(prop, function(type, v1, v2) {
     callback.apply(null, makeValue(type, v1, v2));
-  });
+  }, ctrl);
 }
 
 
 exports.makeProp = makeProp;
+
+exports.makeUrl = Showtime.propMakeUrl;
