@@ -11,6 +11,7 @@ function Item(root) {
       value: prop.createRoot()
     }
   });
+  this.eventhandlers = {};
 }
 
 Duktape.fin(Item.prototype, function(x) {
@@ -25,15 +26,64 @@ Item.prototype.bindVideoMetadata = function(obj) {
 }
 
 Item.prototype.dump = function(obj) {
-  printProp(this.root);
+  prop.print(this.root);
 }
+
+Item.prototype.addOptAction = function(title, action) {
+  var node = prop.createRoot();
+  node.type = 'action';
+  node.metadata.title = title;
+  node.enabled = true;
+  node.action = action;
+
+  prop.setParent(node, this.root.options);
+}
+
+
+Item.prototype.addOptURL = function(title, url) {
+  var node = prop.createRoot();
+  node.type = 'location';
+  node.metadata.title = title;
+  node.enabled = true;
+  node.url = url;
+
+  prop.setParent(node, this.root.options);
+}
+
+
+
+Item.prototype.onEvent = function(type, callback) {
+  if(type in this.eventhandlers) {
+    this.eventhandlers[type].push(callback);
+  } else {
+    this.eventhandlers[type] = [callback];
+  }
+
+  if(!this.eventSubscription) {
+    this.eventSubscription =
+      prop.subscribe(this.root, function(type, val) {
+        if(type != "event")
+          return;
+        if(val in this.eventhandlers) {
+          for(x in this.eventhandlers[val]) {
+            this.eventhandlers[val][x](this);
+          }
+        }
+
+    }.bind(this), {
+      autoDestroy: true
+    });
+  }
+}
+
 
 // ---------------------------------------------------------------
 // The Page object
 // ---------------------------------------------------------------
 
-function Page(root, flat) {
+function Page(root, sync, flat) {
 
+  this.sync = sync;
   this.root = root;
   this.model = flat ? this.root : this.root.model;
   this.root.entries = 0;
@@ -60,15 +110,16 @@ function Page(root, flat) {
     }
   });
 
-  prop.subscribe(this.model.nodes, function(op, value) {
-    if(op == 'wantmorechilds') {
-      var nodes = this.model.nodes;
-      var have_more = typeof this.paginator == 'function' && !!this.paginator();
-      Showtime.propHaveMore(nodes, have_more);
-    }
-  }.bind(this), {
-    autoDestroy: true
-  });
+  this.nodesub =
+    prop.subscribe(this.model.nodes, function(op, value) {
+      if(op == 'wantmorechilds') {
+        var nodes = this.model.nodes;
+        var have_more = typeof this.paginator == 'function' && !!this.paginator();
+        Showtime.propHaveMore(nodes, have_more);
+      }
+    }.bind(this), {
+      autoDestroy: true
+    });
 }
 
 
@@ -107,6 +158,18 @@ Page.prototype.dump = function() {
   Showtime.propPrint(this.root);
 }
 
+Page.prototype.redirect = function(url) {
+
+  Showtime.resourceDestroy(this.nodesub);
+
+  if(this.sync) {
+    Showtime.backendOpen(this.root, url, true);
+  } else {
+    prop.sendEvent(this.root.eventSink, "redirect", url);
+  }
+}
+
+
 // ---------------------------------------------------------------
 // ---------------------------------------------------------------
 // Exported functions
@@ -116,13 +179,13 @@ Page.prototype.dump = function() {
 
 exports.Route = function(re, callback) {
 
-  this.route = Showtime.routeCreate(re, function(pageprop, args) {
+  this.route = Showtime.routeCreate(re, function(pageprop, sync, args) {
 
      // First, convert the raw page prop object into a proxied one
     pageprop = prop.makeProp(pageprop);
 
     // Prepend a Page object as first argument to callback
-    args.unshift(new Page(pageprop));
+    args.unshift(new Page(pageprop, sync, false));
 
     callback.apply(null, args);
   });
@@ -148,7 +211,7 @@ exports.Searcher = function(title, icon, callback) {
 
     prop.setParent(root, model.nodes);
 
-    var page = new Page(root, true);
+    var page = new Page(root, false, true);
     page.type = 'directory';
     root.url = Showtime.propMakeUrl(page.root);
     callback(page, query);

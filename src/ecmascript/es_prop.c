@@ -120,6 +120,21 @@ es_prop_get_global(duk_context *ctx)
  *
  */
 static int
+es_prop_get_name_duk(duk_context *ctx)
+{
+  prop_t *p = es_stprop_get(ctx, 0);
+
+  rstr_t *r = prop_get_name(p);
+  duk_push_string(ctx, rstr_get(r));
+  rstr_release(r);
+  return 1;
+}
+
+
+/**
+ *
+ */
+static int
 es_prop_get_value_duk(duk_context *ctx)
 {
   prop_t *p = es_stprop_get(ctx, 0);
@@ -235,7 +250,6 @@ es_prop_enum_duk(duk_context *ctx)
     }
   }
   hts_mutex_unlock(&prop_mutex);
-  duk_dump_context_stdout(ctx);
   return 1;
 }
 
@@ -299,8 +313,14 @@ es_prop_set_value_duk(duk_context *ctx)
     SETPRINTF("%s", duk_get_boolean(ctx, 2) ? "true" : "false");
     prop_set(p, str, PROP_SET_INT, duk_get_boolean(ctx, 2));
   } else if(duk_is_number(ctx, 2)) {
-    SETPRINTF("%f", duk_get_number(ctx, 2));
-    prop_set(p, str, PROP_SET_FLOAT, duk_get_number(ctx, 2));
+    double dbl = duk_get_number(ctx, 2);
+    SETPRINTF("%f", dbl);
+
+    if(ceil(dbl) == dbl && dbl <= INT32_MAX && dbl >= INT32_MIN) {
+      prop_set(p, str, PROP_SET_INT, (int)dbl);
+    } else {
+      prop_set(p, str, PROP_SET_FLOAT, dbl);
+    }
   } else if(duk_is_string(ctx, 2)) {
     SETPRINTF("\"%s\"", duk_get_string(ctx, 2));
     prop_set(p, str, PROP_SET_STRING, duk_get_string(ctx, 2));
@@ -464,6 +484,12 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
     }
     break;
 
+  case PROP_SELECT_CHILD:
+    duk_push_string(ctx, "selectchild");
+    es_stprop_push(ctx, va_arg(ap, prop_t *));
+    nargs = 2;
+    break;
+
   default:
     nargs = 0;
     break;
@@ -574,6 +600,61 @@ es_prop_make_url(duk_context *ctx)
 
 
 /**
+ *
+ */
+static int
+es_prop_select(duk_context *ctx)
+{
+  prop_select(es_stprop_get(ctx, 0));
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
+es_prop_link(duk_context *ctx)
+{
+  prop_link(es_stprop_get(ctx, 0), es_stprop_get(ctx, 1));
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
+es_prop_unlink(duk_context *ctx)
+{
+  prop_unlink(es_stprop_get(ctx, 0));
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
+es_prop_send_event(duk_context *ctx)
+{
+  prop_t *p = es_stprop_get(ctx, 0);
+  const char *type = duk_require_string(ctx, 1);
+  event_t *e;
+
+  if(!strcmp(type, "redirect")) {
+    e = event_create_str(EVENT_REDIRECT, duk_require_string(ctx, 2));
+  } else {
+    duk_error(ctx, DUK_ERR_ERROR, "Event type %s not understood", type);
+  }
+
+  prop_send_ext_event(p, e);
+  event_release(e);
+  return 0;
+}
+
+
+/**
  * Showtime object exposed functions
  */
 const duk_function_list_entry fnlist_Showtime_prop[] = {
@@ -582,6 +663,7 @@ const duk_function_list_entry fnlist_Showtime_prop[] = {
   { "propRelease",             es_prop_release_duk,           1 },
   { "propCreate",              es_prop_create_duk,            0 },
   { "propGetValue",            es_prop_get_value_duk,         2 },
+  { "propGetName",             es_prop_get_name_duk,          1 },
   { "propGetChild",            es_prop_get_child_duk,         2 },
   { "propSet",                 es_prop_set_value_duk,         3 },
   { "propSetRichStr",          es_prop_set_rich_str_duk,      3 },
@@ -593,6 +675,10 @@ const duk_function_list_entry fnlist_Showtime_prop[] = {
   { "propEnum",                es_prop_enum_duk,              1 },
   { "propHas",                 es_prop_has_duk,               2 },
   { "propDeleteChild",         es_prop_delete_child_duk,      2 },
+  { "propSelect",              es_prop_select,                1 },
+  { "propLink",                es_prop_link,                  2 },
+  { "propUnlink",              es_prop_unlink,                1 },
+  { "propSendEvent",           es_prop_send_event,            3 },
 
   { NULL, NULL, 0}
 };

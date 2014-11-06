@@ -159,7 +159,7 @@ es_escape(duk_context *ctx, int how)
   char *r = malloc(len);
   url_escape(r, len, str, how);
 
-  duk_push_lstring(ctx, r, len);
+  duk_push_lstring(ctx, r, len - 1);
   free(r);
   return 1;
 }
@@ -305,6 +305,74 @@ es_textDialog(duk_context *ctx)
 }
 
 
+/**
+ *
+ */
+static int
+es_bin2hex(duk_context *ctx)
+{
+  duk_size_t bufsize;
+  void *buf = duk_require_buffer(ctx, 0, &bufsize);
+
+  int strlen = bufsize * 2 + 1;
+  char *str = malloc(strlen);
+  bin2hex(str, strlen, buf, bufsize);
+  duk_push_lstring(ctx, str, bufsize * 2);
+  free(str);
+  return 1;
+}
+
+
+/**
+ *
+ */
+static int
+es_hex2bin(duk_context *ctx)
+{
+  const char *str = duk_require_string(ctx, 0);
+  int len = strlen(str);
+  if(len & 1)
+    duk_error(ctx, DUK_ERR_ERROR, "String not integral number of bytes");
+
+  void *dst = duk_push_buffer(ctx, len / 2, 0);
+  hex2bin(dst, len / 2, str);
+  return 1;
+}
+
+
+/**
+ *
+ */
+static int
+es_notify(duk_context *ctx)
+{
+  const char *text = duk_to_string(ctx, 0);
+  unsigned int delay = duk_to_uint(ctx, 1);
+  const char *icon = duk_get_string(ctx, 2);
+  notify_add(NULL, NOTIFY_INFO, icon, delay, rstr_alloc("%s"), text);
+  return 0;
+}
+
+
+
+/**
+ *
+ */
+static int
+es_durationtostring(duk_context *ctx)
+{
+  int s = duk_to_uint(ctx, 0);
+  char tmp[32];
+  int m = s / 60;
+  int h = s / 3600;
+  if(h > 0) {
+    snprintf(tmp, sizeof(tmp), "%d:%02d:%02d", h, m % 60, s % 60);
+  } else {
+    snprintf(tmp, sizeof(tmp), "%d:%02d", m % 60, s % 60);
+  }
+  duk_push_string(ctx, tmp);
+  return 1;
+}
 
 
 
@@ -320,6 +388,10 @@ const duk_function_list_entry fnlist_Showtime_misc[] = {
   { "getAuthCredentials",    es_getAuthCredentials, 5 },
   { "message",               es_message, 3 },
   { "textDialog",            es_textDialog, 3 },
+  { "bin2hex",               es_bin2hex, 1},
+  { "hex2bin",               es_hex2bin, 1},
+  { "notify",                es_notify, 3},
+  { "durationToString",      es_durationtostring, 1},
   { NULL, NULL, 0}
 };
  
