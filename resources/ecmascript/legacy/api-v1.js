@@ -5,6 +5,14 @@ var page    = require('showtime/page');
 var settings= require('showtime/settings');
 var store   = require('showtime/store');
 
+var cryptodigest = function(algo, str) {
+  var hash = Showtime.hashCreate(algo);
+  Showtime.hashUpdate(hash, str);
+  var digest = Showtime.hashFinalize(hash);
+  return Showtime.bin2hex(digest);
+}
+
+
 showtime = {
 
   print: print,
@@ -33,6 +41,20 @@ showtime = {
   paramEscape: Showtime.paramEscape,
   message: Showtime.message,
   textDialog: Showtime.textDialog,
+  probe: Showtime.probe,
+  notify: Showtime.notify,
+  durationToString: Showtime.durationToString,
+
+  print: print,
+  trace: console.log,
+
+  sha1digest: function(str) {
+    return cryptodigest('sha1', str);
+  },
+
+  md5digest: function(str) {
+    return cryptodigest('md5', str);
+  },
 
   RichText: function(x) {
     this.str = x;
@@ -124,6 +146,22 @@ var plugin = {
       createDivider: function(title) {
         return x.createDivider({
           title: title
+        })
+      },
+
+      createInfo: function(id, icon, text) {
+        return x.createInfo({
+          image: icon,
+          description: text
+        })
+      },
+
+      createMultiOpt: function(id, title, options, callback) {
+        return x.createMultiOpt({
+          id: id,
+          title: title,
+          options: options,
+          callback: callback
         })
       }
     }
