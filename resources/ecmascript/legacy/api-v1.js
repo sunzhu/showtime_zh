@@ -9,7 +9,7 @@ var cryptodigest = function(algo, str) {
   var hash = Showtime.hashCreate(algo);
   Showtime.hashUpdate(hash, str);
   var digest = Showtime.hashFinalize(hash);
-  return Showtime.bin2hex(digest);
+  return Duktape.enc('hex', digest);
 }
 
 
@@ -32,6 +32,12 @@ showtime = {
 
     return http.request(url, c);
   },
+
+
+  currentVersionInt: Showtime.currentVersionInt,
+  currentVersionString: Showtime.currentVersionString,
+  deviceId: Showtime.deviceId,
+
 
   httpReq: http.request,
 
@@ -95,82 +101,21 @@ var plugin = {
   getAuthCredentials: Showtime.getAuthCredentials,
 
   createSettings: function(title, icon, description) {
-    var x = new settings.globalSettings(Plugin.id, title, icon, description);
+    return new settings.globalSettings(Plugin.id, title, icon,
+                                       description);
+  },
 
-    var o = {
-      destroy: x.destroy,
+  cachePut: function(stash, key, obj, maxage) {
+    Showtime.cachePut('plugin/' + Plugin.id + '/' + stash,
+                      key, JSON.stringify(obj), maxage);
+  },
 
-      createBool: function(id, title, def, func, persistent) {
-        return x.createBool({
-          id: id,
-          title: title,
-          def: def,
-          callback: func,
-          persistent: persistent
-        });
-      },
-
-      createString: function(id, title, def, func, persistent) {
-        return x.createString({
-          id: id,
-          title: title,
-          def: def,
-          callback: func,
-          persistent: persistent
-        });
-      },
-
-      createInt: function(id, title, def, min, max, step, unit,
-                          func, persistent) {
-        return x.createInteger({
-          id: id,
-          title: title,
-          def: def,
-          min: min,
-          max: max,
-          step: step,
-          unit: unit,
-          callback: func,
-          persistent: persistent
-        });
-      },
-
-      createAction: function(id, title, func) {
-        return x.createAction({
-          id: id,
-          title: title,
-          callback: func
-        })
-      },
-
-      createDivider: function(title) {
-        return x.createDivider({
-          title: title
-        })
-      },
-
-      createInfo: function(id, icon, text) {
-        return x.createInfo({
-          image: icon,
-          description: text
-        })
-      },
-
-      createMultiOpt: function(id, title, options, callback) {
-        return x.createMultiOpt({
-          id: id,
-          title: title,
-          options: options,
-          callback: callback
-        })
-      }
-    }
-
-    return o;
+  cacheGet: function(stash, key) {
+    var v = Showtime.cacheGet('plugin/' + Plugin.id + '/' + stash, key);
+    return v ? JSON.parse(v) : null;
   }
 
 };
 
 var x = Showtime.compile(Plugin.url);
-
 x.call(plugin);

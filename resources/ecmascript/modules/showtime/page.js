@@ -1,4 +1,5 @@
 var prop = require('showtime/prop');
+var settings = require('showtime/settings');
 
 // ---------------------------------------------------------------
 // The Item object
@@ -51,6 +52,16 @@ Item.prototype.addOptURL = function(title, url) {
 }
 
 
+Item.prototype.addOptSeparator = function(title) {
+  var node = prop.createRoot();
+  node.type = 'separator';
+  node.metadata.title = title;
+  node.enabled = true;
+
+  prop.setParent(node, this.root.options);
+}
+
+
 
 Item.prototype.onEvent = function(type, callback) {
   if(type in this.eventhandlers) {
@@ -66,7 +77,7 @@ Item.prototype.onEvent = function(type, callback) {
           return;
         if(val in this.eventhandlers) {
           for(x in this.eventhandlers[val]) {
-            this.eventhandlers[val][x](this);
+            this.eventhandlers[val][x](val);
           }
         }
 
@@ -88,32 +99,40 @@ function Page(root, sync, flat) {
   this.model = flat ? this.root : this.root.model;
   this.root.entries = 0;
 
+  var model = this.model;
+
   Object.defineProperties(this, {
 
     type: {
-      get: function()  { return this.model.type; },
-      set: function(v) { this.model.type = v; }
+      get: function()  { return model.type; },
+      set: function(v) { model.type = v; }
     },
 
     metadata: {
-      get: function()  { return this.model.metadata; }
+      get: function()  { return model.metadata; }
     },
 
     loading: {
-      get: function()  { return this.model.loading; },
-      set: function(v) { this.model.loading = v; }
+      get: function()  { return model.loading; },
+      set: function(v) { model.loading = v; }
     },
 
     source: {
-      get: function()  { return this.root.source; },
-      set: function(v) { this.root.source = v; }
+      get: function()  { return root.source; },
+      set: function(v) { root.source = v; }
     }
   });
 
+  if(!flat) {
+    this.options = new settings.kvstoreSettings(this.model.options,
+                                                this.root.url,
+                                                'plugin');
+  }
+
   this.nodesub =
-    prop.subscribe(this.model.nodes, function(op, value) {
+    prop.subscribe(model.nodes, function(op, value) {
       if(op == 'wantmorechilds') {
-        var nodes = this.model.nodes;
+        var nodes = model.nodes;
         var have_more = typeof this.paginator == 'function' && !!this.paginator();
         Showtime.propHaveMore(nodes, have_more);
       }
@@ -156,6 +175,10 @@ Page.prototype.appendPassiveItem = function(type, data, metadata) {
 
 Page.prototype.dump = function() {
   Showtime.propPrint(this.root);
+}
+
+Page.prototype.flush = function() {
+  prop.deleteChilds(this.model.nodes);
 }
 
 Page.prototype.redirect = function(url) {

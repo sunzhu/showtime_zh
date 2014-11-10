@@ -332,6 +332,12 @@ es_create_env(es_context_t *ec)
   duk_push_int(ctx, showtime_get_version_int());
   duk_put_prop_string(ctx, obj_idx, "currentVersionInt");
 
+  duk_push_string(ctx, htsversion);
+  duk_put_prop_string(ctx, obj_idx, "currentVersionString");
+
+  duk_push_string(ctx, gconf.device_id);
+  duk_put_prop_string(ctx, obj_idx, "deviceId");
+
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_service);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_route);
@@ -342,6 +348,7 @@ es_create_env(es_context_t *ec)
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_htsmsg);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_misc);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_crypto);
+  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_kvstore);
 #if ENABLE_METADATA
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_metadata);
 #endif
@@ -459,7 +466,9 @@ es_context_create(const char *id)
 
 
 /**
- *
+ * Be careful here as it will sometimes will be called with prop_mutex
+ * held (see es_prop_lockmgr() in es_prop.c). Thus any call that might
+ * access the prop system might deadlock. You have been warned.
  */
 void
 es_context_release(es_context_t *ec)
@@ -468,7 +477,6 @@ es_context_release(es_context_t *ec)
     return;
 
   hts_mutex_destroy(&ec->ec_mutex);
-  TRACE(TRACE_DEBUG, ec->ec_id, "Inloaded");
   free(ec->ec_id);
   free(ec->ec_path);
   free(ec->ec_storage);
@@ -511,6 +519,7 @@ es_context_end(es_context_t *ec)
 
     duk_destroy_heap(ec->ec_duk);
     ec->ec_duk = NULL;
+    TRACE(TRACE_DEBUG, ec->ec_id, "Unloaded");
   }
 
   hts_mutex_unlock(&ec->ec_mutex);
@@ -636,6 +645,9 @@ ecmascript_plugin_load(const char *id, const char *url,
   duk_push_string(ctx, manifest);
   duk_put_prop_string(ctx, plugin_obj_idx, "manifest");
 
+  duk_push_int(ctx, version);
+  duk_put_prop_string(ctx, plugin_obj_idx, "apiversion");
+
   if(!fa_parent(path, sizeof(path), url)) {
     duk_push_string(ctx, path);
     duk_put_prop_string(ctx, plugin_obj_idx, "path");
@@ -697,7 +709,6 @@ ecmascript_release_context_vector(es_context_t **v)
 }
 
 
-
 /**
  *
  */
@@ -753,7 +764,38 @@ ecmascript_init(void)
 }
 
 
-INITME(INIT_GROUP_API, ecmascript_init);
+/**
+ *
+ */
+static void
+ecmascript_fini(void)
+{
+  es_context_t *ec;
+  es_resource_t *er;
+
+  hts_mutex_lock(&es_context_mutex);
+  while((ec = LIST_FIRST(&es_contexts)) != NULL) {
+
+    assert(ec->ec_linked);
+    es_num_contexts--;
+    LIST_REMOVE(ec, ec_link);
+    ec->ec_linked = 0;
+    hts_mutex_unlock(&es_context_mutex);
+
+    es_context_begin(ec);
+
+    while((er = LIST_FIRST(&ec->ec_resources_permanent)) != NULL)
+      es_resource_destroy(er);
+
+    es_context_end(ec);
+    es_context_release(ec);
+    hts_mutex_lock(&es_context_mutex);
+  }
+  hts_mutex_unlock(&es_context_mutex);
+}
+
+
+INITME(INIT_GROUP_API, ecmascript_init, ecmascript_fini);
 
 /**
  *

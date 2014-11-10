@@ -17,9 +17,10 @@ var storeproxy = {
       clearTimeout(obj.timer);
 
     obj.timer = setTimeout(function() {
+      console.log("Saving store to " + obj.filename);
       fs.writeFileSync(obj.filename, JSON.stringify(obj.keys));
       delete obj.timer;
-    }, 1000);
+    }, 5000);
 
   },
 
@@ -36,6 +37,13 @@ exports.createFromPath = function(path) {
   };
 
 
+  Duktape.fin(obj, function(obj) {
+    if(obj.timer) {
+      console.log("Finalized store to " + obj.filename);
+      fs.writeFileSync(obj.filename, JSON.stringify(obj.keys));
+    }
+  });
+
   try {
     obj.keys = JSON.parse(fs.readFileSync(obj.filename));
   } catch (e) {
@@ -46,6 +54,7 @@ exports.createFromPath = function(path) {
 
 
 exports.create = function(name) {
-  Showtime.fs.mkdirs('store');
-  return exports.createFromPath('store/' + name);
+  var path = 'store/' + name;
+  Showtime.fs.mkdirs(Showtime.fs.dirname(path));
+  return exports.createFromPath(path);
 }
