@@ -1195,6 +1195,9 @@ prop_build_notify_value(prop_sub_t *s, int direct, const char *origin,
 {
   prop_notify_t *n;
 
+  if(unlikely(s->hps_flags & PROP_SUB_IGNORE_VOID) && p->hp_type == PROP_VOID)
+    return;
+
   if(s->hps_flags & PROP_SUB_DEBUG) {
 
     char trail[64];
@@ -1351,7 +1354,7 @@ prop_build_notify_value(prop_sub_t *s, int direct, const char *origin,
 
   case PROP_PROP:
     n->hpn_prop = prop_ref_inc(p->hp_prop);
-    n->hpn_event = PROP_SET_VOID;
+    n->hpn_event = PROP_SET_PROP;
     break;
 
   case PROP_ZOMBIE:
@@ -1373,6 +1376,9 @@ prop_build_notify_value(prop_sub_t *s, int direct, const char *origin,
 static void
 prop_notify_void(prop_sub_t *s)
 {
+  if(unlikely(s->hps_flags & PROP_SUB_IGNORE_VOID))
+    return;
+
   if(s->hps_flags & PROP_SUB_INTERNAL) {
     prop_callback_t *cb = s->hps_callback;
     prop_trampoline_t *pt = s->hps_trampoline;

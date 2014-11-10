@@ -18,11 +18,11 @@ var propHandler = {
   get: function(obj, name) {
 
     if(name == 'toString') return function() {
-      return String(Showtime.propGetValue(obj, name));
+      return String(Showtime.propGetValue(obj));
     }
 
     if(name == 'valueOf') return function() {
-      return Showtime.propGetValue(obj, name);
+      return Showtime.propGetValue(obj);
     }
 
     return makeProp(Showtime.propGetChild(obj, name));
@@ -34,6 +34,11 @@ var propHandler = {
 
       if('toRichString' in value) {
         Showtime.propSetRichStr(obj, name, value.toRichString());
+        return;
+      }
+
+      if(Showtime.propIsValue(value)) {
+        Showtime.propSet(obj, name, Showtime.propGetValue(value));
         return;
       }
 
@@ -92,6 +97,7 @@ exports.print = Showtime.propPrint;
 exports.setParent = Showtime.propSetParent;
 
 exports.subscribe = Showtime.propSubscribe;
+exports.deleteChilds = Showtime.propDeleteChilds;
 
 exports.createRoot = function() {
   return makeProp(Showtime.propCreate());
@@ -105,6 +111,10 @@ exports.sendEvent = Showtime.propSendEvent;
 
 exports.subscribeValue = function(prop, callback, ctrl) {
   return Showtime.propSubscribe(prop, function(type, v1, v2) {
+
+    if(type == 'destroyed')
+      return;
+
     callback.apply(null, makeValue(type, v1, v2));
   }, ctrl);
 }

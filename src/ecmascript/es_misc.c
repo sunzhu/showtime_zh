@@ -31,6 +31,8 @@
 #include "misc/str.h"
 #include "keyring.h"
 #include "notifications.h"
+#include "blobcache.h"
+#include "networking/http.h"
 
 /**
  *
@@ -309,41 +311,6 @@ es_textDialog(duk_context *ctx)
  *
  */
 static int
-es_bin2hex(duk_context *ctx)
-{
-  duk_size_t bufsize;
-  void *buf = duk_require_buffer(ctx, 0, &bufsize);
-
-  int strlen = bufsize * 2 + 1;
-  char *str = malloc(strlen);
-  bin2hex(str, strlen, buf, bufsize);
-  duk_push_lstring(ctx, str, bufsize * 2);
-  free(str);
-  return 1;
-}
-
-
-/**
- *
- */
-static int
-es_hex2bin(duk_context *ctx)
-{
-  const char *str = duk_require_string(ctx, 0);
-  int len = strlen(str);
-  if(len & 1)
-    duk_error(ctx, DUK_ERR_ERROR, "String not integral number of bytes");
-
-  void *dst = duk_push_buffer(ctx, len / 2, 0);
-  hex2bin(dst, len / 2, str);
-  return 1;
-}
-
-
-/**
- *
- */
-static int
 es_notify(duk_context *ctx)
 {
   const char *text = duk_to_string(ctx, 0);
@@ -375,6 +342,58 @@ es_durationtostring(duk_context *ctx)
 }
 
 
+/**
+ *
+ */
+static int
+es_cachePut(duk_context *ctx)
+{
+  const char *stash = duk_to_string(ctx, 0);
+  const char *  key = duk_to_string(ctx, 1);
+  duk_size_t bufsize;
+  void *buf = duk_to_buffer(ctx, 2, &bufsize);
+  int maxage = duk_get_uint(ctx, 3);
+  buf_t *b = buf_create_and_copy(bufsize, buf);
+  blobcache_put(key, stash, b, maxage, NULL, 0, 0);
+  buf_release(b);
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
+es_cacheGet(duk_context *ctx)
+{
+  const char *stash = duk_to_string(ctx, 0);
+  const char *  key = duk_to_string(ctx, 1);
+  buf_t *b = blobcache_get(key, stash, 0, NULL, NULL, NULL);
+  if(b == NULL) {
+    duk_push_null(ctx);
+  } else {
+    void *v = duk_push_fixed_buffer(ctx, buf_size(b));
+    memcpy(v, buf_cstr(b), buf_size(b));
+    buf_release(b);
+  }
+  return 1;
+}
+
+
+/**
+ *
+ */
+static int
+es_parseTime(duk_context *ctx)
+{
+  time_t t;
+  const char *str = duk_require_string(ctx, 0);
+  if(http_ctime(&t, str))
+    duk_error(ctx, DUK_ERR_ERROR, "Invalid time: %s", str);
+  duk_push_number(ctx, t * 1000ULL); // Convert to ms
+  return 1;
+
+}
 
 /**
  * Showtime object exposed functions
@@ -388,10 +407,11 @@ const duk_function_list_entry fnlist_Showtime_misc[] = {
   { "getAuthCredentials",    es_getAuthCredentials, 5 },
   { "message",               es_message, 3 },
   { "textDialog",            es_textDialog, 3 },
-  { "bin2hex",               es_bin2hex, 1},
-  { "hex2bin",               es_hex2bin, 1},
   { "notify",                es_notify, 3},
   { "durationToString",      es_durationtostring, 1},
+  { "cachePut",              es_cachePut, 4},
+  { "cacheGet",              es_cacheGet, 2},
+  { "parseTime",             es_parseTime, 1},
   { NULL, NULL, 0}
 };
  
