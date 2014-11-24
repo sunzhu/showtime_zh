@@ -231,6 +231,7 @@ typedef struct gconf {
   int disable_http_reuse;
   int enable_experimental;
   int enable_detailed_avdiff;
+  int enable_force_ecmascript;
   int enable_hls_debug;
   int enable_ftp_client_debug;
   int enable_ftp_server_debug;
@@ -244,6 +245,7 @@ typedef struct gconf {
   int enable_image_debug;
   int enable_settings_debug;
   int enable_thread_debug;
+  int enable_metadata_debug;
 
   const char *devplugin;
   const char *plugin_repo;
