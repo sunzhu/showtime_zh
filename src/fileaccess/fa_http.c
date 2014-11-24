@@ -440,9 +440,12 @@ validate_cookie(const char *req_host, const char *req_path,
    * Unless it matches the req_host perfectly
    */
 
-  if(strcmp(domain, req_host))
-    if(*domain != '.' || strchr(domain + 1, '.') == NULL)
-      return 2;
+   if(strcmp(domain, req_host)) {
+     if(*domain == '.')
+       domain++;
+     if(strchr(domain + 1, '.') == NULL)
+       return 2;
+   }
 
   /*
    * The value for the request-host does not domain-match the Domain
@@ -462,7 +465,7 @@ validate_cookie(const char *req_host, const char *req_path,
    */ 
 
   for(x = req_host; x != s; x++) {
-    if(*x == '.')
+    if(*x == '.' && x + 1 != s)
       return 4;
   }
   return 0;
@@ -806,7 +809,7 @@ http_client_oauth(http_request_inspection_t *hri,
   url_escape(str, sizeof(str), token_secret, URL_ESCAPE_PARAM);
   const char *oauth_token_secret = mystrdupa(str);
 
-  snprintf(str, sizeof(str), "%lu", time(NULL));
+  snprintf(str, sizeof(str), "%lu", (long)time(NULL));
   const char *oauth_timestamp = mystrdupa(str);
 
   sha1_decl(shactx);

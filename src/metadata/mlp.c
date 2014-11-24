@@ -588,17 +588,17 @@ query_by_filename_or_dirname(void *db, const metadata_lazy_video_t *mlv,
 				NULL, &title);
 
       if(title == NULL) {
-	TRACE(TRACE_DEBUG, "METADATA",
+	METADATA_TRACE(
 	      "Unable to figure out name of series from %s", 
 	      rstr_get(mlv->mlv_filename));
 	return METADATA_PERMANENT_ERROR;
       }
-      TRACE(TRACE_DEBUG, "METADATA",
+      METADATA_TRACE(
 	    "Performing search lookup for %s season:%d episode:%d, "
 	    "based on filename and foldername",
 	    rstr_get(title), season, episode);
     } else {
-      TRACE(TRACE_DEBUG, "METADATA",
+      METADATA_TRACE(
 	    "Performing search lookup for %s season:%d episode:%d, "
 	    "based on filename",
 	    rstr_get(title), season, episode);
@@ -619,7 +619,7 @@ query_by_filename_or_dirname(void *db, const metadata_lazy_video_t *mlv,
 
     metadata_filename_to_title(rstr_get(mlv->mlv_filename), &year, &title);
   
-    TRACE(TRACE_DEBUG, "METADATA",
+    METADATA_TRACE(
 	  "Performing search lookup for %s year:%d, based on filename",
 	  rstr_get(title), year);
 
@@ -632,7 +632,7 @@ query_by_filename_or_dirname(void *db, const metadata_lazy_video_t *mlv,
     if(rval == METADATA_PERMANENT_ERROR && year != 0) {
       // Try without year
 
-      TRACE(TRACE_DEBUG, "METADATA",
+      METADATA_TRACE(
 	    "Performing search lookup for %s without year, based on filename",
 	    rstr_get(title), year);
 
@@ -652,7 +652,7 @@ query_by_filename_or_dirname(void *db, const metadata_lazy_video_t *mlv,
 
     metadata_filename_to_title(rstr_get(mlv->mlv_folder), &year, &title);
   
-    TRACE(TRACE_DEBUG, "METADATA",
+    METADATA_TRACE(
 	  "Performing search lookup for %s year:%d, based on folder name",
 	  rstr_get(title), year);
 
@@ -793,7 +793,17 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
 
   mlv->mlv_mlp.mlp_loading = 1;
 
+
   hts_mutex_unlock(&metadata_mutex);
+
+
+  METADATA_TRACE("Processing '%s' "
+                 "custom_title=%s imdbid=%s lonely=%s duration=%f",
+                 rstr_get(mlv->mlv_url),
+                 rstr_get(custom_title),
+                 rstr_get(imdb_id),
+                 lonely ? "yes" : "no",
+                 duration);
 
 
   /**
@@ -920,7 +930,7 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
 	case METADATA_QTYPE_IMDB:
 	case METADATA_QTYPE_CUSTOM_IMDB:
 
-	  TRACE(TRACE_DEBUG, "METADATA",
+	  METADATA_TRACE(
 		"Performing IMDB lookup for %s using %s for %s",
                 q, ms->ms_name, rstr_get(mlv->mlv_url));
 
@@ -933,7 +943,7 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
 	  break;
 
 	case METADATA_QTYPE_MOVIE:
-	  TRACE(TRACE_DEBUG, "METADATA",
+	  METADATA_TRACE(
 		"Performing search lookup on movie title %s, "
                 "year:%d using %s for %s",
 		rstr_get(mlv->mlv_filename), mlv->mlv_year, ms->ms_name,
@@ -956,7 +966,7 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
 	  if(msf->query_by_title_and_year == NULL)
 	    continue;
 
-	  TRACE(TRACE_DEBUG, "METADATA",
+	  METADATA_TRACE(
 		"Performing custom search lookup for %s using %s for %s",
                 sq, ms->ms_name, rstr_get(mlv->mlv_url));
 	  rval = msf->query_by_title_and_year(db, rstr_get(mlv->mlv_url),
@@ -969,7 +979,7 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
       }
 
       if(rval == METADATA_DEADLOCK || rval == METADATA_TEMPORARY_ERROR) {
-        TRACE(TRACE_DEBUG, "METADATA", "%s for %s",
+        METADATA_TRACE( "%s for %s",
               rstr_get(mlv->mlv_url),
               rval == METADATA_DEADLOCK ? "Deadlock" : "Temporary error");
 
@@ -1004,7 +1014,7 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
      ms->ms_funcs->query_by_id != NULL &&
      (mlv->mlv_mlp.mlp_req_items & ms->ms_complete_props)) {
     
-    TRACE(TRACE_DEBUG, "METADATA",
+    METADATA_TRACE(
 	  "Performing additional query for %s : %s", ms->ms_name,
 	  rstr_get(md->md_ext_id));
 
@@ -1019,14 +1029,14 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
     }
 
     if(rval == METADATA_TEMPORARY_ERROR) {
-      TRACE(TRACE_DEBUG, "METADATA", "Temporary error for %s",
+      METADATA_TRACE( "Temporary error for %s",
 	    rstr_get(mlv->mlv_url));
       r = METADATA_TEMPORARY_ERROR;
       goto done;
     }
 
     if(rval == METADATA_PERMANENT_ERROR)
-      TRACE(TRACE_DEBUG, "METADATA", "Permanent error for %s",
+      METADATA_TRACE( "Permanent error for %s",
 	    rstr_get(mlv->mlv_url));
 
     r = metadb_get_videoinfo(db, rstr_get(mlv->mlv_url), msqivec, num_msqi,
@@ -1840,8 +1850,10 @@ void
 mlv_set_imdb_id(metadata_lazy_video_t *mlv, rstr_t *imdb_id)
 {
   hts_mutex_lock(&metadata_mutex);
-  rstr_set(&mlv->mlv_imdb_id, imdb_id);
-  mlp_enqueue(&mlv->mlv_mlp);
+  if(!rstr_eq(mlv->mlv_imdb_id, imdb_id)) {
+    rstr_set(&mlv->mlv_imdb_id, imdb_id);
+    mlp_enqueue(&mlv->mlv_mlp);
+  }
   hts_mutex_unlock(&metadata_mutex);
 }
 
@@ -1853,8 +1865,10 @@ void
 mlv_set_duration(metadata_lazy_video_t *mlv, float duration)
 {
   hts_mutex_lock(&metadata_mutex);
-  mlv->mlv_duration = duration;
-  mlp_enqueue(&mlv->mlv_mlp);
+  if(mlv->mlv_duration != duration) {
+    mlv->mlv_duration = duration;
+    mlp_enqueue(&mlv->mlv_mlp);
+  }
   hts_mutex_unlock(&metadata_mutex);
 }
 
@@ -1867,6 +1881,9 @@ mlv_set_lonely(metadata_lazy_video_t *mlv, int lonely)
 {
   hts_mutex_lock(&metadata_mutex);
   if(mlv->mlv_lonely != lonely) {
+    METADATA_TRACE("Item '%s' is %slonely", rstr_get(mlv->mlv_url),
+                   lonely ? "" : "not ");
+
     mlv->mlv_lonely = lonely;
     mlp_enqueue(&mlv->mlv_mlp);
   }
