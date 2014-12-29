@@ -49,7 +49,7 @@ glw_nav_first(glw_t *parent)
 
   while(c != NULL) {
     glw_t *to_focus = glw_get_focusable_child(c);
-    if(to_focus != NULL) {
+    if(to_focus != NULL && to_focus->glw_flags2 & GLW2_NAV_FOCUSABLE) {
       glw_focus_set(to_focus->glw_root, to_focus, GLW_FOCUS_SET_INTERACTIVE);
       return 1;
     }
@@ -65,11 +65,11 @@ glw_nav_first(glw_t *parent)
 static int
 glw_nav_last(glw_t *parent)
 {
-  glw_t *c = glw_last_widget(parent, 0);
+  glw_t *c = glw_last_widget(parent);
 
   while(c != NULL) {
     glw_t *to_focus = glw_get_focusable_child(c);
-    if(to_focus != NULL) {
+    if(to_focus != NULL && to_focus->glw_flags2 & GLW2_NAV_FOCUSABLE) {
       glw_focus_set(to_focus->glw_root, to_focus, GLW_FOCUS_SET_INTERACTIVE);
       return 1;
     }
@@ -97,6 +97,9 @@ glw_navigate_step(glw_t *c, int count, int may_wrap)
   while((c = glw_step_widget(c, forward)) != NULL) {
     glw_t *tentative = glw_get_focusable_child(c);
     if(tentative != NULL) {
+      if(!(tentative->glw_flags2 & GLW2_NAV_FOCUSABLE))
+        continue;
+
       to_focus = tentative;
       count--;
       if(count == 0)

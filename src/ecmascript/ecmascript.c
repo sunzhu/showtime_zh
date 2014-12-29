@@ -19,6 +19,7 @@
  *  For more information, contact andreas@lonelycoder.com
  */
 
+#include <unistd.h>
 #include "showtime.h"
 #include "arch/arch.h"
 #include "fileaccess/fileaccess.h"
@@ -254,11 +255,20 @@ es_compile(duk_context *ctx)
 }
 
 
+static int
+es_sleep(duk_context *ctx)
+{
+  int t = duk_get_number(ctx, 0) * 1000000.0;
+  usleep(t);
+  return 0;
+}
+
 
 
 static const duk_function_list_entry fnlist_Showtime[] = {
   { "compile",                 es_compile,              1 },
   { "resourceDestroy",         es_resource_destroy_duk, 1 },
+  { "sleep",                   es_sleep,                1 },
   { NULL, NULL, 0}
 };
 
@@ -522,6 +532,10 @@ es_context_end(es_context_t *ec)
 
     duk_destroy_heap(ec->ec_duk);
     ec->ec_duk = NULL;
+
+    // Hack for killing off any settings created by app
+    prop_destroy_by_name(prop_create(gconf.settings_apps, "nodes"), ec->ec_id);
+
     TRACE(TRACE_DEBUG, ec->ec_id, "Unloaded");
   }
 

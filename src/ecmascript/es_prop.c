@@ -307,6 +307,18 @@ es_prop_delete_childs_duk(duk_context *ctx)
 }
 
 
+/**
+ *
+ */
+static int
+es_prop_destroy_duk(duk_context *ctx)
+{
+  prop_t *p = es_stprop_get(ctx, 0);
+  prop_destroy(p);
+  return 0;
+}
+
+
 //#define SETPRINTF(fmt...) printf(fmt);
 #define SETPRINTF(fmt, ...)
 
@@ -394,6 +406,7 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
   int i;
   int destroy = 0;
   const  event_t *e;
+  prop_t *p1, *p2;
   duk_context *ctx = ec->ec_duk;
 
   es_push_root(ctx, eps);
@@ -471,29 +484,55 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
       destroy = 1;
     break;
 
+  case PROP_REQ_MOVE_CHILD:
+    duk_push_string(ctx, "reqmove");
+    p1 = va_arg(ap, prop_t *);
+    p2 = va_arg(ap, prop_t *);
+    nargs = 3;
+    es_stprop_push(ctx, p1);
+
+    if(p2 != NULL) {
+      es_stprop_push(ctx, p2);
+    } else {
+      duk_push_null(ctx);
+    }
+    break;
+
   case PROP_EXT_EVENT:
-    nargs = 2;
-    duk_push_string(ctx, "event");
     e = va_arg(ap, const event_t *);
 
     if(event_is_type(e, EVENT_DYNAMIC_ACTION)) {
       const event_payload_t *ep = (const event_payload_t *)e;
+      nargs = 2;
+      duk_push_string(ctx, "action");
       duk_push_string(ctx, ep->payload);
 
     } else if(e->e_type_x == EVENT_ACTION_VECTOR) {
       const event_action_vector_t *eav = (const event_action_vector_t *)e;
       assert(eav->num > 0);
+      nargs = 2;
+      duk_push_string(ctx, "action");
       duk_push_string(ctx, action_code2str(eav->actions[0]));
 
     } else if(e->e_type_x == EVENT_UNICODE) {
       const event_int_t *eu = (const event_int_t *)e;
-      char tmp[8];
-      snprintf(tmp, sizeof(tmp), "%C", eu->val);
-      duk_push_string(ctx, tmp);
+      nargs = 2;
+      duk_push_string(ctx, "unicode");
+      duk_push_int(ctx, eu->val);
 
+    } else if(e->e_type_x == EVENT_PROPREF) {
+      event_prop_t *ep = (event_prop_t *)e;
+      nargs = 2;
+      duk_push_string(ctx, "propref");
+      es_stprop_push(ctx, ep->p);
     } else {
       duk_pop(ctx);
       nargs = 0;
+    }
+
+    if(nargs > 0 && e->e_nav != NULL) {
+      es_stprop_push(ctx, e->e_nav);
+      nargs++;
     }
     break;
 
@@ -660,6 +699,27 @@ es_prop_send_event(duk_context *ctx)
 
   if(!strcmp(type, "redirect")) {
     e = event_create_str(EVENT_REDIRECT, duk_require_string(ctx, 2));
+  } else if(!strcmp(type, "openurl")) {
+
+    event_openurl_args_t args = {};
+
+    rstr_t *url        = es_prop_to_rstr(ctx, 2, "url");
+    rstr_t *view       = es_prop_to_rstr(ctx, 2, "view");
+    rstr_t *how        = es_prop_to_rstr(ctx, 2, "how");
+    rstr_t *parent_url = es_prop_to_rstr(ctx, 2, "parenturl");
+
+    args.url        = rstr_get(url);
+    args.view       = rstr_get(view);
+    args.how        = rstr_get(how);
+    args.parent_url = rstr_get(parent_url);
+
+    e = event_create_openurl_args(&args);
+
+    rstr_release(url);
+    rstr_release(view);
+    rstr_release(how);
+    rstr_release(parent_url);
+
   } else {
     duk_error(ctx, DUK_ERR_ERROR, "Event type %s not understood", type);
   }
@@ -706,6 +766,46 @@ es_prop_is_value(duk_context *ctx)
 
 
 /**
+ *
+ */
+static int
+es_prop_atomic_add(duk_context *ctx)
+{
+  prop_t *p = es_stprop_get(ctx, 0);
+  int num = duk_require_number(ctx, 1);
+
+  prop_add_int(p, num);
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
+es_prop_is_same(duk_context *ctx)
+{
+  prop_t *a = es_stprop_get(ctx, 0);
+  prop_t *b = es_stprop_get(ctx, 1);
+  duk_push_boolean(ctx, a == b);
+  return 1;
+}
+
+
+/**
+ *
+ */
+static int
+es_prop_move_before(duk_context *ctx)
+{
+  prop_t *a = es_stprop_get(ctx, 0);
+  prop_t *b = es_get_native_obj_nothrow(ctx, 1, ES_NATIVE_PROP);
+  prop_move(a, b);
+  return 0;
+}
+
+
+/**
  * Showtime object exposed functions
  */
 const duk_function_list_entry fnlist_Showtime_prop[] = {
@@ -727,10 +827,14 @@ const duk_function_list_entry fnlist_Showtime_prop[] = {
   { "propHas",                 es_prop_has_duk,               2 },
   { "propDeleteChild",         es_prop_delete_child_duk,      2 },
   { "propDeleteChilds",        es_prop_delete_childs_duk,     1 },
+  { "propDestroy",             es_prop_destroy_duk,           1 },
   { "propSelect",              es_prop_select,                1 },
   { "propLink",                es_prop_link,                  2 },
   { "propUnlink",              es_prop_unlink,                1 },
   { "propSendEvent",           es_prop_send_event,            3 },
   { "propIsValue",             es_prop_is_value,              1 },
+  { "propAtomicAdd",           es_prop_atomic_add,            2 },
+  { "propIsSame",              es_prop_is_same,               2 },
+  { "propMoveBefore",          es_prop_move_before,           2 },
   { NULL, NULL, 0}
 };

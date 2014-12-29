@@ -1,4 +1,4 @@
-
+var prop    = require('showtime/prop');
 var http    = require('showtime/http');
 var service = require('showtime/service');
 var page    = require('showtime/page');
@@ -52,6 +52,7 @@ showtime = {
 
   print: print,
   trace: console.log,
+  basename: Showtime.fs.basename,
 
   sha1digest: function(str) {
     return cryptodigest('sha1', str);
@@ -65,8 +66,8 @@ showtime = {
     this.str = x.toString();
   },
 
-  XML: function(v) {
-    return require('showtime/xml').parse(v);
+  systemIpAddress: function() {
+      return Showtime.systemIpAddress();
   }
 };
 
@@ -105,6 +106,9 @@ var plugin = {
 
   addHTTPAuth: Showtime.httpInspectorCreate,
 
+  copyFile: Showtime.fs.copyfile,
+  selectView: Showtime.selectView,
+
   createSettings: function(title, icon, description) {
     return new settings.globalSettings(Plugin.id, title, icon,
                                        description);
@@ -118,7 +122,16 @@ var plugin = {
   cacheGet: function(stash, key) {
     var v = Showtime.cacheGet('plugin/' + Plugin.id + '/' + stash, key);
     return v ? JSON.parse(v) : null;
-  }
+  },
+
+  config: {},
+
+  properties: prop.global.plugin[Plugin.id],
+
+  addItemHook: function(conf) {
+    require('showtime/itemhook').create(conf);
+  },
+
 
 };
 

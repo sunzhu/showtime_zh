@@ -102,6 +102,8 @@ SRCS-$(CONFIG_USAGEREPORT) += src/usage.c
 
 SRCS-$(CONFIG_PLAYQUEUE) += src/playqueue.c
 
+SRCS-$(CONFIG_HTTPSERVER) += src/prop/prop_http.c
+
 ##############################################################
 # Images
 ##############################################################
@@ -218,6 +220,7 @@ SRCS += src/fileaccess/fileaccess.c \
 	src/fileaccess/fa_bwlimit.c \
 	src/fileaccess/fa_cmp.c \
 	src/fileaccess/fa_aes.c \
+	src/fileaccess/fa_data.c \
 	src/fileaccess/fa_imageloader.c \
 
 SRCS-$(CONFIG_FTPCLIENT) += src/fileaccess/fa_ftp.c \
@@ -340,7 +343,6 @@ SRCS-$(CONFIG_AUDIOTEST) += src/audio2/audio_test.c
 SRCS-$(CONFIG_DVD)       += src/backend/dvd/dvd.c
 SRCS-$(CONFIG_DVD_LINUX) += src/backend/dvd/linux_dvd.c
 SRCS-$(CONFIG_DVD_WII)   += src/backend/dvd/wii_dvd.c
-SRCS-$(CONFIG_CDDA)      += src/backend/dvd/cdda.c
 
 ##############################################################
 # Bittorrent
