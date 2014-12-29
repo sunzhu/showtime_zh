@@ -18,9 +18,13 @@ function createSetting(group, type, id, title) {
       value: model
     },
 
-    vale: {
+    value: {
       get: function() {
         return model.value;
+      },
+
+      set: function(v) {
+        model.value = v;
       }
     },
 
@@ -68,7 +72,7 @@ sp.createBool = function(id, title, def, callback, persistent) {
   var group = this;
   var item = createSetting(group, 'bool', id, title);
 
-  var initial = group.getvalue(id, def, 'int', persistent);
+  var initial = group.getvalue(id, def, 'bool', persistent);
   item.model.value = initial;
 
   prop.subscribeValue(item.model.value, function(newval) {
@@ -187,7 +191,7 @@ sp.createAction = function(id, title, callback) {
   var item = createSetting(group, 'action', id, title);
 
   prop.subscribe(item.model.action, function(type) {
-    if(type == 'event')
+    if(type == 'action')
       callback();
   }, {
     autoDestroy: true
@@ -221,22 +225,26 @@ sp.createMultiOpt = function(id, title, options, callback, persistent) {
 
     opt.title = opt_title;
 
-    if(initial == null)
+    if(initial == null && opt_default)
       initial = opt_id;
+  }
 
-    if(opt_id == initial || opt_default) {
-      prop.select(opt);
-      callback(opt_id);
-      prop.link(opt, model.current);
-      model.value = opt_id;
-    }
+  if(!initial)
+    initial = options[0][0].toString();
+
+  if(initial) {
+    var opt = model.options[initial];
+    prop.select(opt);
+    prop.link(opt, model.current);
+    model.value = opt_id;
+    callback(initial);
   }
 
   prop.subscribe(model.options, function(type, a) {
     if(type == 'selectchild') {
       var selected = prop.getName(a);
       group.setvalue(id, selected, persistent);
-      callback(id);
+      callback(selected);
       prop.link(a, model.current);
       model.value = id;
     }
@@ -245,7 +253,6 @@ sp.createMultiOpt = function(id, title, options, callback, persistent) {
     autoDestroy: true
   });
 
-  callback(initial);
 
 }
 
@@ -282,6 +289,8 @@ exports.globalSettings = function(id, title, icon, desc) {
   this.setvalue = function(id, value) {
     mystore[id] = value;
   };
+
+  this.properties = model;
 }
 
 
@@ -302,6 +311,8 @@ exports.kvstoreSettings = function(nodes, url, domain) {
 
     if(type == 'int')
       return Showtime.kvstoreGetInteger(url, domain, id, def);
+    else if(type == 'bool')
+      return Showtime.kvstoreGetBoolean(url, domain, id, def);
     else
       return Showtime.kvstoreGetString(url, domain, id) || def;
   };

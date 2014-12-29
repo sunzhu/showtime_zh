@@ -1632,7 +1632,7 @@ lp_get(char **lp)
  *
  */
 char *
-find_str(char *s, int len, const char *needle)
+find_str(const char *s, int len, const char *needle)
 {
   int nlen = strlen(needle);
   if(len < nlen)
@@ -1647,7 +1647,7 @@ find_str(char *s, int len, const char *needle)
       }
     }
     if(j == nlen)
-      return s + i;
+      return (char *)s + i;
   }
   return NULL;
 }

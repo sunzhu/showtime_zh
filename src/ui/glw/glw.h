@@ -742,7 +742,7 @@ typedef struct glw_root {
   prop_t *gr_is_fullscreen;   // Set if our window is in fullscreen
 
   uint64_t gr_time_usec;
-  float gr_time_sec;
+  double gr_time_sec;
 
   int gr_need_refresh;
   int64_t gr_scheduled_refresh;
@@ -1434,7 +1434,7 @@ glw_t *glw_prev_widget(glw_t *w);
 
 glw_t *glw_first_widget(glw_t *w);
 
-glw_t *glw_last_widget(glw_t *w, int focusable);
+glw_t *glw_last_widget(glw_t *w);
 
 void glw_set_fullscreen(glw_root_t *gr, int fullscreen);
 

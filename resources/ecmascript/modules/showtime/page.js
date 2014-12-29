@@ -5,11 +5,14 @@ var settings = require('showtime/settings');
 // The Item object
 // ---------------------------------------------------------------
 
-function Item(root) {
+function Item(page) {
   Object.defineProperties(this, {
 
     root: {
       value: prop.createRoot()
+    },
+    page: {
+      value: page
     }
   });
   this.eventhandlers = {};
@@ -24,6 +27,10 @@ Item.prototype.bindVideoMetadata = function(obj) {
   if(this.mlv)
     Showtime.videoMetadataUnbind(this.mlv);
   this.mlv = Showtime.videoMetadataBind(this.root, this.root.url, obj);
+}
+
+Item.prototype.toString = function() {
+  return '[ITEM with title: ' + this.root.metadata.title.toString() + ']';
 }
 
 Item.prototype.dump = function() {
@@ -70,6 +77,30 @@ Item.prototype.addOptSeparator = function(title) {
 }
 
 
+Item.prototype.destroy = function() {
+  var pos = this.page.items.indexOf(this);
+  if(pos != -1)
+    this.page.items.splice(pos, 1);
+  prop.destroy(this.root);
+}
+
+
+Item.prototype.moveBefore = function(before) {
+  prop.moveBefore(this.root, before ? before.root : null);
+  var thispos = this.page.items.indexOf(this);
+  if(before) {
+    var beforepos = this.page.items.indexOf(before);
+    this.page.items.splice(thispos, 1);
+    if(beforepos > thispos)
+      beforepos--;
+    this.page.items.splice(beforepos, 0, this);
+  } else {
+    this.page.items.splice(thispos, 1);
+    this.page.items.push(this);
+  }
+}
+
+
 
 Item.prototype.onEvent = function(type, callback) {
   if(type in this.eventhandlers) {
@@ -81,7 +112,7 @@ Item.prototype.onEvent = function(type, callback) {
   if(!this.eventSubscription) {
     this.eventSubscription =
       prop.subscribe(this.root, function(type, val) {
-        if(type != "event")
+        if(type != "action")
           return;
         if(val in this.eventhandlers) {
           for(x in this.eventhandlers[val]) {
@@ -101,7 +132,7 @@ Item.prototype.onEvent = function(type, callback) {
 // ---------------------------------------------------------------
 
 function Page(root, sync, flat) {
-
+  this.items = [];
   this.sync = sync;
   this.root = root;
   this.model = flat ? this.root : this.root.model;
@@ -139,17 +170,31 @@ function Page(root, sync, flat) {
   }
 
   this.nodesub =
-    prop.subscribe(model.nodes, function(op, value) {
+    prop.subscribe(model.nodes, function(op, value, value2) {
       if(op == 'wantmorechilds') {
         var nodes = model.nodes;
         var have_more = typeof this.paginator == 'function' && !!this.paginator();
         Showtime.propHaveMore(nodes, have_more);
+      }
+
+      if(op == 'reqmove' && typeof this.reorderer == 'function') {
+        var item = this.items[this.findItemByProp(value)];
+        var before = value2 ? this.items[this.findItemByProp(value2)] : null;
+        this.reorderer(item, before);
       }
     }.bind(this), {
       autoDestroy: true
     });
 }
 
+Page.prototype.findItemByProp = function(v) {
+  for(var i = 0; i < this.items.length; i++) {
+    if(prop.isSame(this.items[i].root, v)) {
+      return i;
+    }
+  }
+  return -1;
+}
 
 Page.prototype.error = function(msg) {
   this.model.loading = false;
@@ -157,11 +202,17 @@ Page.prototype.error = function(msg) {
   this.model.error = msg.toString();
 }
 
+Page.prototype.getItems = function() {
+  return this.items.slice(0);
+}
+
 
 Page.prototype.appendItem = function(url, type, metadata) {
   this.root.entries++;
 
-  var item = new Item();
+  var item = new Item(this);
+  this.items.push(item);
+
   var root = item.root;
   root.url = url;
   root.type = type;
@@ -171,7 +222,7 @@ Page.prototype.appendItem = function(url, type, metadata) {
 }
 
 Page.prototype.appendAction = function(type, data, enabled, metadata) {
-  var item = new Item();
+  var item = new Item(this);
 
   var root = item.root;
   root.enabled = enabled;
@@ -185,7 +236,9 @@ Page.prototype.appendAction = function(type, data, enabled, metadata) {
 Page.prototype.appendPassiveItem = function(type, data, metadata) {
   this.root.entries++;
 
-  var item = new Item();
+  var item = new Item(this);
+  this.items.push(item);
+
   var root = item.root;
   root.type = type;
   root.data = data;
@@ -223,7 +276,7 @@ Page.prototype.onEvent = function(type, callback) {
   if(!this.eventSubscription) {
     this.eventSubscription =
       prop.subscribe(this.root.eventSink, function(type, val) {
-        if(type != "event")
+        if(type != "action")
           return;
         if(val in this.eventhandlers) {
           for(x in this.eventhandlers[val]) {
@@ -266,7 +319,7 @@ exports.Route.prototype.destroy = function() {
 
 exports.Searcher = function(title, icon, callback) {
 
-  this.searcher = Showtime.hookRegister('searcher', function(model, query) {
+  this.searcher = Showtime.hookRegister('searcher', function(model, query, loading) {
 
     // Convert the raw page prop object into a proxied one
     model = prop.makeProp(model);
@@ -276,13 +329,17 @@ exports.Searcher = function(title, icon, callback) {
     root.metadata.title = title;
     root.metadata.icon = icon;
     root.type = 'directory';
-
     prop.setParent(root, model.nodes);
 
     var page = new Page(root, false, true);
     page.type = 'directory';
     root.url = Showtime.propMakeUrl(page.root);
-    callback(page, query);
+    prop.atomicAdd(loading, 1);
+    try {
+      callback(page, query);
+    } finally {
+      prop.atomicAdd(loading, -1);
+    }
   });
 }
 

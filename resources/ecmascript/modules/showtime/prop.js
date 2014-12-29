@@ -108,6 +108,9 @@ exports.getName = Showtime.propGetName;
 exports.link = Showtime.propLink;
 exports.unlink = Showtime.propUnlink;
 exports.sendEvent = Showtime.propSendEvent;
+exports.atomicAdd = Showtime.propAtomicAdd;
+exports.destroy = Showtime.propDestroy;
+exports.isSame = Showtime.propIsSame;
 
 exports.subscribeValue = function(prop, callback, ctrl) {
   return Showtime.propSubscribe(prop, function(type, v1, v2) {
@@ -123,3 +126,6 @@ exports.subscribeValue = function(prop, callback, ctrl) {
 exports.makeProp = makeProp;
 
 exports.makeUrl = Showtime.propMakeUrl;
+
+exports.moveBefore = Showtime.propMoveBefore;
+
