@@ -359,6 +359,7 @@ es_create_env(es_context_t *ec)
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_misc);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_crypto);
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_kvstore);
+  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_subtitles);
 #if ENABLE_METADATA
   duk_put_function_list(ctx, obj_idx, fnlist_Showtime_metadata);
 #endif
@@ -452,11 +453,16 @@ es_mem_free(void *udata, void *ptr)
  *
  */
 static es_context_t *
-es_context_create(const char *id)
+es_context_create(const char *id, int flags)
 {
   es_context_t *ec = calloc(1, sizeof(es_context_t));
+
+  ec->ec_debug  = !!(flags & ECMASCRIPT_DEBUG);
+
   hts_mutex_init_recursive(&ec->ec_mutex);
   atomic_set(&ec->ec_refcount, 1);
+
+  ec->ec_prop_unload_destroy = prop_vec_create(16);
 
   ec->ec_duk = duk_create_heap(es_mem_alloc, es_mem_realloc, es_mem_free,
                                ec, NULL);
@@ -533,8 +539,8 @@ es_context_end(es_context_t *ec)
     duk_destroy_heap(ec->ec_duk);
     ec->ec_duk = NULL;
 
-    // Hack for killing off any settings created by app
-    prop_destroy_by_name(prop_create(gconf.settings_apps, "nodes"), ec->ec_id);
+    prop_vec_destroy_entries(ec->ec_prop_unload_destroy);
+    prop_vec_release(ec->ec_prop_unload_destroy);
 
     TRACE(TRACE_DEBUG, ec->ec_id, "Unloaded");
   }
@@ -563,7 +569,7 @@ es_dump_err(duk_context *ctx)
   const char *name = duk_get_string(ctx, -1);
 
   duk_get_prop_string(ctx, -2, "message");
-  const char *message = duk_get_string(ctx, -1);
+  const char *message = duk_to_string(ctx, -1);
 
   duk_get_prop_string(ctx, -3, "fileName");
   const char *filename = duk_get_string(ctx, -1);
@@ -579,6 +585,19 @@ es_dump_err(duk_context *ctx)
 
   TRACE(TRACE_ERROR, ec->ec_id, "STACK DUMP: %s", stack);
   duk_pop_n(ctx, 5);
+}
+
+
+/**
+ *
+ */
+int
+es_get_err_code(duk_context *ctx)
+{
+  duk_get_prop_string(ctx, -1, "message");
+  int r = duk_to_int(ctx, -1);
+  duk_pop(ctx);
+  return r;
 }
 
 
@@ -601,6 +620,7 @@ es_exec(es_context_t *ec, const char *path)
   duk_context *ctx = ec->ec_duk;
 
   duk_push_lstring(ctx, buf_cstr(buf), buf_len(buf));
+  buf_release(buf);
   duk_push_string(ctx, path);
 
   if(duk_pcompile(ctx, 0)) {
@@ -640,10 +660,11 @@ es_get_env(duk_context *ctx)
 int
 ecmascript_plugin_load(const char *id, const char *url,
                        char *errbuf, size_t errlen,
-                       int version, const char *manifest)
+                       int version, const char *manifest,
+                       int flags)
 {
   char path[PATH_MAX];
-  es_context_t *ec = es_context_create(id);
+  es_context_t *ec = es_context_create(id, flags);
 
 
   es_context_begin(ec);
@@ -769,7 +790,7 @@ ecmascript_init(void)
   if(gconf.load_ecmascript == NULL)
     return;
 
-  es_context_t *ec = es_context_create("cmdline");
+  es_context_t *ec = es_context_create("cmdline", ECMASCRIPT_DEBUG);
   es_context_begin(ec);
 
   ec->ec_storage = strdup("/tmp");

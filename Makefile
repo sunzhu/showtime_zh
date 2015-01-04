@@ -139,7 +139,7 @@ SRCS +=	src/misc/ptrvec.c \
 	src/misc/gb2312.c \
 	src/misc/cancellable.c \
 
-SRCS-${CONFIG_TREX} += ext/trex/trex.c
+SRCS += ext/trex/trex.c
 
 SRCS-${CONFIG_BSPATCH} += ext/bspatch/bspatch.c
 
@@ -740,6 +740,7 @@ SRCS += ext/duktape/duktape.c \
 	src/ecmascript/es_root.c \
 	src/ecmascript/es_hook.c \
 	src/ecmascript/es_timer.c \
+	src/ecmascript/es_subtitles.c \
 
 SRCS-$(CONFIG_METADATA) += src/ecmascript/es_metadata.c
 

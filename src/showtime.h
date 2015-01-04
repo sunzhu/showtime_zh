@@ -246,6 +246,15 @@ typedef struct gconf {
   int enable_settings_debug;
   int enable_thread_debug;
   int enable_metadata_debug;
+  int enable_upnp_debug;
+
+  int enable_torrent_debug;
+  int enable_torrent_tracker_debug;
+  int enable_torrent_diskio_debug;
+  int enable_torrent_peer_connection_debug;
+  int enable_torrent_peer_upload_debug;
+  int enable_torrent_peer_download_debug;
+
 
   const char *devplugin;
   const char *plugin_repo;
