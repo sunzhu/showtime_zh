@@ -143,7 +143,7 @@ es_prop_get_value_duk(duk_context *ctx)
 
   if(p->hp_type == PROP_ZOMBIE) {
     hts_mutex_unlock(&prop_mutex);
-    return 0;
+    duk_error(ctx, ST_ERROR_PROP_ZOMBIE, NULL);
   }
 
   switch(p->hp_type) {
@@ -198,7 +198,7 @@ es_prop_get_child_duk(duk_context *ctx)
 
   if(p->hp_type == PROP_ZOMBIE) {
     hts_mutex_unlock(&prop_mutex);
-    return 0;
+    duk_error(ctx, ST_ERROR_PROP_ZOMBIE, NULL);
   }
 
   if(str != NULL) {
@@ -526,7 +526,6 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
       duk_push_string(ctx, "propref");
       es_stprop_push(ctx, ep->p);
     } else {
-      duk_pop(ctx);
       nargs = 0;
     }
 
@@ -806,6 +805,30 @@ es_prop_move_before(duk_context *ctx)
 
 
 /**
+ *
+ */
+static int
+es_prop_unload_destroy(duk_context *ctx)
+{
+  es_context_t *ec = es_get(ctx);
+  prop_t *a = es_stprop_get(ctx, 0);
+  ec->ec_prop_unload_destroy = prop_vec_append(ec->ec_prop_unload_destroy, a);
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
+es_prop_is_zombie(duk_context *ctx)
+{
+  prop_t *a = es_stprop_get(ctx, 0);
+  duk_push_boolean(ctx, a->hp_type == PROP_ZOMBIE);
+  return 1;
+}
+
+/**
  * Showtime object exposed functions
  */
 const duk_function_list_entry fnlist_Showtime_prop[] = {
@@ -836,5 +859,7 @@ const duk_function_list_entry fnlist_Showtime_prop[] = {
   { "propAtomicAdd",           es_prop_atomic_add,            2 },
   { "propIsSame",              es_prop_is_same,               2 },
   { "propMoveBefore",          es_prop_move_before,           2 },
+  { "propUnloadDestroy",       es_prop_unload_destroy,        1 },
+  { "propIsZombie",            es_prop_is_zombie,             1 },
   { NULL, NULL, 0}
 };

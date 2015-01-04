@@ -1,5 +1,6 @@
 #pragma once
 
+#include "showtime.h"
 #include "ext/duktape/duktape.h"
 #include "misc/queue.h"
 #include "arch/threads.h"
@@ -9,7 +10,9 @@
 struct es_resource;
 struct rstr;
 struct prop;
+struct prop_vec;
 
+#define ST_ERROR_PROP_ZOMBIE 0x8000
 #define ST_ERROR_SQLITE_BASE 0x10000
 
 
@@ -36,6 +39,8 @@ typedef struct es_context {
   char *ec_path;
   char *ec_storage;
 
+  char ec_debug;
+
   int ec_linked;
 
   atomic_t ec_refcount;
@@ -56,6 +61,8 @@ typedef struct es_context {
 
 
   struct htsmsg *ec_manifest; // plugin.json
+
+  struct prop_vec *ec_prop_unload_destroy;
 
 } es_context_t;
 
@@ -92,6 +99,8 @@ es_context_t *es_get(duk_context *ctx);
 void es_dumpstack(duk_context *ctx);
 
 void es_dump_err(duk_context *ctx);
+
+int es_get_err_code(duk_context *ctx);
 
 
 void es_stprop_push(duk_context *ctx, struct prop *p);
@@ -165,7 +174,10 @@ void ecmascript_release_context_vector(es_context_t **v);
  */
 int ecmascript_plugin_load(const char *id, const char *fullpath,
                            char *errbuf, size_t errlen,
-                           int version, const char *manifest);
+                           int version, const char *manifest,
+                           int flags);
+
+#define ECMASCRIPT_DEBUG  0x1
 
 void ecmascript_plugin_unload(const char *id);
 
@@ -221,6 +233,15 @@ void es_hash_release(struct es_hash *);
 
 
 /**
+ *
+ */
+#define es_debug(ec, fmt, ...) do {                             \
+    if((ec)->ec_debug) {                                        \
+      TRACE(TRACE_DEBUG, (ec)->ec_id, fmt, ##__VA_ARGS__);     \
+    }                                                           \
+  } while(0)
+
+/**
  * Function definitions
  */
 extern const duk_function_list_entry fnlist_Showtime_service[];
@@ -237,5 +258,6 @@ extern const duk_function_list_entry fnlist_Showtime_misc[];
 extern const duk_function_list_entry fnlist_Showtime_crypto[];
 extern const duk_function_list_entry fnlist_Showtime_console[];
 extern const duk_function_list_entry fnlist_Showtime_kvstore[];
+extern const duk_function_list_entry fnlist_Showtime_subtitles[];
 
 extern const duk_function_list_entry fnlist_Global_timer[];

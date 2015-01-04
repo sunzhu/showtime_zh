@@ -23,7 +23,7 @@
 #include "networking/asyncio.h"
 #include "htsmsg/htsmsg.h"
 #include "misc/minmax.h"
-
+#include "misc/bytestream.h"
 #include "bittorrent.h"
 #include "bencode.h"
 
@@ -101,6 +101,22 @@ http_callback(http_req_aux_t *req, void *opaque)
           peer_add(to, &na);
         }
       }
+
+      const void *data;
+      size_t size;
+
+      if(!htsmsg_get_bin(msg, "peers", &data, &size)) {
+        net_addr_t na;
+        na.na_family = 4;
+        while(size >= 6) {
+          memcpy(na.na_addr, data, 4);
+          na.na_port = rd16_be(data + 4);
+          if(na.na_port > 0)
+            peer_add(to, &na);
+          data += 6;
+          size -= 6;
+        }
+      }
       htsmsg_release(msg);
     }
   }
@@ -118,6 +134,7 @@ tracker_http_torrent_announce(tracker_torrent_t *tt, int event)
   tracker_t *t = tt->tt_tracker;
   torrent_t *to = tt->tt_torrent;
   const char *eventstr;
+  int flags = 0;
 
   if(tt->tt_tentative)
     eventstr = "started";
@@ -131,17 +148,22 @@ tracker_http_torrent_announce(tracker_torrent_t *tt, int event)
   if(tt->tt_http_req != NULL)
     asyncio_http_cancel(tt->tt_http_req);
 
+  if(gconf.enable_torrent_tracker_debug)
+    flags = FA_DEBUG;
+
   tt->tt_http_req =
     asyncio_http_req(t->t_url, http_callback, tt,
                      HTTP_ARGBIN("info_hash", to->to_info_hash, 20),
                      HTTP_ARGBIN("peer_id", btg.btg_peer_id, 20),
                      HTTP_ARGINT("port", 7898),
+                     HTTP_ARGINT("compact", 1),
                      HTTP_ARGINT64("uploaded", to->to_uploaded_bytes),
                      HTTP_ARGINT64("downloaded", to->to_downloaded_bytes),
                      HTTP_ARGINT64("left", to->to_remaining_bytes),
                      HTTP_ARG("event", eventstr),
                      HTTP_ARG("trackerid", tt->tt_trackerid),
                      HTTP_RESULT_PTR(HTTP_BUFFER_INTERNALLY),
+                     HTTP_FLAGS(flags),
                      NULL);
 
 }

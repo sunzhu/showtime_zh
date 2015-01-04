@@ -1,14 +1,18 @@
 #include <unistd.h>
 #include <assert.h>
 
+#include "showtime.h"
 #include "ecmascript.h"
 #include "fileaccess/http_client.h"
 #include "fileaccess/fileaccess.h"
 #include "misc/str.h"
 #include "misc/regex.h"
 #include "htsmsg/htsbuf.h"
+#include "htsmsg/htsmsg.h"
+#include "htsmsg/htsmsg_json.h"
 #include "task.h"
 #include "backend/backend.h"
+#include "api/xmlrpc.h"
 
 /**
  *
@@ -375,9 +379,14 @@ es_http_req(duk_context *ctx)
 
   es_http_do_request(ehr);
 
-  if(ehr->ehr_error)
+  if(ehr->ehr_error) {
+    const char *err_url = mystrdupa(ehr->ehr_url);
+    const char *err_buf = mystrdupa(ehr->ehr_errbuf);
+    ehr_cleanup(ehr);
+    free(ehr);
     duk_error(ctx, DUK_ERR_ERROR, "HTTP request failed %s -- %s",
-              ehr->ehr_url, ehr->ehr_errbuf);
+              err_url, err_buf);
+  }
 
   es_http_push_result(ctx, ehr);
   ehr_cleanup(ehr);
@@ -490,6 +499,8 @@ es_http_inspector_create(duk_context *ctx)
   ehi->ehi_pattern = strdup(str);
   ehi->ehi_prio = strlen(str);
 
+  es_debug(ec, "Adding HTTP insepction for pattern %s", str);
+
   LIST_INSERT_SORTED(&http_inspectors, ehi, ehi_link, ehi_cmp,
                      es_http_inspector_t);
 
@@ -525,7 +536,11 @@ get_hri(duk_context *ctx)
 static int
 es_http_inspector_fail(duk_context *ctx)
 {
-  http_client_fail_req(get_hri(ctx), duk_safe_to_string(ctx, 0));
+  es_context_t *ec = es_get(ctx);
+  http_request_inspection_t *hri = get_hri(ctx);
+  const char *reason = duk_safe_to_string(ctx, 0);
+  es_debug(ec, "Inspector failing request -- %s", reason);
+  http_client_fail_req(hri, duk_safe_to_string(ctx, 0));
   return 0;
 }
 
@@ -536,9 +551,13 @@ es_http_inspector_fail(duk_context *ctx)
 static int
 es_http_inspector_set_header(duk_context *ctx)
 {
-  http_client_set_header(get_hri(ctx),
-                         duk_safe_to_string(ctx, 0),
-                         duk_safe_to_string(ctx, 1));
+  es_context_t *ec = es_get(ctx);
+  http_request_inspection_t *hri = get_hri(ctx);
+  const char *key = duk_safe_to_string(ctx, 0);
+  const char *value = duk_safe_to_string(ctx, 1);
+  es_debug(ec, "Inspector adding header %s = %s",
+           key, value);
+  http_client_set_header(hri, key, value);
   return 0;
 }
 
@@ -549,9 +568,13 @@ es_http_inspector_set_header(duk_context *ctx)
 static int
 es_http_inspector_set_cookie(duk_context *ctx)
 {
-  http_client_set_cookie(get_hri(ctx),
-                         duk_safe_to_string(ctx, 0),
-                         duk_safe_to_string(ctx, 1));
+  es_context_t *ec = es_get(ctx);
+  http_request_inspection_t *hri = get_hri(ctx);
+  const char *key = duk_safe_to_string(ctx, 0);
+  const char *value = duk_safe_to_string(ctx, 1);
+  es_debug(ec, "Inspector setting cookie %s = %s",
+           key, value);
+  http_client_set_cookie(hri, key, value);
   return 0;
 }
 
@@ -594,6 +617,8 @@ es_http_inspect(const char *url, http_request_inspection_t *hri)
 
   es_context_t *ec = ehi->super.er_ctx;
   es_context_begin(ec);
+
+  es_debug(ec, "Inspecting %s using %s", url, ehi->ehi_pattern);
 
   duk_context *ctx = ec->ec_duk;
 
@@ -663,11 +688,42 @@ es_probe(duk_context *ctx)
 
 
 /**
+ *
+ */
+static int
+es_xmlrpc(duk_context *ctx)
+{
+  int argc = duk_get_top(ctx);
+  if(argc < 2)
+    return DUK_RET_TYPE_ERROR;
+
+  char errbuf[256];
+  const char *url    = duk_to_string(ctx, 0);
+  const char *method = duk_to_string(ctx, 1);
+  const char *json   = duk_to_string(ctx, 2);
+
+  htsmsg_t *args = htsmsg_json_deserialize2(json, errbuf, sizeof(errbuf));
+  if(args == NULL)
+    duk_error(ctx, DUK_ERR_ERROR, "Bad interim JSON -- %s", errbuf);
+
+  htsmsg_t *reply = xmlrpc_request(url, method,
+                                   args, errbuf, sizeof(errbuf));
+
+  if(reply == NULL)
+    duk_error(ctx, DUK_ERR_ERROR, "XMLRPC request %s to %s failed -- %s",
+              method, url, errbuf);
+
+  es_push_native_obj(ctx, ES_NATIVE_HTSMSG, reply);
+  return 1;
+}
+
+/**
  * Showtime object exposed functions
  */
 const duk_function_list_entry fnlist_Showtime_io[] = {
   { "httpReq",              es_http_req,              3 },
   { "httpInspectorCreate",  es_http_inspector_create, 2 },
   { "probe",                es_probe,                 1 },
+  { "xmlrpc",               es_xmlrpc,                DUK_VARARGS },
   { NULL, NULL, 0}
 };

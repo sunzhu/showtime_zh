@@ -3015,7 +3015,9 @@ http_req_do(http_req_aux_t *hra)
   htsbuf_append(&q, " ", 1);
   htsbuf_append(&q, hf->hf_path, strlen(hf->hf_path));
 
-  char prefix = '?';
+  // If the path already contains a '?' we prefix first parameter with '&'
+  // instead
+  char prefix = strchr(hf->hf_path, '?') ? '&' : '?';
 
   if(hra->arguments != NULL) {
     char **args = hra->arguments;
@@ -3089,14 +3091,16 @@ http_req_do(http_req_aux_t *hra)
   int no_content = !strcmp(m, "HEAD");
 
   switch(code) {
-  case 200 ... 205:
-    if(no_content) {
+  case 204:
+    no_content = 1;
+    // FALLTHRU
+  case 200:
+  case 201:
+  case 202:
+  case 203:
+  case 205:
+    if(no_content)
       hf->hf_rsize = 0;
-      http_destroy(hf);
-      if(hra->decoded_cleanup)
-        hra->decoded_cleanup(hra);
-      return 0;
-    }
     break;
 
   case 304:
@@ -3357,6 +3361,8 @@ http_reqv(const char *url, va_list ap,
 
       if(ptr == HTTP_BUFFER_INTERNALLY)
         ptr = &hra->result;
+      else
+        *ptr = NULL;
 
       hra->decoded_opaque = calloc(1, sizeof(buf_t));
       *ptr = hra->decoded_opaque;
