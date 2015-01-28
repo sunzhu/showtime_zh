@@ -23,7 +23,7 @@ id: Disable sleep timer
 msg: Désactiver la mise en veille
 
 id: Exit Showtime
-msg: Sortie Showtime
+msg: Quitter Showtime
 
 id: Go to Home screen
 msg: Retour à la page d'accueil
@@ -32,8 +32,7 @@ id: Hide system info
 msg: Cacher les informations système
 
 id: Master volume
-# Missing translation
-msg: 
+msg: Contrôler le volume
 
 id: Navigation
 msg: Navigation
@@ -48,7 +47,7 @@ id: Power off
 msg: Éteindre
 
 id: Reload current page
-msg: Rafraichir
+msg: Rafraîchir
 
 id: Show system info
 msg: Afficher les informations système
@@ -63,8 +62,7 @@ id: Time until sleep
 msg: Veille dans
 
 id: dB
-# Missing translation
-msg: 
+msg: dB
 
 id: min
 msg: minutes
@@ -97,7 +95,7 @@ id: Mark as unseen
 msg: Marquer comme non vu
 
 id: Play from beginning
-msg: Lire dépuis le début
+msg: Lire depuis le début
 
 id: Play until end of list
 msg: Lire jusqu'à la fin de la liste
@@ -153,7 +151,11 @@ msg: Paramètres vidéo
 #
 # ./glwskins/default/loading.view
 #
-id: Bitrate: %d kb/s
+id: %d kb/s
+# Missing translation
+msg: 
+
+id: Bitrate:
 # Missing translation
 msg: 
 
@@ -405,8 +407,7 @@ msg: Vérification %s
 # ./glwskins/default/pages/video.view
 #
 id: Audio volume adjustment: %d dB
-# Missing translation
-msg: 
+msg: Ajustement du volume audio: %d dB
 
 id: CPU is too slow to decode this video
 msg: Le CPU est trop faible pour décoder cette vidéo
@@ -457,8 +458,7 @@ id: GPU Temp
 msg: Température du GPU
 
 id: HDD Avail
-# Missing translation
-msg: 
+msg: HDD disponible
 
 id: Inactive mem
 msg: Mémoire libre
@@ -505,8 +505,9 @@ msg: Mémoire système faible (%d kB de RAM restant)
 #
 # ./src/arch/ps3/ps3_vdec.c
 #
-id: Cell-h264: %d Ref-frames for 1080 content is incompatible with PS3 HW decoder. Disabling acceleration
-msg: Cell-h264: Le nombre de Ref-frames (%d) pour une video en 1080 est incompatible avec le decodeur HW de la PS3. L'accélération vidéo est désactivée.
+id: Cell-h264: %d Ref-frames for %d content is incompatible with PS3 HW decoder. Disabling acceleration
+# Missing translation
+msg: 
 
 id: Cell-h264: Broken headers, Disabling acceleration
 msg: En-têtes du fichier malformés. L'accélération vidéo est désactivée.
@@ -611,61 +612,58 @@ msg: Type de signal test
 # ./src/backend/bittorrent/bt_backend.c
 #
 id: No files in torrent
-# Missing translation
-msg: 
-
-id: Unable to load torrent: %s
-# Missing translation
-msg: 
+msg: Aucun fichier dans le torrent
 
 id: Unable to open torrent: %s
-# Missing translation
-msg: 
-
-id: Unable to parse torrent: %s
-# Missing translation
-msg: 
+msg: Impossible d'ouvrir le torrent: %s
 
 #
 # ./src/backend/bittorrent/diskio.c
 #
 id: Cached torrents use %d MB out of allowed %d MB. Total free space on volume: %d MB
-# Missing translation
-msg: 
+msg: Le cache Torrent utilise %d Mo sur %d Mo. Espace libre total sur le volume:% d Mo
 
 #
-# ./src/backend/bittorrent/magnet.c
+# ./src/backend/bittorrent/fa_torrent.c
 #
-id: Invalid SHA-1 hash: %s
+id: Connected peers
 # Missing translation
 msg: 
 
-id: No 'xt' in magnet link
+id: Known peers
 # Missing translation
 msg: 
 
-id: Unknown hash scheme: %s
+id: Receiving from
+# Missing translation
+msg: 
+
+id: Torrent leechers
+# Missing translation
+msg: 
+
+id: Torrent seeders
 # Missing translation
 msg: 
 
 #
 # ./src/backend/bittorrent/torrent_settings.c
 #
-id: Enable bittorrent
+id: Clear cache
 # Missing translation
 msg: 
+
+id: Enable bittorrent
+msg: Activation de bittorrent
 
 id: Max usage of free space for caching torrents
-# Missing translation
-msg: 
+msg: Utilisation max de l'espace libre pour les mises en cache des torrents
 
 id: Status
-# Missing translation
-msg: 
+msg: Status
 
 id: Torrent cache path
-# Missing translation
-msg: 
+msg: Chemin du cache Torrent
 
 #
 # ./src/backend/dvd/dvd.c
@@ -773,8 +771,7 @@ id: Can't handle content type %d
 msg: Ne peut gérer le contenu de type %d
 
 id: Checking file contents
-# Missing translation
-msg: 
+msg: Vérification du contenu des fichiers
 
 id: Unable to open file: %s
 msg: Impossible d'ouvrir le fichier : %s
@@ -849,12 +846,10 @@ id: Are you sure you want to delete:
 msg: Etes-vous sur de vouloir supprimer:
 
 id: BitTorrent
-# Missing translation
-msg: 
+msg: BitTorrent
 
 id: Browse archives as folders
-# Missing translation
-msg: 
+msg: Parcourir les archives comme des dossiers
 
 id: Enable file deletion from item menu
 msg: Activer l'option Supprimer depuis le menu du fichier
@@ -956,8 +951,7 @@ id: Go to standby after video ends
 msg: Mettre en veille à la fin de la vidéo
 
 id: Horizontal pan
-# Missing translation
-msg: 
+msg: Panoramique horizontal
 
 id: Reset defaults for folder '%s'
 msg: Réinitialiser les paramètres par défaut du répertoire '%s'
@@ -987,8 +981,7 @@ id: Subtitle vertical displacement
 msg: Déplacement vertical des sous titres
 
 id: Vertical pan
-# Missing translation
-msg: 
+msg: Panoramique vertical
 
 id: Video frame interpolation
 msg: Interpolation de trames vidéo
@@ -1057,8 +1050,7 @@ id: Clear all metadata
 msg: Effacer toutes les métadonnées
 
 id: Clearing all metadata means losing <b>all</b> metadata cached from external sources such as themoviedb.org, etc\n\nInformation about resume-points, playcount, etc will be saved.\nAre you sure you proceed?
-# Missing translation
-msg: 
+msg: Effacer toutes les métadonnées signifie perdre <b> tous </ b> les caches de métadonnées à partir de sources externes telles que themoviedb.org, etc\n\nInformation à propos des lectures, ... etc seront sauvés.\nVoulez-vous continuer?
 
 #
 # ./src/metadata/mlp.c
@@ -1583,8 +1575,7 @@ id: No limit
 msg: Pas de limite
 
 id: Per-file volume
-# Missing translation
-msg: 
+msg: Par fichier de volume
 
 id: Preferred VDPAU deinterlacer method
 msg: Préférer la méthode VDPAU pour le désentrelacement
@@ -1593,12 +1584,10 @@ id: Resume video playback
 msg: Reprendre la lecture vidéo
 
 id: Step when seeking backward
-# Missing translation
-msg: 
+msg: Étape lorsqu'on cherche à revenir en arrière
 
 id: Step when seeking forward
-# Missing translation
-msg: 
+msg: Étape lorsqu'on cherche à aller de l'avant 
 
 id: Temporal
 msg: Temporel
@@ -1607,8 +1596,7 @@ id: Temporal/Spatial
 msg: Temporel/Spatial
 
 id: Up / Down during video playback controls
-# Missing translation
-msg: 
+msg: Haut / Bas commandes durant une lecture vidéo
 
 id: Video acceleration and display behaviour
 msg: Accélération vidéo et comportement de l'affichage

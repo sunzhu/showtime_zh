@@ -29,6 +29,7 @@
 #include "misc/str.h"
 #include "media/media_track.h"
 #include "i18n.h"
+#include "usage.h"
 
 typedef struct es_sp {
   es_resource_t super;
@@ -149,6 +150,8 @@ esp_query(subtitle_provider_t *SP, sub_scanner_t *ss, int score,
   duk_context *ctx = ec->ec_duk;
   if(ctx != NULL) {
 
+    usage_inc_plugin_counter(ec->ec_id, "subsearch", 1);
+
     sub_scanner_retain(ss);
 
     es_push_root(ctx, esp);
@@ -195,7 +198,7 @@ esp_query(subtitle_provider_t *SP, sub_scanner_t *ss, int score,
 
   }
   es_resource_release(&esp->super);
-  es_context_end(ec);
+  es_context_end(ec, 1);
 }
 
 
@@ -275,7 +278,7 @@ es_getsubtitlelanguages(duk_context *ctx)
  */
 const duk_function_list_entry fnlist_Showtime_subtitles[] = {
   { "subtitleAddProvider",     es_subtitleprovideradd,       3 },
-  { "subtitleAddItem",         es_subtitleadditem,           7 },
+  { "subtitleAddItem",         es_subtitleadditem,           8 },
   { "getSubtitleLanguages",    es_getsubtitlelanguages,      0 },
   { NULL, NULL, 0}
 };

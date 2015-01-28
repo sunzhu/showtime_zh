@@ -18,15 +18,17 @@ function Item(page) {
   this.eventhandlers = {};
 }
 
-Duktape.fin(Item.prototype, function(x) {
-  if(this.mlv)
-    Showtime.videoMetadataUnbind(this.mlv);
-});
-
 Item.prototype.bindVideoMetadata = function(obj) {
   if(this.mlv)
-    Showtime.videoMetadataUnbind(this.mlv);
+    Showtime.resourceDestroy(this.mlv);
   this.mlv = Showtime.videoMetadataBind(this.root, this.root.url, obj);
+}
+
+Item.prototype.unbindVideoMetadata = function(obj) {
+  if(this.mlv) {
+    Showtime.resourceDestroy(this.mlv);
+    delete this.mlv
+  }
 }
 
 Item.prototype.toString = function() {
@@ -175,6 +177,11 @@ function Page(root, sync, flat) {
         var nodes = model.nodes;
         var have_more = false;
 
+        if(typeof this.asyncPaginator == 'function') {
+          this.asyncPaginator();
+          return;
+        }
+
         if(typeof this.paginator == 'function') {
 
           try {
@@ -198,6 +205,11 @@ function Page(root, sync, flat) {
     }.bind(this), {
       autoDestroy: true
     });
+}
+
+
+Page.prototype.haveMore = function(v) {
+  Showtime.propHaveMore(this.model.nodes, v);
 }
 
 Page.prototype.findItemByProp = function(v) {
@@ -230,6 +242,29 @@ Page.prototype.appendItem = function(url, type, metadata) {
   root.url = url;
   root.type = type;
   root.metadata = metadata;
+
+  if(type == 'video') {
+
+    var metabind_url = url;
+    if(url.indexOf('videoparams:') == 0) {
+      try {
+        var x = JSON.parse(url.substring(12));
+        if(typeof(x.canonicalUrl) == 'string') {
+          metabind_url = x.canonicalUrl;
+        } else {
+          for(var i = 0; i < x.sources.length; i++) {
+            if(typeof(x.sources[i].url) == 'string') {
+              metabind_url = x.sources[i].url;
+              break;
+            }
+          }
+        }
+      } catch(e) {
+      }
+    }
+    Showtime.bindPlayInfo(root, metabind_url);
+  }
+
   Showtime.propSetParent(root, this.model.nodes);
   return item;
 }

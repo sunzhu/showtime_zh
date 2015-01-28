@@ -62,8 +62,7 @@ id: Time until sleep
 msg: Czas do uśpienia
 
 id: dB
-# Missing translation
-msg: 
+msg: dB 
 
 id: min
 msg: min
@@ -152,8 +151,13 @@ msg: Ustawienia Video
 #
 # ./glwskins/default/loading.view
 #
-id: Bitrate: %d kb/s
-msg: Bitrate: %d kb/s
+id: %d kb/s
+# Missing translation
+msg: 
+
+id: Bitrate:
+# Missing translation
+msg: 
 
 #
 # ./glwskins/default/log.view
@@ -501,8 +505,9 @@ msg: Mała ilość dostępnej pamięci (dostępne %d kB RAM)
 #
 # ./src/arch/ps3/ps3_vdec.c
 #
-id: Cell-h264: %d Ref-frames for 1080 content is incompatible with PS3 HW decoder. Disabling acceleration
-msg: Cell-h264: %d klatek referencyjnych dla jakości 1080 jest niekompatybilna ze sprzętowym dekoderem PS3. Wyłączam akcelerację
+id: Cell-h264: %d Ref-frames for %d content is incompatible with PS3 HW decoder. Disabling acceleration
+# Missing translation
+msg: 
 
 id: Cell-h264: Broken headers, Disabling acceleration
 msg: Cell-h264: Uszkodzony nagłówek, wyłączanie akceleracji
@@ -609,14 +614,8 @@ msg: Typ sygnału testowego
 id: No files in torrent
 msg: Brak plików w torrencie
 
-id: Unable to load torrent: %s
-msg: Nie można załadować torrenta: %s
-
 id: Unable to open torrent: %s
 msg: Nie można otworzyć torrenta: %s
-
-id: Unable to parse torrent: %s
-msg: Nie można zanalizować torrenta: %s
 
 #
 # ./src/backend/bittorrent/diskio.c
@@ -625,20 +624,35 @@ id: Cached torrents use %d MB out of allowed %d MB. Total free space on volume: 
 msg: Zbuforowane torrenty zajmują %d MB z dozwolonych %d MB. Ogół wolnego miejsca na dysku: %d MB
 
 #
-# ./src/backend/bittorrent/magnet.c
+# ./src/backend/bittorrent/fa_torrent.c
 #
-id: Invalid SHA-1 hash: %s
-msg: Błędny hash SHA-1: %s
+id: Connected peers
+# Missing translation
+msg: 
 
-id: No 'xt' in magnet link
-msg: Brak 'xt' w linku magnet
+id: Known peers
+# Missing translation
+msg: 
 
-id: Unknown hash scheme: %s
-msg: Nieznany schemat hash: %s
+id: Receiving from
+# Missing translation
+msg: 
+
+id: Torrent leechers
+# Missing translation
+msg: 
+
+id: Torrent seeders
+# Missing translation
+msg: 
 
 #
 # ./src/backend/bittorrent/torrent_settings.c
 #
+id: Clear cache
+# Missing translation
+msg: 
+
 id: Enable bittorrent
 msg: Włącz BitTorrent
 
@@ -835,8 +849,7 @@ id: BitTorrent
 msg: BitTorrent
 
 id: Browse archives as folders
-# Missing translation
-msg: 
+msg: Przeglądaj archiwa jako foldery
 
 id: Enable file deletion from item menu
 msg: Włącz opcję usuwania pliku w menu
@@ -938,8 +951,7 @@ id: Go to standby after video ends
 msg: Przejdź w stan czuwania po zakończonym video
 
 id: Horizontal pan
-# Missing translation
-msg: 
+msg: Przesunięcie poziome
 
 id: Reset defaults for folder '%s'
 msg: Przywróć ustawienia domyślne dla folderu '%s'
@@ -969,8 +981,7 @@ id: Subtitle vertical displacement
 msg: Przesunięcie napisów w pionie
 
 id: Vertical pan
-# Missing translation
-msg: 
+msg: Przesunięcie pionowe
 
 id: Video frame interpolation
 msg: Interpolacja klatek Video
@@ -1039,8 +1050,7 @@ id: Clear all metadata
 msg: Usuń wszystkie metadane
 
 id: Clearing all metadata means losing <b>all</b> metadata cached from external sources such as themoviedb.org, etc\n\nInformation about resume-points, playcount, etc will be saved.\nAre you sure you proceed?
-# Missing translation
-msg: 
+msg: Wyczyszczenie wszystkich danych oznacza utratę <b>WSZYSTKICH</b> metadanych, pobranych ze źródeł zewnętrznych jak themoviedb.org, itp.\n\nInformacje na temat liczby odtworzeń, punktach wznowień itp. zostaną zachowane.\Czy chcesz kontynuować?
 
 #
 # ./src/metadata/mlp.c
@@ -1574,12 +1584,10 @@ id: Resume video playback
 msg: Wznów odtwarzanie Video
 
 id: Step when seeking backward
-# Missing translation
-msg: 
+msg: Krok przy szukaniu wstecz
 
 id: Step when seeking forward
-# Missing translation
-msg: 
+msg: Krok przy szukaniu do przodu
 
 id: Temporal
 msg: Czasowy

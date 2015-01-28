@@ -62,6 +62,10 @@ typedef struct {
   const char *canonical_url;
 
   int total_duration;  // in ms
+
+  sub_scanner_t *ss;
+  const video_args_t *va;
+  const char *url;
 } rtmp_t;
 
 
@@ -108,6 +112,9 @@ handle_metadata0(rtmp_t *r, AMFObject *obj,
     r->total_duration = prop.p_vu.p_number * 1000;
     mp_set_duration(mp, r->total_duration * 1000LL);
     mp_set_clr_flags(mp, MP_CAN_SEEK, 0);
+
+    if(r->ss == NULL)
+      r->ss = sub_scanner_create(r->url, mp->mp_prop_subtitle_tracks, r->va, 0);
 
   } else {
 
@@ -176,7 +183,7 @@ video_seek(rtmp_t *r, media_pipe_t *mp, media_buf_t **mbp,
   mp->mp_video.mq_seektarget = pos;
   mp->mp_audio.mq_seektarget = pos;
 
-  mp_flush(mp, 0);
+  mp_flush(mp);
 
   if(mbp != NULL && *mbp != NULL) {
     media_buf_free_unlocked(mp, *mbp);
@@ -722,13 +729,13 @@ rtmp_playvideo(const char *url0, media_pipe_t *mp,
   r.canonical_url = va.canonical_url;
   r.restartpos_last = -1;
 
-  sub_scanner_t *ss =
-    sub_scanner_create(url, mp->mp_prop_subtitle_tracks, &va, 0);
-
+  r.url = url;
+  r.va = &va;
   prop_set(mp->mp_prop_root, "loading", PROP_SET_INT, 0);
   e = rtmp_loop(&r, mp, url, errbuf, errlen);
 
-  sub_scanner_destroy(ss);
+  if(r.ss)
+    sub_scanner_destroy(r.ss);
 
   if(r.total_duration) {
     int p = mp->mp_seek_base / (r.total_duration * 10);
@@ -742,7 +749,6 @@ rtmp_playvideo(const char *url0, media_pipe_t *mp,
     }
   }
 
-  mp_flush(mp, 0);
   mp_shutdown(mp);
 
   TRACE(TRACE_DEBUG, "RTMP", "End of stream");

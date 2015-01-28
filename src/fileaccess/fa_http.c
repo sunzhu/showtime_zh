@@ -289,7 +289,9 @@ http_connection_get(const char *hostname, int port, int ssl,
 
   if((tc = tcp_connect(hostname, port, errbuf, errlen,
                        timeout, tcp_connect_flags, c)) == NULL) {
-    HTTP_TRACE(dbg, "Connection to %s:%d failed -- %s", hostname, port, errbuf);
+    HTTP_TRACE(dbg, "Connection to %s:%d failed -- %s%s",
+               hostname, port, errbuf,
+               cancellable_is_cancelled(c) ? ", Cancelled by user" : "");
     return NULL;
   }
   HTTP_TRACE(dbg, "Connected to %s:%d (id=%d)", hostname, port, id);
@@ -1885,7 +1887,8 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
 
     } else {
 
-      HF_TRACE(hf, "read() needs to send a new GET request");
+      HF_TRACE(hf, "read() needs to send a new GET request on connection %d",
+               hc->hc_id);
       read_size = size - totsize;
 
       /* Must send a new request */
@@ -2127,7 +2130,6 @@ http_seek(fa_handle_t *handle, int64_t pos, int whence, int lazy)
 
 	if(!hf_drain_bytes(hf, d)) {
 	  hf->hf_pos = np;
-	  hf->hf_rsize -= d;
 	  return np;
 	}
         http_detach(hf, 0, "Disconnected while draining");
@@ -2332,6 +2334,16 @@ http_get_last_component(struct fa_protocol *fap, const char *url,
 }
 
 
+/**
+ *
+ */
+static int
+http_no_parking(fa_handle_t *fh)
+{
+  http_file_t *hf = (http_file_t *)fh;
+  return hf->hf_connection_mode == CONNECTION_MODE_CLOSE;
+}
+
 
 /**
  *
@@ -2370,6 +2382,7 @@ static fa_protocol_t fa_protocol_http = {
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
   .fap_set_read_timeout = http_set_read_timeout,
+  .fap_no_parking = http_no_parking,
 };
 
 FAP_REGISTER(http);
@@ -2390,6 +2403,7 @@ static fa_protocol_t fa_protocol_https = {
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
   .fap_set_read_timeout = http_set_read_timeout,
+  .fap_no_parking = http_no_parking,
 };
 
 FAP_REGISTER(https);
@@ -2708,6 +2722,7 @@ static fa_protocol_t fa_protocol_webdav = {
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
   .fap_set_read_timeout = http_set_read_timeout,
+  .fap_no_parking = http_no_parking,
 };
 FAP_REGISTER(webdav);
 
@@ -2727,6 +2742,7 @@ static fa_protocol_t fa_protocol_webdavs = {
   .fap_load = http_load,
   .fap_get_last_component = http_get_last_component,
   .fap_set_read_timeout = http_set_read_timeout,
+  .fap_no_parking = http_no_parking,
 };
 FAP_REGISTER(webdavs);
 
@@ -3144,6 +3160,13 @@ http_req_do(http_req_aux_t *hra)
     goto retry;
 
   default:
+
+    if(hra->flags & FA_CONTENT_ON_ERROR && hf->hf_rsize) {
+      HF_TRACE(hf, "%s failed with %d but content is available",
+               hf->hf_url, code);
+      break;
+    }
+
     snprintf(hra->errbuf, hra->errlen, "HTTP error: %d", code);
 
     if(!no_content && http_drain_content(hf))

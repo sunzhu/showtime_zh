@@ -96,11 +96,11 @@ struct event *mb_enqueue_with_events(struct media_pipe *mp,
 void mb_enqueue_always(struct media_pipe *mp, media_queue_t *mq,
                        media_buf_t *mb);
 
-void mp_flush_locked(struct media_pipe *mp);
+void mp_flush_locked(struct media_pipe *mp, int final);
 
-void mp_flush(struct media_pipe *mp, int blackout);
+void mp_flush(struct media_pipe *mp);
 
-void mq_flush(struct media_pipe *mp, media_queue_t *mq, int full);
+void mq_flush(struct media_pipe *mp, media_queue_t *mq, int all);
 
 void mq_init(media_queue_t *mq, prop_t *p, hts_mutex_t *mutex,
              struct media_pipe *mp);

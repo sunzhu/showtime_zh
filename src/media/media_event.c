@@ -102,10 +102,12 @@ mp_seek_in_queues(media_pipe_t *mp, int64_t pos)
 
       mb = media_buf_alloc_locked(mp, 0);
       mb->mb_data_type = MB_CTRL_FLUSH;
+      mb->mb_data32 = 0;
       mb_enq(mp, &mp->mp_video, mb);
 
       mb = media_buf_alloc_locked(mp, 0);
       mb->mb_data_type = MB_CTRL_FLUSH;
+      mb->mb_data32 = 0;
       mb_enq(mp, &mp->mp_audio, mb);
 
       mp_check_underrun(mp);
@@ -135,6 +137,7 @@ mp_direct_seek(media_pipe_t *mp, int64_t ts)
   prop_set_float_ex(mp->mp_prop_currenttime, mp->mp_sub_currenttime,
 		    ts / 1000000.0, 0);
 
+  mp->mp_epoch++;
   mp->mp_seek_base = ts;
 
   if(!mp_seek_in_queues(mp, ts + mp->mp_start_time)) {

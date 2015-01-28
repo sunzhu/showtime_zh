@@ -144,7 +144,7 @@ torrent_write_to_disk(torrent_t *to, torrent_piece_t *tp)
        growth * to->to_piece_length >= btg.btg_cache_limit) {
 
       diskio_trace(to, "Write would exceed cache size, need to cleanup");
-      if(torrent_diskio_scan()) {
+      if(torrent_diskio_scan(0)) {
         // Managed to clean up something
         continue;
       }
@@ -385,7 +385,8 @@ torrent_diskio_verify(torrent_t *to)
 
   htsmsg_t *doc = bencode_deserialize(buf_cstr(b), buf_cstr(b) + buf_size(b),
                                       errbuf, sizeof(errbuf),
-                                      torrent_extract_info_hash, info_hash);
+                                      torrent_extract_info_hash, info_hash,
+                                      NULL);
 
   buf_release(b);
   if(doc == NULL) {
@@ -553,7 +554,7 @@ sf_cmp(const scanned_file_t *a, const scanned_file_t *b)
  *
  */
 int
-torrent_diskio_scan(void)
+torrent_diskio_scan(int force_flush)
 {
   scanned_file_t *sf, *next;
   char tmp[41];
@@ -643,7 +644,8 @@ torrent_diskio_scan(void)
 
     if(!sf->sf_active) {
 
-      if(btg.btg_total_bytes_active + btg.btg_total_bytes_inactive >=
+      if(force_flush ||
+         btg.btg_total_bytes_active + btg.btg_total_bytes_inactive >=
          btg.btg_cache_limit) {
         if(fa_unlink(rstr_get(sf->sf_url), errbuf, sizeof(errbuf))) {
           TRACE(TRACE_ERROR, "BITTORRENT",
@@ -667,6 +669,75 @@ torrent_diskio_scan(void)
     free(sf);
   }
   rstr_release(path);
+  update_disk_usage();
   return rval;
 }
 
+
+
+void
+torrent_diskio_cache_clear(void)
+{
+  torrent_diskio_scan(1);
+}
+
+
+/**
+ *
+ */
+buf_t *
+torrent_diskio_load_infofile_from_hash(const uint8_t *req_hash)
+{
+  char path[PATH_MAX];
+  char str[41];
+  bin2hex(str, sizeof(str), req_hash, 20);
+
+  snprintf(path, sizeof(path), "%s/%s.tc",
+           rstr_get(btg.btg_cache_path), str);
+
+  fa_handle_t *fh = fa_open(path, NULL, 0);
+
+  if(fh == NULL)
+    return NULL;
+
+  uint8_t tmp[8];
+
+  if(fa_read(fh, tmp, sizeof(tmp)) != sizeof(tmp))
+    goto bad;
+
+  uint32_t magic = rd32_be(tmp);
+  if(magic != 'bt02')
+    goto bad;
+
+  unsigned int bencodesize = rd32_be(tmp+4);
+
+  if(bencodesize > 1024 * 1024)
+    goto bad;
+
+  buf_t *b = buf_create(bencodesize);
+  if(fa_read(fh, buf_str(b), bencodesize) != bencodesize)
+    goto bad2;
+
+  uint8_t disk_hash[20] = {0};
+
+  htsmsg_t *doc = bencode_deserialize(buf_cstr(b), buf_cstr(b) + buf_size(b),
+                                      NULL, 0,
+                                      torrent_extract_info_hash, disk_hash,
+                                      NULL);
+
+  if(doc == NULL)
+    goto bad2;
+
+  htsmsg_release(doc);
+
+  if(memcmp(req_hash, disk_hash, 20))
+    goto bad2;
+
+  return b;
+
+ bad2:
+  buf_release(b);
+ bad:
+  fa_close(fh);
+  return NULL;
+}
