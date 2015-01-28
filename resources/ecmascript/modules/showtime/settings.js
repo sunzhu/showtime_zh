@@ -131,6 +131,8 @@ sp.createInt = function(id, title, def, min, max, step, unit,
   var initial = group.getvalue(id, def, 'int', persistent);
   item.model.value = initial;
 
+  prop.setClipRange(item.model.value, min, max);
+
   item.model.min  = min;
   item.model.max  = max;
   item.model.step = step;
@@ -265,7 +267,9 @@ exports.globalSettings = function(id, title, icon, desc) {
 
   this.__proto__ = sp;
 
-  Showtime.fs.mkdirs('settings');
+  var basepath = Showtime.storagePath + '/settings';
+
+  Showtime.fs.mkdirs(basepath);
 
   this.id = id;
 
@@ -283,7 +287,7 @@ exports.globalSettings = function(id, title, icon, desc) {
   metadata.icon = icon;
   metadata.shortdesc = desc;
 
-  var mystore = store.createFromPath('settings/' + id);
+  var mystore = store.createFromPath(basepath + '/' + id);
 
   this.getvalue = function(id, def) {
     return id in mystore ? mystore[id] : def;

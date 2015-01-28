@@ -127,7 +127,7 @@ video_seek(AVFormatContext *fctx, media_pipe_t *mp, media_buf_t **mbp,
   mp->mp_video.mq_seektarget = pos;
   mp->mp_audio.mq_seektarget = pos;
 
-  mp_flush(mp, 0);
+  mp_flush(mp);
   
   if(*mbp != NULL && *mbp != MB_SPECIAL_EOF)
     media_buf_free_unlocked(mp, *mbp);
@@ -356,20 +356,31 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
   if(mb != NULL && mb != MB_SPECIAL_EOF)
     media_buf_free_unlocked(mp, mb);
 
-  // Compute stop position (in percentage of video length)
+  if(fctx->duration != AV_NOPTS_VALUE) {
 
-  int spp = fctx->duration > 0 ? (mp->mp_seek_base * 100 / fctx->duration) : 0;
+    // Compute stop position (in percentage of video length)
 
-  if(spp >= video_settings.played_threshold || event_is_type(e, EVENT_EOF)) {
+    int spp =
+      fctx->duration > 0 ? (mp->mp_seek_base * 100 / fctx->duration) : 0;
+
+    if(spp >= video_settings.played_threshold || event_is_type(e, EVENT_EOF)) {
+      playinfo_set_restartpos(canonical_url, -1, 0);
+      playinfo_register_play(canonical_url, 1);
+      TRACE(TRACE_DEBUG, "Video",
+            "Playback reached %d%%, counting as played (%s)",
+            spp, canonical_url);
+    } else if(last_timestamp_presented != PTS_UNSET) {
+      playinfo_set_restartpos(canonical_url, last_timestamp_presented / 1000,
+                              0);
+    }
+  } else {
+    /*
+     * Hack to wipe out bad records from the db. See #2503
+     * Remove some time in the future.
+     */
     playinfo_set_restartpos(canonical_url, -1, 0);
-    playinfo_register_play(canonical_url, 1);
-    TRACE(TRACE_DEBUG, "Video",
-	  "Playback reached %d%%, counting as played (%s)",
-	  spp, canonical_url);
-  } else if(last_timestamp_presented != PTS_UNSET) {
-    playinfo_set_restartpos(canonical_url, last_timestamp_presented / 1000,
-			    0);
   }
+
   return e;
 }
 
@@ -622,12 +633,14 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
                      video_queue_t *vq, fa_handle_t *fh,
 		     const video_args_t *va0)
 {
+  sub_scanner_t *ss = NULL;
   video_args_t va = *va0;
 
   if(!(va.flags & BACKEND_VIDEO_NO_FILE_HASH)) {
     compute_hash(fh, &va);
     if(!va.hash_valid)
-      TRACE(TRACE_DEBUG, "Video", "Unable to compute opensub hash");
+      TRACE(TRACE_DEBUG, "Video",
+            "Unable to compute opensub hash, stream probably not seekable");
   }
 
   AVIOContext *avio = fa_libav_reopen(fh, 0);
@@ -690,12 +703,14 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
 #endif
 
   /**
-   * Create subtitle scanner
+   * Create subtitle scanner.
+   * Only scan for subs if we can compute hash or if duration is valid
    */
-  sub_scanner_t *ss =
-    sub_scanner_create(url, mp->mp_prop_subtitle_tracks, &va,
-		       fctx->duration != AV_NOPTS_VALUE ? 
-                       fctx->duration / 1000000 : 0);
+  if(fctx->duration != AV_NOPTS_VALUE || va.hash_valid) {
+    ss = sub_scanner_create(url, mp->mp_prop_subtitle_tracks, &va,
+                            fctx->duration != AV_NOPTS_VALUE ?
+                            fctx->duration / 1000000 : 0);
+  }
 
   /**
    * Init codec contexts
@@ -799,9 +814,13 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
 
   mp->mp_start_time = fctx->start_time;
 
+  int flags = MP_CAN_PAUSE;
+
+  if(fctx->duration != PTS_UNSET)
+    flags |= MP_CAN_SEEK;
+
   // Start it
-  mp_configure(mp, MP_CAN_SEEK | MP_CAN_PAUSE,
-	       MP_BUFFER_DEEP, fctx->duration, "video");
+  mp_configure(mp, flags, MP_BUFFER_DEEP, fctx->duration, "video");
 
   if(!(va.flags & BACKEND_VIDEO_NO_AUDIO))
     mp_become_primary(mp);
@@ -824,7 +843,6 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
 
   mp->mp_start_time = 0;
 
-  mp_flush(mp, 0);
   mp_shutdown(mp);
 
   for(i = 0; i < cwvec_size; i++)
@@ -835,7 +853,8 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
 
   media_format_deref(fw);
 
-  sub_scanner_destroy(ss);
+  if(ss != NULL)
+    sub_scanner_destroy(ss);
 
 #if ENABLE_METADATA
   if(md != NULL)

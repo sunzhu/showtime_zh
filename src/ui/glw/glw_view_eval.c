@@ -462,6 +462,38 @@ token2rstr(token_t *t)
 }
 
 
+/**
+ *
+ */
+static token_t *
+token_rgbstr_to_vec(token_t *t, glw_view_eval_context_t *ec)
+{
+  const char *s, *s0;
+  int n = 0;
+  switch(t->type) {
+
+  case TOKEN_RSTRING:
+    s = rstr_get(t->t_rstring);
+    if(s[0] != '#')
+      return t;
+    s++;
+    s0 = s;
+    for(; *s; s++, n++) {
+      if(hexnibble(*s) == -1)
+        return t;
+    }
+    if(n == 3 || n == 6) {
+      t = eval_alloc(t, ec, TOKEN_VECTOR_FLOAT);
+      t->t_elements = 3;
+      rgbstr_to_floatvec(s0, t->t_float_vector);
+    }
+    return t;
+
+  default:
+    return t;
+  }
+}
+
 
 /**
  *
@@ -485,6 +517,9 @@ eval_op(glw_view_eval_context_t *ec, struct token *self)
 
   if(b->type == TOKEN_VOID)
     b = &t_zero;
+
+  a = token_rgbstr_to_vec(a, ec);
+  b = token_rgbstr_to_vec(b, ec);
 
   switch(self->type) {
   case TOKEN_ADD:
@@ -559,17 +594,18 @@ eval_op(glw_view_eval_context_t *ec, struct token *self)
     r->t_float = f_fn(token2float(ec, a), token2float(ec, b));
 
   } else if(a->type == TOKEN_VECTOR_FLOAT && b->type == TOKEN_VECTOR_FLOAT) {
+
     if(a->t_elements != b->t_elements)
-      return glw_view_seterr(ec->ei, self, 
+      return glw_view_seterr(ec->ei, self,
 			      "Arithmetic op is invalid for "
 			      "non-equal sized vectors");
-    
+
     r = eval_alloc(self, ec, TOKEN_VECTOR_FLOAT);
 
     r->t_elements = a->t_elements;
     for(i = 0; i < a->t_elements; i++)
-      r->t_float_vector_int[i] = f_fn(a->t_float_vector_int[i],
-				      b->t_float_vector_int[i]);
+      r->t_float_vector[i] = f_fn(a->t_float_vector[i],
+                                  b->t_float_vector[i]);
 
   } else if(a->type == TOKEN_VECTOR_FLOAT && token_floatish(b)) {
 
@@ -579,7 +615,7 @@ eval_op(glw_view_eval_context_t *ec, struct token *self)
 
     r->t_elements = a->t_elements;
     for(i = 0; i < a->t_elements; i++)
-      r->t_float_vector_int[i] = f_fn(a->t_float_vector_int[i], v);
+      r->t_float_vector[i] = f_fn(a->t_float_vector[i], v);
 
   } else if(token_floatish(a) && b->type == TOKEN_VECTOR_FLOAT) {
 
@@ -589,7 +625,7 @@ eval_op(glw_view_eval_context_t *ec, struct token *self)
 
     r->t_elements = b->t_elements;
     for(i = 0; i < b->t_elements; i++)
-      r->t_float_vector_int[i] = f_fn(v, b->t_float_vector_int[i]);
+      r->t_float_vector[i] = f_fn(v, b->t_float_vector[i]);
   } else {
     r = eval_alloc(self, ec, TOKEN_VOID);
   }
@@ -953,7 +989,7 @@ eval_assign(glw_view_eval_context_t *ec, struct token *self, int how)
 
       break;
     case TOKEN_VOID:
-      if(0 /* not yet */ && left->t_flags & TOKEN_F_PROP_LINK) {
+      if(left->t_flags & TOKEN_F_PROP_LINK) {
         prop_unlink(left->t_prop);
         left->t_flags &= ~TOKEN_F_PROP_LINK;
       } else {
@@ -2426,7 +2462,7 @@ make_vector(glw_view_eval_context_t *ec, token_t *t)
   for(i = t->t_num_args - 1; i >= 0; i--) {
     if((a = token_resolve(ec, eval_pop(ec))) == NULL)
       return -1;
-    r->t_float_vector_int[i] = token2float(ec, a);
+    r->t_float_vector[i] = token2float(ec, a);
   }
   eval_push(ec, r);
   return 0;
@@ -4446,24 +4482,9 @@ glwf_focusedChild(glw_view_eval_context_t *ec, struct token *self,
   ec->dynamic_eval |= GLW_VIEW_EVAL_OTHER;
 
   c = w->glw_focused;
-  if(c != NULL) {
-    if(c->glw_originating_prop != NULL) {
-      r = eval_alloc(self, ec, TOKEN_PROPERTY_REF);
-      r->t_prop = prop_ref_inc(c->glw_originating_prop);
-      eval_push(ec, r);
-      return 0;
-    }
-
-    glw_t *d;
-    int num = 0;
-    TAILQ_FOREACH(d, &w->glw_childs, glw_parent_link) {
-      if(d == c)
-        break;
-      num++;
-    }
-
-    r = eval_alloc(self, ec, TOKEN_INT);
-    r->t_int = num;
+  if(c != NULL && c->glw_originating_prop != NULL) {
+    r = eval_alloc(self, ec, TOKEN_PROPERTY_REF);
+    r->t_prop = prop_ref_inc(c->glw_originating_prop);
     eval_push(ec, r);
     return 0;
   }
@@ -5030,14 +5051,17 @@ glwf_sinewave(glw_view_eval_context_t *ec, struct token *self,
     return -1;
 
   float p = token2float(ec, a);
-  int64_t v64 = gr->gr_time_sec / p * 4096.0;
+  float inc = M_PI * 2  / (p * gr->gr_framerate);
 
-  int v = v64 & 0xfff;
+  self->t_extra_float += inc;
+
+  if(self->t_extra_float >= M_PI * 2)
+    self->t_extra_float -= M_PI * 2;
 
   glw_need_refresh(gr, 0);
 
   r = eval_alloc(self, ec, TOKEN_FLOAT);
-  r->t_float = sin(v * M_PI * 2.0 / 4096.0);
+  r->t_float = sin(self->t_extra_float);
   eval_push(ec, r);
   ec->dynamic_eval |= GLW_VIEW_EVAL_LAYOUT;
   return 0;

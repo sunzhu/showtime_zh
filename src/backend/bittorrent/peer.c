@@ -29,7 +29,7 @@
 #include "htsmsg/htsmsg.h"
 #include "bittorrent.h"
 #include "misc/minmax.h"
-
+#include "bencode.h"
 
 #define BT_MSGID_CHOKE          0x0
 #define BT_MSGID_UNCHOKE        0x1
@@ -45,6 +45,10 @@
 #define BT_MSGID_HAVE_NONE      0xf
 #define BT_MSGID_REJECT         0x10
 #define BT_MSGID_ALLOWED_FAST   0x11
+#define BT_MSGID_EXTENSION      0x14
+
+#define EXTENSION_MSGID_HANDSHAKE 0
+#define EXTENSION_MSGID_METADATA  2
 
 static void peer_shutdown(peer_t *p, int next_state, int resched);
 
@@ -56,6 +60,10 @@ static void peer_send_msgid(peer_t *p, int msgid);
 
 static void peer_send_cancel(peer_t *p, const torrent_request_t *tr);
 
+static void peer_parse_extension(peer_t *p, htsmsg_t *msg, uint8_t msgid,
+                                 const uint8_t *data, size_t len);
+
+static void peer_send_extension_handshake(peer_t *p);
 
 
 #define PEER_DBG_CONN     0x1
@@ -137,6 +145,7 @@ send_handshake(peer_t *p)
   uint8_t *reserved = handshake + 1 + 19;
   memset(reserved, 0, 8);
   reserved[7] = 0x04;
+  reserved[5] = 0x10;
 
   memcpy(handshake + 1 + 19 + 8, to->to_info_hash, 20);
   memcpy(handshake + 1 + 19 + 8 + 20, btg.btg_peer_id, 20);
@@ -170,6 +179,9 @@ peer_abort_requests(peer_t *p)
     return;
 
   asyncio_timer_disarm(&p->p_data_recv_timer);
+
+  if(LIST_FIRST(&p->p_requests) != NULL)
+    p->p_torrent->to_peers_with_outstanding_requests--;
 
   while((tr = LIST_FIRST(&p->p_requests)) != NULL) {
     torrent_block_t *tb = tr->tr_block;
@@ -230,12 +242,51 @@ peer_error_cb(void *opaque, const char *error)
  *
  */
 static void
+peer_destroy_all_metainfo_requests(peer_t *p)
+{
+  metainfo_request_t *mr;
+  if(LIST_FIRST(&p->p_metainfo_requests) == NULL)
+    return;
+
+  while((mr = LIST_FIRST(&p->p_metainfo_requests)) != NULL) {
+    LIST_REMOVE(mr, mr_peer_link);
+    LIST_REMOVE(mr, mr_query_link);
+    free(mr->mr_data);
+    free(mr);
+  }
+  hts_cond_broadcast(&torrent_metainfo_available_cond);
+}
+
+
+/**
+ *
+ */
+static void
 peer_free_pieces(peer_t *p)
 {
   piece_peer_t *pp;
   while((pp = LIST_FIRST(&p->p_pieces)) != NULL)
     torrent_piece_peer_destroy(pp);
 }
+
+
+/**
+ *
+ */
+static void
+peer_destroy_request(torrent_request_t *tr)
+{
+  peer_t *p = tr->tr_peer;
+  assert(p->p_active_requests > 0);
+  p->p_active_requests--;
+  LIST_REMOVE(tr, tr_peer_link);
+
+  if(LIST_FIRST(&p->p_requests) == NULL)
+    p->p_torrent->to_peers_with_outstanding_requests--;
+
+  free(tr);
+}
+
 
 /**
  *
@@ -255,6 +306,11 @@ peer_shutdown(peer_t *p, int next_state, int resched)
   if(p->p_connection != NULL) {
     asyncio_del_fd(p->p_connection);
     p->p_connection = NULL;
+  }
+
+  if(p->p_pending_bitfield != NULL) {
+    free(p->p_pending_bitfield);
+    p->p_pending_bitfield = NULL;
   }
 
   asyncio_timer_disarm(&p->p_ka_send_timer);
@@ -281,6 +337,7 @@ peer_shutdown(peer_t *p, int next_state, int resched)
 
   case PEER_STATE_RUNNING:
     LIST_REMOVE(p, p_running_link);
+    peer_destroy_all_metainfo_requests(p);
     if(p->p_peer_choking == 0) {
       LIST_REMOVE(p, p_unchoked_link);
       p->p_peer_choking = 1;
@@ -419,6 +476,8 @@ recv_handshake(peer_t *p, htsbuf_queue_t *q)
 
   if(reserved[7] & 0x4)
     p->p_fast_ext = 1;
+  if(reserved[5] & 0x10)
+    p->p_ext_prot = 1;
 
   if(memcmp(msg + 1 + 19 + 8, p->p_torrent->to_info_hash, 20)) {
     peer_disconnect(p, "Invalid info hash");
@@ -428,10 +487,13 @@ recv_handshake(peer_t *p, htsbuf_queue_t *q)
   memcpy(p->p_id, msg + 1 + 19 + 8 + 20, 20);
   p->p_id[20] = 0;
 
-  peer_trace(p, PEER_DBG_CONN, "Handshake received%s",
-             p->p_fast_ext ? ", Fast extenions" : "");
+  peer_trace(p, PEER_DBG_CONN, "Handshake received%s%s",
+             p->p_fast_ext ? ", Fast extensions" : "",
+             p->p_ext_prot ? ", Extension Protocol" : "");
 
   send_initial_set(p);
+  if(p->p_ext_prot)
+    peer_send_extension_handshake(p);
   return 0;
 }
 
@@ -448,22 +510,17 @@ peer_have_piece(peer_t *p, uint32_t pid)
   p->p_num_pieces_have++;
 }
 
+
 /**
  *
  */
 static int
-recv_bitfield(peer_t *p, const uint8_t *data, unsigned int len)
+parse_bitfield(peer_t *p, const uint8_t *data, unsigned int len)
 {
-  if(len == 0)
-    return 0;
-
   torrent_t *to = p->p_torrent;
 
-  if((to->to_num_pieces + 7) / 8 != len) {
-    peer_disconnect(p, "Invalid 'bitfield' length got:%d, pieces:%d",
-                    len, to->to_num_pieces);
+  if((to->to_num_pieces + 7) / 8 != len)
     return 1;
-  }
 
   if(p->p_piece_flags == NULL)
     p->p_piece_flags = calloc(1, to->to_num_pieces);
@@ -483,6 +540,37 @@ recv_bitfield(peer_t *p, const uint8_t *data, unsigned int len)
  *
  */
 static int
+recv_bitfield(peer_t *p, const uint8_t *data, unsigned int len)
+{
+  if(len == 0 || len > 8192)
+    return 0;
+
+  torrent_t *to = p->p_torrent;
+
+  if(to->to_metainfo == NULL) {
+
+    free(p->p_pending_bitfield);
+    p->p_pending_bitfield = malloc(len);
+    memcpy(p->p_pending_bitfield, data, len);
+    p->p_pending_bitfield_size = len;
+    peer_trace(p, PEER_DBG_CONN, "Initial bitfield message stashed");
+    return 0;
+  }
+
+  if(parse_bitfield(p, data, len)) {
+    peer_disconnect(p, "Invalid 'bitfield' length got:%d, pieces:%d",
+                    len, to->to_num_pieces);
+    return 1;
+  }
+  return 0;
+
+}
+
+
+/**
+ *
+ */
+static int
 recv_have(peer_t *p, const uint8_t *data, unsigned int len)
 {
   torrent_t *to = p->p_torrent;
@@ -494,6 +582,16 @@ recv_have(peer_t *p, const uint8_t *data, unsigned int len)
 
   unsigned int pid =
     (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+
+  if(to->to_metainfo == NULL) {
+
+    if(p->p_pending_bitfield != NULL) {
+      if(pid / 8 < p->p_pending_bitfield_size)
+        p->p_pending_bitfield[pid / 8] |= 0x80 >> (pid & 0x7);
+    }
+
+    return 0;
+  }
 
   if(pid >= to->to_num_pieces) {
     peer_disconnect(p, "Excessive piece index %d / %d", pid, to->to_num_pieces);
@@ -608,11 +706,7 @@ recv_piece(peer_t *p, const uint8_t *buf, size_t len)
     torrent_receive_block(tr->tr_block, buf, begin, len, to, p);
   }
 
-  assert(p->p_active_requests > 0);
-  p->p_active_requests--;
-  LIST_REMOVE(tr, tr_peer_link);
-  free(tr);
-
+  peer_destroy_request(tr);
   return 0;
 }
 
@@ -671,18 +765,15 @@ recv_reject(peer_t *p, const uint8_t *buf, size_t len)
   }
 
 
-  const torrent_t *to = p->p_torrent;
+  torrent_t *to = p->p_torrent;
 
   if(p->p_piece_flags == NULL)
     p->p_piece_flags = calloc(1, to->to_num_pieces);
 
   p->p_piece_flags[tr->tr_piece] |= PIECE_REJECTED;
 
-  assert(p->p_active_requests > 0);
-  p->p_active_requests--;
-  LIST_REMOVE(tr, tr_peer_link);
-  free(tr);
 
+  peer_destroy_request(tr);
   return 0;
 }
 
@@ -754,6 +845,37 @@ recv_allowed_fast(peer_t *p, const uint8_t *buf, size_t len)
     return 1;
   }
 
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
+recv_extension(peer_t *p, const uint8_t *buf, size_t len)
+{
+  char errbuf[256];
+
+  if(len < 1) {
+    peer_disconnect(p, "Bad request packet length");
+    return 1;
+  }
+  uint8_t msgid = buf[0];
+  int consumed = 0;
+  buf++;
+  len--;
+  const char *d = (const char *)buf;
+  htsmsg_t *msg = bencode_deserialize(d, d + len,
+                                      errbuf, sizeof(errbuf),
+                                      NULL, NULL, &consumed);
+  if(msg == NULL) {
+    peer_disconnect(p, "Bad extension message -- %s", errbuf);
+    return 1;
+  }
+  peer_parse_extension(p, msg, msgid, buf + consumed, len - consumed);
+
+  htsmsg_release(msg);
   return 0;
 }
 
@@ -893,6 +1015,9 @@ recv_message(peer_t *p, htsbuf_queue_t *q)
   case BT_MSGID_REJECT:
     r = recv_reject(p, data, len);
     break;
+  case BT_MSGID_EXTENSION:
+    r = recv_extension(p, data, len);
+    break;
 
   default:
     TRACE(TRACE_ERROR, "BITTORRENT",
@@ -935,9 +1060,10 @@ peer_read_cb(void *opaque, htsbuf_queue_t *q)
         break;
     }
 
-    timeout = 300;
-
-    asyncio_set_timeout(p->p_connection, async_now + timeout * 1000000);
+    if(p->p_connection != NULL) {
+      timeout = 300;
+      asyncio_set_timeout(p->p_connection, async_now + timeout * 1000000);
+    }
     break;
   }
 }
@@ -989,9 +1115,7 @@ void
 peer_cancel_request(torrent_request_t *tr)
 {
   peer_send_cancel(tr->tr_peer, tr);
-  tr->tr_peer->p_active_requests--;
-  LIST_REMOVE(tr, tr_peer_link);
-  free(tr);
+  peer_destroy_request(tr);
 }
 
 
@@ -1170,4 +1294,147 @@ peer_shutdown_all(torrent_t *to)
   peer_t *p;
   while((p = LIST_FIRST(&to->to_peers)) != NULL)
     peer_shutdown(p, PEER_STATE_DESTROYED, 0);
+}
+
+
+/**
+ *
+ */
+void
+peer_activate_pending_data(torrent_t *to)
+{
+  peer_t *p, *next;
+  for(p = LIST_FIRST(&to->to_running_peers); p != NULL; p = next) {
+    next = LIST_NEXT(p, p_running_link);
+
+    if(p->p_pending_bitfield != NULL) {
+      void *d = p->p_pending_bitfield;
+      p->p_pending_bitfield = NULL;
+
+      if(parse_bitfield(p, d, p->p_pending_bitfield_size)) {
+        peer_disconnect(p, "Invalid 'bitfield' length got:%d, pieces:%d",
+                        p->p_pending_bitfield_size, to->to_num_pieces);
+      }
+      free(d);
+    }
+  }
+}
+
+
+/**
+ *
+ */
+static void
+peer_parse_extension_handshake(peer_t *p, htsmsg_t *handshake)
+{
+  htsmsg_t *m = htsmsg_get_map(handshake, "m");
+
+  if(m != NULL) {
+    p->p_ext_ut_metadata = htsmsg_get_u32_or_default(m, "ut_metadata", 0);
+    hts_cond_broadcast(&torrent_metainfo_available_cond);
+  }
+}
+
+
+/**
+ *
+ */
+static void
+peer_parse_extension_metadata(peer_t *p, htsmsg_t *msg,
+                              const uint8_t *data, size_t len)
+{
+  int msg_type   = htsmsg_get_u32_or_default(msg, "msg_type", -1);
+  int piece      = htsmsg_get_u32_or_default(msg, "piece", -1);
+  int total_size = htsmsg_get_u32_or_default(msg, "total_size", 0);
+  metainfo_request_t *mr;
+  if(msg_type != 1 && msg_type != 2)
+    return;
+
+  LIST_FOREACH(mr, &p->p_metainfo_requests, mr_peer_link) {
+
+    if(mr->mr_piece == piece && mr->mr_state == MR_SENT) {
+      if(msg_type == 1) {
+        mr->mr_size = len;
+        mr->mr_data = malloc(len);
+        mr->mr_total_size = total_size;
+        memcpy(mr->mr_data, data, len);
+        mr->mr_state = MR_RECEIVED;
+      } else {
+        mr->mr_state = MR_REJECTED;
+      }
+      hts_cond_broadcast(&torrent_metainfo_available_cond);
+    }
+  }
+}
+
+
+/**
+ *
+ */
+static void
+peer_parse_extension(peer_t *p, htsmsg_t *msg, uint8_t msgid,
+                     const uint8_t *data, size_t len)
+{
+  switch(msgid) {
+  case EXTENSION_MSGID_HANDSHAKE:
+    peer_parse_extension_handshake(p, msg);
+    break;
+  case EXTENSION_MSGID_METADATA:
+    peer_parse_extension_metadata(p, msg, data, len);
+    break;
+  }
+}
+
+
+/**
+ *
+ */
+static void
+peer_send_extension_msg(peer_t *p, htsmsg_t *msg, uint8_t msgid)
+{
+  buf_t *b = bencode_serialize(msg);
+  htsmsg_release(msg);
+
+  uint8_t buf[6] = {0,0,0,0,BT_MSGID_EXTENSION,msgid};
+  wr32_be(buf, buf_len(b) + 2);
+  //  hexdump("EXTHDR", buf, sizeof(buf));
+  //  hexdump("EXTDAT", buf_cstr(b), buf_len(b));
+  asyncio_send(p->p_connection, buf, sizeof(buf), 1);
+  asyncio_send(p->p_connection, buf_cstr(b), buf_len(b), 0);
+  buf_release(b);
+}
+
+/**
+ *
+ */
+static void
+peer_send_extension_handshake(peer_t *p)
+{
+  char version[128];
+  htsmsg_t *handshake = htsmsg_create_map();
+
+  htsmsg_t *m = htsmsg_create_map();
+  htsmsg_add_u32(m, "ut_metadata", EXTENSION_MSGID_METADATA);
+  htsmsg_add_msg(handshake, "m", m);
+
+  snprintf(version, sizeof(version), "Showtime %s", htsversion);
+  htsmsg_add_str(handshake, "v", version);
+  peer_send_extension_msg(p, handshake, EXTENSION_MSGID_HANDSHAKE);
+}
+
+
+/**
+ *
+ */
+void
+peer_send_metainfo_request(peer_t *p, metainfo_request_t *mr)
+{
+  mr->mr_state = MR_SENT;
+
+  htsmsg_t *req = htsmsg_create_map();
+  htsmsg_add_u32(req, "msg_type", 0); // 0 == request
+  htsmsg_add_u32(req, "piece", mr->mr_piece);
+  peer_send_extension_msg(p, req, p->p_ext_ut_metadata);
+  peer_trace(p, PEER_DBG_DOWNLOAD,
+             "Requesting metadata piece %d", mr->mr_piece);
 }

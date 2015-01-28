@@ -62,8 +62,14 @@ http_callback(http_req_aux_t *req, void *opaque)
   if(b != NULL) {
     msg = bencode_deserialize(buf_cstr(b),
                               buf_cstr(b) + buf_size(b),
-                              errbuf, sizeof(errbuf), NULL, NULL);
+                              errbuf, sizeof(errbuf), NULL, NULL, NULL);
     if(msg != NULL) {
+
+      if(gconf.enable_torrent_tracker_debug) {
+        TRACE(TRACE_DEBUG, "TRACKER", "%s: Decoded response:",
+              tt->tt_tracker->t_url);
+        htsmsg_print("TRACKER", msg);
+      }
 
       const char *err = htsmsg_get_str(msg, "failure reason");
       if(err != NULL) {
@@ -75,6 +81,9 @@ http_callback(http_req_aux_t *req, void *opaque)
 
       if(trackerid != NULL)
         mystrset(&tt->tt_trackerid, trackerid);
+
+      tt->tt_seeders  = htsmsg_get_u32_or_default(msg, "complete", 0);
+      tt->tt_leechers = htsmsg_get_u32_or_default(msg, "incomplete", 0);
 
       tt->tt_interval =
         htsmsg_get_u32_or_default(msg, "min interval",
@@ -159,7 +168,7 @@ tracker_http_torrent_announce(tracker_torrent_t *tt, int event)
                      HTTP_ARGINT("compact", 1),
                      HTTP_ARGINT64("uploaded", to->to_uploaded_bytes),
                      HTTP_ARGINT64("downloaded", to->to_downloaded_bytes),
-                     HTTP_ARGINT64("left", to->to_remaining_bytes),
+                     HTTP_ARGINT64("left", to->to_total_length ?: 16384),
                      HTTP_ARG("event", eventstr),
                      HTTP_ARG("trackerid", tt->tt_trackerid),
                      HTTP_RESULT_PTR(HTTP_BUFFER_INTERNALLY),

@@ -198,28 +198,30 @@ swthread(void *aux)
 
   upgrade_init();
 
-  for(int i = 0; i < 10; i++) {
-    if(!plugins_upgrade_check())
-      break;
-    TRACE(TRACE_DEBUG, "plugins",
-          "Failed to update repo, retrying in %d seconds", i + 1);
-    sleep(i + i);
+  if(!gconf.disable_upgrades) {
+
+    for(int i = 0; i < 10; i++) {
+      if(!plugins_upgrade_check())
+        break;
+      TRACE(TRACE_DEBUG, "plugins",
+            "Failed to update repo, retrying in %d seconds", i + 1);
+      sleep(i + i);
+    }
+
+    for(int i = 0; i < 10; i++) {
+      if(!upgrade_refresh())
+        break;
+      sleep(i + 1);
+      TRACE(TRACE_DEBUG, "upgrade",
+            "Failed to check for app upgrade, retrying in %d seconds", i + 1);
+    }
+
+    usage_report_send(1);
   }
-
-  for(int i = 0; i < 10; i++) {
-    if(!upgrade_refresh())
-      break;
-    sleep(i + 1);
-    TRACE(TRACE_DEBUG, "upgrade",
-          "Failed to check for app upgrade, retrying in %d seconds", i + 1);
-  }
-
-  usage_report_send(1);
-
   hts_mutex_lock(&gconf.state_mutex);
   gconf.swrefresh = 0;
 
-  while(1) {
+  while(!gconf.disable_upgrades) {
 
     int timeout = 0;
 
@@ -238,6 +240,7 @@ swthread(void *aux)
     usage_report_send(0);
     hts_mutex_lock(&gconf.state_mutex);
   }
+  hts_mutex_unlock(&gconf.state_mutex);
   return NULL;
 }
 
@@ -501,6 +504,10 @@ parse_opts(int argc, char **argv)
       gconf.disable_sd = 1;
       argc -= 1; argv += 1;
       continue;
+    } else if(!strcmp(argv[0], "--disable-upgrades")) {
+      gconf.disable_upgrades = 1;
+      argc -= 1; argv += 1;
+      continue;
     } else if(!strcmp(argv[0], "--with-standby")) {
       gconf.can_standby = 1;
       argc -= 1; argv += 1;
@@ -537,6 +544,9 @@ parse_opts(int argc, char **argv)
       gconf.load_jsfile = argv[1];
       argc -= 2; argv += 2;
       continue;
+    } else if(!strcmp(argv[0], "--bypass-ecmascript-acl")) {
+      gconf.bypass_ecmascript_acl = 1;
+      argc -= 1; argv += 1;
     } else if(!strcmp(argv[0], "--ecmascript") && argc > 1) {
       gconf.load_ecmascript = argv[1];
       argc -= 2; argv += 2;

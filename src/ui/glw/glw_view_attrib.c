@@ -25,6 +25,7 @@
 #include <stdarg.h>
 
 #include "misc/strtab.h"
+#include "misc/str.h"
 #include "glw_view.h"
 #include "glw.h"
 #include "glw_event.h"
@@ -611,6 +612,7 @@ set_float3(glw_view_eval_context_t *ec, const token_attrib_t *a,
   const float *vec3;
   float v[3];
   glw_t *w = ec->w;
+  const char *s;
 
   switch(t->type) {
   case TOKEN_VECTOR_FLOAT:
@@ -618,7 +620,7 @@ set_float3(glw_view_eval_context_t *ec, const token_attrib_t *a,
     switch(t->t_elements) {
 
     case 3:
-      vec3 = t->t_float_vector_int;
+      vec3 = t->t_float_vector;
       break;
 
     default:
@@ -648,6 +650,15 @@ set_float3(glw_view_eval_context_t *ec, const token_attrib_t *a,
     v[0] = v[1] = v[2] = 0;
     vec3 = v;
     break;
+
+  case TOKEN_RSTRING:
+    s = rstr_get(t->t_rstring);
+    if(s[0] == '#') {
+      rgbstr_to_floatvec(s + 1, v);
+      vec3 = v;
+      break;
+    }
+    // FALLTHRU
   default:
     return glw_view_seterr(ec->ei, t, "Attribute '%s' expects a vec3, got %s",
 			   a->name, token2name(t));
@@ -687,14 +698,14 @@ set_float4(glw_view_eval_context_t *ec, const token_attrib_t *a,
     switch(t->t_elements) {
 
     case 4:
-      vec4 = t->t_float_vector_int;
+      vec4 = t->t_float_vector;
       break;
 
     case 2:
-      v[0] = t->t_float_vector_int[0];
-      v[1] = t->t_float_vector_int[1];
-      v[2] = t->t_float_vector_int[0];
-      v[3] = t->t_float_vector_int[1];
+      v[0] = t->t_float_vector[0];
+      v[1] = t->t_float_vector[1];
+      v[2] = t->t_float_vector[0];
+      v[3] = t->t_float_vector[1];
       vec4 = v;
       break;
 
@@ -758,17 +769,17 @@ set_int16_4(glw_view_eval_context_t *ec, const token_attrib_t *a,
     switch(t->t_elements) {
 
     case 4:
-      v[0] = t->t_float_vector_int[0];
-      v[1] = t->t_float_vector_int[1];
-      v[2] = t->t_float_vector_int[2];
-      v[3] = t->t_float_vector_int[3];
+      v[0] = t->t_float_vector[0];
+      v[1] = t->t_float_vector[1];
+      v[2] = t->t_float_vector[2];
+      v[3] = t->t_float_vector[3];
       break;
 
     case 2:
-      v[0] = t->t_float_vector_int[0];
-      v[1] = t->t_float_vector_int[1];
-      v[2] = t->t_float_vector_int[0];
-      v[3] = t->t_float_vector_int[1];
+      v[0] = t->t_float_vector[0];
+      v[1] = t->t_float_vector[1];
+      v[2] = t->t_float_vector[0];
+      v[3] = t->t_float_vector[1];
       break;
 
     default:

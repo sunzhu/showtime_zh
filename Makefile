@@ -114,6 +114,7 @@ SRCS +=	src/image/image.c \
 	src/image/jpeg.c \
 	src/image/vector.c \
 	src/image/image_decoder_libav.c \
+	src/image/dominantcolor.c \
 
 ##############################################################
 # Misc support
@@ -239,7 +240,7 @@ SRCS-$(CONFIG_LOCATEDB)        += src/fileaccess/fa_locatedb.c
 SRCS-$(CONFIG_SPOTLIGHT)       += src/fileaccess/fa_spotlight.c
 SRCS-$(CONFIG_READAHEAD_CACHE) += src/fileaccess/fa_cache.c
 SRCS-$(CONFIG_LIBNTFS)         += src/fileaccess/fa_ntfs.c
-SRCS-$(CONFIG_NATIVESMB)       += src/fileaccess/fa_nativesmb.c
+SRCS-$(CONFIG_NATIVESMB)       += src/fileaccess/smb/fa_nativesmb.c
 SRCS-$(CONFIG_RAR)             += src/fileaccess/fa_rar.c
 SRCS-$(CONFIG_SID)             += src/fileaccess/fa_sidfile.c \
 				  ext/audio/sid.c
@@ -360,6 +361,7 @@ SRCS-$(CONFIG_BITTORRENT) += \
 	src/backend/bittorrent/tracker_udp.c \
 	src/backend/bittorrent/tracker_http.c \
 	src/backend/bittorrent/bencode.c \
+	src/backend/bittorrent/magnet.c \
 
 
 ##############################################################
@@ -372,7 +374,9 @@ BUNDLES-$(CONFIG_HTSP) += resources/tvheadend
 ##############################################################
 # TV
 ##############################################################
-SRCS-$(CONFIG_HLS)  += src/backend/hls/hls.c \
+SRCS-$(CONFIG_HLS) += \
+	src/backend/hls/hls.c \
+	src/backend/hls/hls_ts.c \
 
 ##############################################################
 # Icecast
@@ -384,14 +388,6 @@ SRCS-$(CONFIG_ICECAST)  += src/backend/icecast/icecast.c \
 ##############################################################
 SRCS-${CONFIG_SPOTIFY} += src/backend/spotify/spotify.c
 BUNDLES-$(CONFIG_SPOTIFY) += resources/spotify
-
-##############################################################
-# libsidplay2
-##############################################################
-
-SRCS-${CONFIG_LIBSIDPLAY2} += \
-	src/backend/sid/sid_wrapper.cpp \
-	src/backend/sid/sid.c
 
 ##############################################################
 # GLW user interface
@@ -747,7 +743,7 @@ SRCS-$(CONFIG_METADATA) += src/ecmascript/es_metadata.c
 SRCS-$(CONFIG_SQLITE) += src/ecmascript/es_sqlite.c
 
 ${BUILDDIR}/ext/duktape/%.o : CFLAGS = -Wall ${OPTFLAGS} \
- -fstrict-aliasing -std=c99  -DDUK_OPT_ASSERTIONS #-DDUK_OPT_DEBUG -DDUK_OPT_DPRINT -DDUK_OPT_DDPRINT -DDUK_OPT_DDDPRINT
+ -fstrict-aliasing -std=c99 #-DDUK_OPT_ASSERTIONS #-DDUK_OPT_DEBUG -DDUK_OPT_DPRINT -DDUK_OPT_DDPRINT -DDUK_OPT_DDDPRINT
 
 include src/arch/${OS}/${OS}.mk
 
@@ -791,7 +787,7 @@ $(foreach VAR,$(BRIEF), \
     $(eval $(VAR) = @$$(call ECHO,$(VAR),$$(MSG)); $($(VAR))))
 endif
 
-.PHONY:	clean distclean makever
+.PHONY:	clean distclean makever build-%
 
 ${PROG}: $(OBJS) $(ALLDEPS)  support/dataroot/wd.c
 	$(CC) -o $@ $(OBJS) support/dataroot/wd.c $(LDFLAGS) ${LDFLAGS_cfg}
@@ -875,7 +871,9 @@ export BUILDDIR
 export OPTFLAGS
 
 # External builds
-$(BUILDDIR)/stamps/%.stamp:
-	${MAKE} -f ${C}/ext/$*.mk build
+$(BUILDDIR)/stamps/%.stamp: build-%
 	@mkdir -p $(dir $@)
 	touch $@
+
+build-%:
+	${MAKE} -f ${C}/ext/$*.mk build
