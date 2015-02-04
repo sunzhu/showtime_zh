@@ -272,9 +272,11 @@ showtime_init(void)
 
   gconf.exit_code = 1;
 
-  net_init();
+  asyncio_init_early();
+  init_group(INIT_GROUP_NET);
 
   unicode_init();
+
 
   /* Initialize property tree */
   prop_init();
@@ -375,7 +377,7 @@ showtime_init(void)
   audio_init();
 
   /* Initialize plugin manager */
-  plugins_init(gconf.devplugin);
+  plugins_init(gconf.devplugins);
 
   /* Start software installer thread (plugins, upgrade, etc) */
   hts_thread_create_detached("swinst", swthread, NULL, THREAD_PRIO_BGTASK);
@@ -402,7 +404,7 @@ showtime_init(void)
   init_group(INIT_GROUP_API);
 
   /* Asynchronous IO (Used by HTTP server, etc) */
-  asyncio_init();
+  asyncio_start();
 
   runcontrol_init();
 
@@ -533,7 +535,7 @@ parse_opts(int argc, char **argv)
       argc -= 1; argv += 1;
       continue;
     } else if(!strcmp(argv[0], "-p") && argc > 1) {
-      gconf.devplugin = argv[1];
+      strvec_addp(&gconf.devplugins,argv[1]);
       argc -= 2; argv += 2;
       continue;
     } else if(!strcmp(argv[0], "--plugin-repo") && argc > 1) {

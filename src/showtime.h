@@ -257,7 +257,7 @@ typedef struct gconf {
   int enable_torrent_peer_download_debug;
 
 
-  const char *devplugin;
+  char **devplugins;
   const char *plugin_repo;
   const char *load_jsfile;
   const char *load_ecmascript;
@@ -318,6 +318,7 @@ extern const char *htsversion_full;
 typedef struct inithelper {
   struct inithelper *next;
   enum {
+    INIT_GROUP_NET,
     INIT_GROUP_API,
     INIT_GROUP_IPC,
     INIT_GROUP_STATIC_APPS,
