@@ -264,7 +264,7 @@ libav_video_flush(media_codec_t *mc, video_decoder_t *vd)
 
   while(1) {
     avcodec_decode_video2(ctx, vd->vd_frame, &got_pic, &avpkt);
-    if(got_pic)
+    if(!got_pic)
       break;
     av_frame_unref(frame);
   };
@@ -412,11 +412,8 @@ media_codec_create_lavc(media_codec_t *cw, const media_codec_params_t *mcp,
     cw->ctx->extradata_size = mcp->extradata_size;
   }
 
-  if(cw->codec_id == AV_CODEC_ID_H264 && gconf.concurrency > 1) {
-    cw->ctx->thread_count = gconf.concurrency;
-    if(mcp && mcp->cheat_for_speed)
-      cw->ctx->flags2 |= CODEC_FLAG2_FAST;
-  }
+  if(mcp && mcp->cheat_for_speed)
+    cw->ctx->flags2 |= CODEC_FLAG2_FAST;
 
   if(codec->type == AVMEDIA_TYPE_VIDEO) {
 
