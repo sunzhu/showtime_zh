@@ -63,8 +63,6 @@ typedef struct ts_demuxer {
     TD_MUX_MODE_RAW,
   } td_mux_mode;
 
-  int td_drive_clock;
-
   uint8_t td_buf[2048];
   int td_buf_bytes;
 
@@ -588,7 +586,7 @@ enqueue_packet(ts_demuxer_t *td, const void *data, int len,
   mb->mb_keyframe = keyframe;
   mb->mb_sequence = seq;
   mb->mb_epoch = td->td_mp->mp_epoch;
-  mb->mb_drive_clock = td->td_drive_clock;
+  mb->mb_drive_clock = te->te_data_type == MB_VIDEO;
 
   if(mb->mb_keyframe && !te->te_logged_keyframe) {
     te->te_logged_keyframe = 1;
@@ -866,6 +864,26 @@ hls_ts_demuxer_close(hls_variant_t *hv)
 }
 
 
+/**
+ *
+ */
+static void
+hls_ts_demuxer_flush(hls_variant_t *hv)
+{
+  ts_demuxer_t *td = hv->hv_demuxer_private;
+  ts_es_t *te;
+
+  LIST_FOREACH(te, &td->td_elemtary_streams, te_link) {
+    media_codec_t *mc = te->te_codec;
+    if(mc == NULL)
+      continue;
+
+    av_parser_close(mc->parser_ctx);
+    mc->parser_ctx = av_parser_init(mc->codec_id);
+  }
+}
+
+
 
 /**
  *
@@ -1034,14 +1052,19 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
       TAILQ_INIT(&td->td_packets);
       assert(hv->hv_demuxer_close == NULL);
       hv->hv_demuxer_close = hls_ts_demuxer_close;
+      hv->hv_demuxer_flush = hls_ts_demuxer_flush;
       td->td_mp = mp;
       td->td_hd = hd;
-      td->td_drive_clock = hd == &hd->hd_hls->h_primary;
     }
 
     media_buf_t *mb = get_pkt(td);
     if(mb != NULL)
       return mb;
+
+    if(hd->hd_seek_to_segment != PTS_UNSET && hv->hv_current_seg != NULL) {
+      hls_segment_close(hv->hv_current_seg);
+      hv->hv_current_seg = NULL;
+    }
 
     if(hv->hv_current_seg == NULL || hv->hv_current_seg->hs_fh == NULL) {
 
