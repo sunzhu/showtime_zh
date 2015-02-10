@@ -1282,12 +1282,15 @@ static void __attribute__((unused))
 print_ts(media_buf_t *mb)
 {
   if(mb == HLS_EOF)
-    printf("%8s:%5s:%-20s %-20s", "", "", "EOF", "");
+    printf("%5s:%8s:%5s:%-20s %-20s", "", "", "", "EOF", "");
   else if(mb->mb_dts == PTS_UNSET)
-    printf("%08x:%5d:%-20s %-20s", mb->mb_epoch, mb->mb_sequence, "UNSET", "");
+    printf("%5s:%08x:%5d:%-20s %-20s",
+           mb->mb_data_type == MB_VIDEO ? "VIDEO" : "AUDIO",
+           mb->mb_epoch, mb->mb_sequence, "UNSET", "");
   else
-    printf("%08x:%5d:%-20"PRId64" %-20"PRId64, mb->mb_epoch,
-           mb->mb_sequence, mb->mb_dts, mb->mb_delta);
+    printf("%5s:%08x:%5d:%-20"PRId64" %-20"PRId64,
+           mb->mb_data_type == MB_VIDEO ? "VIDEO" : "AUDIO",
+           mb->mb_epoch, mb->mb_sequence, mb->mb_dts, mb->mb_delta);
 }
 
 /**
@@ -1404,14 +1407,13 @@ hls_play(hls_t *h, media_pipe_t *mp, char *errbuf, size_t errlen,
 
   mp_event_set_callback(mp, hls_event_callback, h);
 
-  if(va->flags & BACKEND_VIDEO_RESUME) {
-    int64_t start = playinfo_get_restartpos(canonical_url) * 1000;
-    if(start) {
-      TRACE(TRACE_DEBUG, "HLS", "Attempting to resume from %.2f seconds",
-            start / 1000000.0f);
-      mp->mp_seek_base = start;
-      h->h_pending_seek = start;
-    }
+  int64_t start = playinfo_get_restartpos(canonical_url,
+                                          va->title, va->resume_mode) * 1000;
+  if(start) {
+    TRACE(TRACE_DEBUG, "HLS", "Attempting to resume from %.2f seconds",
+          start / 1000000.0f);
+    mp->mp_seek_base = start;
+    h->h_pending_seek = start;
   }
 
   h->h_primary.hd_current = hls_select_default_variant(&h->h_primary);
