@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -28,7 +26,7 @@
 #include <limits.h>
 #include <dirent.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "upgrade.h"
 #include "arch/arch.h"
 #include "arch/halloc.h"
@@ -56,7 +54,7 @@ extern char *showtime_bin;
 
 static HTS_MUTEX_DECL(upgrade_mutex);
 
-static const char *ctrlbase = "https://showtimemediacenter.com/upgrade/1";
+static const char *ctrlbase = "https://movian.tv/upgrade/1";
 static const char *artifact_type;
 static const char *archname;
 
@@ -76,7 +74,7 @@ static int inhibit_checks = 1;
 static prop_t *news_ref;
 
 #if STOS
-static const char *ctrlbase_stos = "https://showtimemediacenter.com/stos/1";
+static const char *ctrlbase_stos = "https://movian.tv/stos/1";
 static int stos_upgrade_needed;
 static int stos_current_version;
 static int stos_req_version;
@@ -550,7 +548,7 @@ stos_check_upgrade(void)
     return -1;
   }
 
-  stos_avail_version = showtime_parse_version_int(version);
+  stos_avail_version = parse_version_int(version);
   TRACE(TRACE_DEBUG, "STOS", "Available version: %s (%d)",
 	version, stos_avail_version);
   
@@ -664,7 +662,7 @@ check_upgrade(int set_news)
 
     const char *stosVersion = htsmsg_get_str(manifest, "stosVersion");
     if(stosVersion != NULL) {
-      stos_req_version = showtime_parse_version_int(stosVersion);
+      stos_req_version = parse_version_int(stosVersion);
 
       if(stos_current_version < stos_req_version) {
 	stos_upgrade_needed = 1;
@@ -737,8 +735,8 @@ check_upgrade(int set_news)
   int canUpgrade = gconf.enable_omnigrade;
   
   if(ver != NULL) {
-    int current_ver = showtime_get_version_int();
-    int available_ver = showtime_parse_version_int(ver);
+    int current_ver = app_get_version_int();
+    int available_ver = parse_version_int(ver);
     if(available_ver > current_ver) {
       canUpgrade = 1;
     }
@@ -755,10 +753,10 @@ check_upgrade(int set_news)
   news_ref = NULL;
 
   if(set_news && canUpgrade) {
-    rstr_t *r = _("Showtime version %s is available");
+    rstr_t *r = _("%s version %s is available");
     rstr_t *s = _("Open download page");
     char buf[128];
-    snprintf(buf, sizeof(buf), rstr_get(r), ver);
+    snprintf(buf, sizeof(buf), rstr_get(r), APPNAMEUSER, ver);
     news_ref = add_news(buf, buf, "showtime:upgrade", rstr_get(s));
     rstr_release(r);
     rstr_release(s);
@@ -984,7 +982,7 @@ attempt_upgrade(int accept_patch)
 		  showtime_download_url,
 		  showtime_download_size,
 		  showtime_download_digest,
-		  "Showtime", 0, overwrite,
+		  APPNAMEUSER, 0, overwrite,
                   accept_patch ? fname : NULL))
     return 1;
 
@@ -999,10 +997,10 @@ attempt_upgrade(int accept_patch)
 
 #if STOS
   if(stos_upgrade_needed)
-    showtime_shutdown(SHOWTIME_EXIT_REBOOT);
+    app_shutdown(APP_EXIT_REBOOT);
   else
 #endif
-    showtime_shutdown(SHOWTIME_EXIT_RESTART);
+    app_shutdown(APP_EXIT_RESTART);
   return 0;
 }
 
@@ -1092,7 +1090,7 @@ stos_get_current_version(void)
     char *x = strchr(buf, '\n');
     if(x)
       *x = 0;
-    stos_current_version = showtime_parse_version_int(buf);
+    stos_current_version = parse_version_int(buf);
     TRACE(TRACE_DEBUG, "STOS", "Current version: %s (%d)", buf, 
 	  stos_current_version);
   }

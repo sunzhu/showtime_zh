@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,16 +17,9 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-#include <assert.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <stdio.h>
-#include "arch/halloc.h"
 
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess.h"
 #include "fa_proto.h"
 
@@ -84,9 +76,9 @@ static int
 bwlimit_read(fa_handle_t *handle, void *buf, size_t size)
 {
   bwlimit_t *s = (bwlimit_t *)handle;
-  int64_t ts = showtime_get_ts();
+  int64_t ts = arch_get_ts();
   int r = fa_read(s->s_src, buf, size);
-  ts = showtime_get_ts() - ts;
+  ts = arch_get_ts() - ts;
 
   int64_t delay = s->s_spill + r * 1000000LL / s->s_bps - ts;
 

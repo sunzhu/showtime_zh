@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2013 Andreas Öman
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -13,12 +13,14 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *  This program is also available under a commercial proprietary license.
+ *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <string.h>
 #include <unistd.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "navigator.h"
 #include "backend/backend.h"
 #include "misc/sha.h"
@@ -121,7 +123,7 @@ metainfo_load(torrent_t *to, char *errbuf, size_t errlen)
   hts_mutex_assert(&bittorrent_mutex);
 
   // Compute final deadline for getting metadata
-  int64_t deadline = showtime_get_ts() + 120 * 1000000LL;
+  int64_t deadline = arch_get_ts() + 120 * 1000000LL;
 
   while(1) {
 
@@ -132,7 +134,7 @@ metainfo_load(torrent_t *to, char *errbuf, size_t errlen)
     for(int piece = 0; piece < num_pieces; piece++) {
 
       int max_active_requests = 1;
-      int64_t piece_start = showtime_get_ts();
+      int64_t piece_start = arch_get_ts();
       metainfo_request_t *mr;
       peer_t *p;
       struct metainfo_request_list requests;
@@ -210,7 +212,7 @@ metainfo_load(torrent_t *to, char *errbuf, size_t errlen)
                               &bittorrent_mutex, 1000);
 
 
-        int64_t now = showtime_get_ts();
+        int64_t now = arch_get_ts();
 
         if(now > deadline) {
           buf_release(r);

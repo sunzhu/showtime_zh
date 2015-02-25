@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,13 +17,11 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-
 #include <X11/Xlib.h>
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtk.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "arch/arch.h"
 #include "arch/posix/posix.h"
 #include "linux.h"
@@ -163,7 +160,7 @@ main(int argc, char **argv)
 
   linux_init();
 
-  showtime_init();
+  main_init();
 
   if(gconf.ui && !strcmp(gconf.ui, "gu"))
     ui_wanted = &ui_gu;
@@ -176,15 +173,11 @@ main(int argc, char **argv)
 		 PROP_TAG_COURIER, glibcourier, 
 		 NULL);
 
-#if ENABLE_WEBPOPUP
-  linux_webpopup_init();
-#endif
-
   add_xdg_paths();
 
   mainloop();
 
-  showtime_fini();
+  main_fini();
 
   arch_exit();
 }

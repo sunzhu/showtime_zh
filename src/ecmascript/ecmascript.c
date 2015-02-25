@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2014 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,15 +17,14 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <unistd.h>
-#include "showtime.h"
+#include "main.h"
 #include "arch/arch.h"
 #include "fileaccess/fileaccess.h"
 #include "backend/backend.h"
 #include "htsmsg/htsmsg.h"
 #include "ecmascript.h"
-
+#include "misc/minmax.h"
 
 static int es_num_contexts;
 static struct es_context_list es_contexts;
@@ -344,7 +342,7 @@ es_create_env(es_context_t *ec, const char *loaddir, const char *storage)
 
   int obj_idx = duk_push_object(ctx);
 
-  duk_push_int(ctx, showtime_get_version_int());
+  duk_push_int(ctx, app_get_version_int());
   duk_put_prop_string(ctx, obj_idx, "currentVersionInt");
 
   duk_push_string(ctx, htsversion);
@@ -742,33 +740,33 @@ ecmascript_plugin_load(const char *id, const char *url,
 
   if(version == 1) {
 
-    int64_t ts0 = showtime_get_ts();
+    int64_t ts0 = arch_get_ts();
 
     if(es_load_and_compile(ec,
                            "dataroot://resources/ecmascript/legacy/api-v1.js"))
       goto bad;
 
-    int64_t ts1 = showtime_get_ts();
+    int64_t ts1 = arch_get_ts();
 
     if(duk_pcall(ctx, 0)) {
       es_dump_err(ctx);
       goto bad;
     }
 
-    int64_t ts2 = showtime_get_ts();
+    int64_t ts2 = arch_get_ts();
 
     if(es_load_and_compile(ec, url)) {
       duk_pop(ctx);
       goto bad;
     }
 
-    int64_t ts3 = showtime_get_ts();
+    int64_t ts3 = arch_get_ts();
 
     duk_swap_top(ctx, 0);
     if(duk_pcall_method(ctx, 0))
       es_dump_err(ctx);
 
-    int64_t ts4 = showtime_get_ts();
+    int64_t ts4 = arch_get_ts();
 
     es_debug(ec, "API v1 emulation: Compile:%dms Exec:%dms",
              ((int)(ts1 - ts0)) / 1000,

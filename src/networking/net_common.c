@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,15 +17,13 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdlib.h>
 
-#include <sys/socket.h>
-
 #include "misc/minmax.h"
+#include "misc/bytestream.h"
 #include "net_i.h"
 
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess/smb/nmb.h"
 
 /**
@@ -225,54 +222,6 @@ tcp_read_data_nowait(tcpcon_t *tc, char *buf, const size_t bufsize)
 }
 
 
-#include <netinet/in.h>
-
-/**
- *
- */
-static void
-net_addr_from_sockaddr_in(net_addr_t *na, const struct sockaddr_in *sin)
-{
-  na->na_family = 4;
-  na->na_port = ntohs(sin->sin_port);
-  memcpy(na->na_addr, &sin->sin_addr, 4);
-}
-
-
-/**
- *
- */
-void
-net_local_addr_from_fd(net_addr_t *na, int fd)
-{
-  socklen_t slen = sizeof(struct sockaddr_in);
-  struct sockaddr_in self;
-
-  if(!getsockname(fd, (struct sockaddr *)&self, &slen)) {
-    net_addr_from_sockaddr_in(na, &self);
-  } else {
-    memset(na, 0, sizeof(net_addr_t));
-  }
-}
-
-
-/**
- *
- */
-void
-net_remote_addr_from_fd(net_addr_t *na, int fd)
-{
-  socklen_t slen = sizeof(struct sockaddr_in);
-  struct sockaddr_in self;
-
-  if(!getpeername(fd, (struct sockaddr *)&self, &slen)) {
-    net_addr_from_sockaddr_in(na, &self);
-  } else {
-    memset(na, 0, sizeof(net_addr_t));
-  }
-}
-
-
 /**
  *
  */
@@ -292,8 +241,8 @@ net_fmt_host(char *dst, size_t dstlen, const net_addr_t *na)
     break;
 
   default:
-    if(dstlen)
-      *dst = 0;
+    snprintf(dst, dstlen, "family-%d",na->na_family);
+    break;
   }
 }
 
@@ -356,7 +305,7 @@ void
 tcp_cancel(void *aux)
 {
   tcpcon_t *tc = aux;
-  shutdown(tc->fd, SHUT_RDWR);
+  tcp_shutdown(tc);
 }
 
 
@@ -499,10 +448,8 @@ tcp_connect(const char *hostname, int port,
     if(!net_resolve_numeric(hostname, &addr) && addr.na_family == 4) {
 
       netif_t *ni = net_get_interfaces();
-      uint32_t v4addr;
 
-      memcpy(&v4addr, addr.na_addr, 4);
-      v4addr = ntohl(v4addr);
+      const uint32_t v4addr = rd32_be(addr.na_addr);
       if(ni != NULL) {
         for(int i = 0; ni[i].ipv4; i++) {
           printf("%x %x %x\n", v4addr, ni[i].maskv4, ni[i].ipv4);
@@ -531,12 +478,11 @@ tcp_connect(const char *hostname, int port,
   } else {
     if(net_resolve(hostname, &addr, &errmsg)) {
 
-      snprintf(errbuf, errlen, "%s", errmsg);
+      snprintf(errbuf, errlen, "Unable to resolve %s -- %s", hostname, errmsg);
 
       // If no dots in hostname, try to resolve using NetBIOS name lookup
       if(strchr(hostname, '.') != NULL || nmb_resolve(hostname, &addr))
         return NULL;
-
     }
   }
 

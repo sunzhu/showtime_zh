@@ -1,4 +1,23 @@
-#include "showtime.h"
+/*
+ *  Copyright (C) 2007-2015 Lonelycoder AB
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *  This program is also available under a commercial proprietary license.
+ *  For more information, contact andreas@lonelycoder.com
+ */
+#include "main.h"
 #include "htsmsg/htsmsg.h"
 #include "htsmsg/htsmsg_json.h"
 #include "htsmsg/htsmsg_store.h"
@@ -21,7 +40,7 @@ void
 usage_init(void)
 {
   hts_mutex_init(&usage_mutex);
-  usage_time_base = showtime_get_ts() / 1000000LL;
+  usage_time_base = arch_get_ts() / 1000000LL;
 
   usage_counters  = htsmsg_create_map();
   plugin_counters = htsmsg_create_map();
@@ -40,13 +59,13 @@ make_usage_report(void)
 
   htsmsg_add_str(out, "deviceid", gconf.device_id);
   htsmsg_add_str(out, "version", htsversion_full);
-  htsmsg_add_str(out, "arch", showtime_get_system_type());
-  htsmsg_add_u32(out, "verint", showtime_get_version_int());
+  htsmsg_add_str(out, "arch", arch_get_system_type());
+  htsmsg_add_u32(out, "verint", app_get_version_int());
   htsmsg_add_u32(out, "generated", time(NULL));
   if(gconf.os_info[0])
     htsmsg_add_str(out, "os" , gconf.os_info);
 
-  time_t now = showtime_get_ts() / 1000000LL;
+  time_t now = arch_get_ts() / 1000000LL;
 
   int runtime = now - usage_time_base;
   htsmsg_s32_inc(usage_counters, "runtime", runtime);
@@ -73,7 +92,7 @@ usage_fini(void)
 
   hts_mutex_lock(&usage_mutex);
 
-  int runtime = showtime_get_ts() / 1000000LL - usage_time_base;
+  int runtime = arch_get_ts() / 1000000LL - usage_time_base;
   htsmsg_s32_inc(usage_counters, "runtime", runtime);
 
   htsmsg_t *r = make_usage_report();
@@ -100,7 +119,7 @@ send_report(void *aux)
 
   htsmsg_json_serialize(m, &hq, 0);
 
-  http_req("https://showtimemediacenter.com/showtime/status/v1/usage",
+  http_req("https://movian.tv/movian/status/v1/usage",
            HTTP_POSTDATA(&hq, "application/json"),
            NULL);
 

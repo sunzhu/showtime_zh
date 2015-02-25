@@ -1,7 +1,5 @@
-#pragma once
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,7 +18,7 @@
  *  For more information, contact andreas@lonelycoder.com
  */
 #pragma once
-#include "showtime.h"
+#include "main.h"
 #include "arch/threads.h"
 #include "misc/queue.h"
 

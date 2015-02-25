@@ -22,8 +22,9 @@ msg: Aktivere dvale timer
 id: Disable sleep timer
 msg: Deaktivere dvale timer
 
-id: Exit Showtime
-msg: Afslut Showtime
+id: Exit %s
+# Missing translation
+msg: 
 
 id: Go to Home screen
 msg: Gå til startskærm
@@ -62,8 +63,7 @@ id: Time until sleep
 msg: Tid indtil dvale
 
 id: dB
-# Missing translation
-msg: 
+msg: dB
 
 id: min
 msg: min.
@@ -153,8 +153,7 @@ msg: Videoindstillinger
 # ./glwskins/default/loading.view
 #
 id: %d kb/s
-# Missing translation
-msg: 
+msg: %d kb/s
 
 id: Bitrate:
 # Missing translation
@@ -247,6 +246,10 @@ msg: Dato:
 #
 # ./glwskins/default/pages/iteminfo/plugin.view
 #
+id: %s %s or newer is required
+# Missing translation
+msg: 
+
 id: Author: 
 msg: Forfatter:
 
@@ -255,9 +258,6 @@ msg: Tilgængelig version:
 
 id: Installed version: 
 msg: Installeret version:
-
-id: Showtime %s or newer is required
-msg: Showtime %s eller nyere er krævet
 
 #
 # ./glwskins/default/pages/iteminfo/video.view
@@ -344,6 +344,10 @@ msg: Pauset
 #
 # ./glwskins/default/pages/upgrade.view
 #
+id: %s is up to date
+# Missing translation
+msg: 
+
 id: An error occured during download
 msg: En fejl opstod under download
 
@@ -360,8 +364,7 @@ id: Checking for updates...
 msg: Søger efter opdateringer...
 
 id: Checking installed version of %s
-# Missing translation
-msg: 
+msg: Tjekker installeret version af %s
 
 id: Current version:
 msg: Aktuel version:
@@ -373,8 +376,7 @@ id: Downloading %s
 msg: Downloader %s
 
 id: Installing %s
-# Missing translation
-msg: 
+msg: Installerer %s
 
 id: New version %s is available for download
 msg: Ny version %s er klar til download
@@ -383,17 +385,14 @@ id: No upgrade available
 msg: Ingen opdatering tilgængelig
 
 id: Patching %s
+msg: Patching %s
+
+id: Restarting %s in %d seconds...
 # Missing translation
 msg: 
 
-id: Restarting Showtime in %d seconds...
-msg: Genstarter Showtime om %d sekunder...
-
 id: Retry...
 msg: Forsøg igen...
-
-id: Showtime is up to date
-msg: Showtime er opdateret
 
 id: Stable
 msg: Stabil
@@ -442,6 +441,17 @@ msg: Husk mig
 
 id: Username
 msg: Brugernavn
+
+#
+# ./glwskins/default/popups/resume.view
+#
+id: No, Start over
+# Missing translation
+msg: 
+
+id: Resume %s from %s
+# Missing translation
+msg: 
 
 #
 # ./glwskins/default/screensaver.view
@@ -510,8 +520,7 @@ msg: Systemet mangler hukommelse (%d Kb RAM tilgængelig)
 # ./src/arch/ps3/ps3_vdec.c
 #
 id: Cell-h264: %d Ref-frames for %d content is incompatible with PS3 HW decoder. Disabling acceleration
-# Missing translation
-msg: 
+msg: Cell-h264: %d Ref-billeder for %d indhold er ikke kompatibel med PS3 HW dekoder. Deaktiverer acceleration
 
 id: Cell-h264: Broken headers, Disabling acceleration
 msg: Cell-h264: Ødelagt overskrifter, deaktiverer acceleration
@@ -534,20 +543,44 @@ msg: Kan ikke forespørge Cell codec. Fejl 0x%x
 #
 # ./src/arch/rpi/rpi_audio.c
 #
+id: 8 Channel PCM
+# Missing translation
+msg: 
+
+id: AC3 Pass-Through
+# Missing translation
+msg: 
+
 id: Analog
 msg: Analog
 
 id: Audio output port
 msg: Lyd udgangsport
 
+id: Autodetect
+# Missing translation
+msg: 
+
+id: DTS Pass-Through
+# Missing translation
+msg: 
+
 id: HDMI
 msg: HDMI
+
+id: Off
+msg: Sluk
+
+id: On
+# Missing translation
+msg: 
 
 #
 # ./src/arch/rpi/rpi_cec.c
 #
-id: Configure how Showtime communicates with your TV
-msg: Konfigurere hvordan Showtime skal kommunikere med dit TV
+id: Configure communications with your TV
+# Missing translation
+msg: 
 
 id: Consumer Electronics Control
 msg: Consumer Electronics Control
@@ -631,31 +664,25 @@ msg: Lagrede torrents bruger %d MB ud af tilladte %d MB. Total ledig plads på d
 # ./src/backend/bittorrent/fa_torrent.c
 #
 id: Connected peers
-# Missing translation
-msg: 
+msg: Forbundet peers
 
 id: Known peers
-# Missing translation
-msg: 
+msg: Kendte peers
 
 id: Receiving from
-# Missing translation
-msg: 
+msg: Modtager fra
 
 id: Torrent leechers
-# Missing translation
-msg: 
+msg: Torrent leechers
 
 id: Torrent seeders
-# Missing translation
-msg: 
+msg: Torrent seeders
 
 #
 # ./src/backend/bittorrent/torrent_settings.c
 #
 id: Clear cache
-# Missing translation
-msg: 
+msg: Tøm cache
 
 id: Enable bittorrent
 msg: Aktivere bittorrent
@@ -679,6 +706,17 @@ id: DVD read error, restarting disc
 msg: DVD læsefejl, genstarter disk
 
 #
+# ./src/backend/hls/hls.c
+#
+id: Primary
+# Missing translation
+msg: 
+
+id: Supplementary
+# Missing translation
+msg: 
+
+#
 # ./src/backend/htsp/htsp.c
 #
 id: Invalid HTSP URL
@@ -699,8 +737,9 @@ msg: Søgeresultat for: %s
 id: Albums
 msg: Album
 
-id: Automatic login when Showtime starts
-msg: Automatisk login når Showtime starter
+id: Automatic login on start
+# Missing translation
+msg: 
 
 id: Collaborative
 msg: Samarbejde
@@ -787,21 +826,6 @@ id: Search using Unix locatedb
 msg: Søg via Unix locatedb
 
 #
-# ./src/fileaccess/fa_nativesmb.c
-#
-id: Access denied
-msg: Adgang nægtet
-
-id: Account restricted
-msg: Konto begrænset
-
-id: Bad network share name
-msg: Dårligt netværk sharenavn
-
-id: Logon failure
-msg: Logonfejl
-
-#
 # ./src/fileaccess/fa_scanner.c
 #
 id: Artists
@@ -821,9 +845,6 @@ msg: Filnavn
 
 id: Indexed mode
 msg: Indekseret tilstand
-
-id: Off
-msg: Sluk
 
 id: Show only supported files
 msg: Vis kun supporterede filer
@@ -853,8 +874,7 @@ id: BitTorrent
 msg: BitTorrent
 
 id: Browse archives as folders
-# Missing translation
-msg: 
+msg: Gennemse arkiver som mapper
 
 id: Enable file deletion from item menu
 msg: Aktivere sletning af filer fra liste menu
@@ -879,6 +899,25 @@ msg[1]: %d mappe
 id: %d files
 msg[0]: %d filer
 msg[1]: %d fil
+
+#
+# ./src/fileaccess/smb/fa_nativesmb.c
+#
+id: Access denied
+msg: Adgang nægtet
+
+id: Account restricted
+msg: Konto begrænset
+
+id: Bad network share name
+msg: Dårligt netværk sharenavn
+
+id: Logon failure
+msg: Logonfejl
+
+id: Object name not found
+# Missing translation
+msg: 
 
 #
 # ./src/i18n.c
@@ -956,8 +995,7 @@ id: Go to standby after video ends
 msg: Gå i standby efter slut af video
 
 id: Horizontal pan
-# Missing translation
-msg: 
+msg: Vandret pan
 
 id: Reset defaults for folder '%s'
 msg: Nulstil standarder for mappe '%s'
@@ -987,8 +1025,7 @@ id: Subtitle vertical displacement
 msg: Vertikal visning af undertekster
 
 id: Vertical pan
-# Missing translation
-msg: 
+msg: Lodret pan
 
 id: Video frame interpolation
 msg: Video billede interpolation
@@ -1007,6 +1044,10 @@ msg: Indekserer
 #
 id: Automatic
 msg: Automatisk
+
+id: Erase all playback info
+# Missing translation
+msg: 
 
 id: Manual
 msg: Manuel
@@ -1057,8 +1098,7 @@ id: Clear all metadata
 msg: Fjern alle metadata
 
 id: Clearing all metadata means losing <b>all</b> metadata cached from external sources such as themoviedb.org, etc\n\nInformation about resume-points, playcount, etc will be saved.\nAre you sure you proceed?
-# Missing translation
-msg: 
+msg: At fjerne alle metadata betyder at du mister <b>alle</b> metadata cached fra eksterne kilder så som themoviedb.org, osv.\n\nOplysninger om resumé-punkter, spilletider, osv. bliver gemt.\nEr du sikker på at fortsætte?
 
 #
 # ./src/metadata/mlp.c
@@ -1183,8 +1223,9 @@ msg: Alternativ plugin Respository URL
 id: Automatically upgrade plugins
 msg: Opdater automatisk plugins
 
-id: Available apps
-msg: Tilgængelige apps
+id: Available plugins
+# Missing translation
+msg: 
 
 id: Background
 msg: Baggrund
@@ -1192,8 +1233,9 @@ msg: Baggrund
 id: Beta testing passwords
 msg: Betatest password
 
-id: Browse available apps
-msg: Gennemse tilgængelige apps
+id: Browse available plugins
+# Missing translation
+msg: 
 
 id: Browsing
 msg: Browsing
@@ -1216,8 +1258,9 @@ msg: Fil åbningsfejl
 id: Home page
 msg: Startside
 
-id: Installed apps
-msg: Installerede apps
+id: Installed plugins
+# Missing translation
+msg: 
 
 id: Installed version higher than available
 msg: Den installerede version er højere end den der er tilgængelig
@@ -1309,14 +1352,19 @@ msg: Åben shell
 id: Power off system
 msg: Sluk systemet
 
+id: Quit
+# Missing translation
+msg: 
+
 id: SSH server
 msg: SSH server
 
 id: Standby
 msg: Standby
 
-id: Starting and stopping Showtime
-msg: Starter og stopper Showtime
+id: Starting and stopping
+# Missing translation
+msg: 
 
 #
 # ./src/sd/sd.c
@@ -1484,12 +1532,10 @@ msg: Brugergrænseflade
 # ./src/ui/glw/glw_ps3.c
 #
 id: Seek using L2 and R2 button
-# Missing translation
-msg: 
+msg: Søg ved at bruge L2 og R2 knap
 
 id: Yes with Select button
-# Missing translation
-msg: 
+msg: Ja med Select knap
 
 #
 # ./src/ui/glw/glw_settings.c
@@ -1504,8 +1550,7 @@ id: Screensaver delay
 msg: Pauseskærm forsinkelse
 
 id: Vertical underscan
-# Missing translation
-msg: 
+msg: Lodret underscanning
 
 id: Wrap when reaching beginning/end of lists
 msg: Wrap når starten/slutningen af listen nåes
@@ -1534,14 +1579,15 @@ msg: Videotilstande
 #
 # ./src/upgrade.c
 #
+id: %s version %s is available
+# Missing translation
+msg: 
+
 id: Notify about upgrades
 msg: Informer om opdateringer
 
 id: Open download page
 msg: Åben downloadside
-
-id: Showtime version %s is available
-msg: Showtime version %s er tilgængelig
 
 id: Software upgrade
 msg: Softwareopdatering
@@ -1567,6 +1613,14 @@ msg: Tjenesten findes ikke
 #
 # ./src/video/video_settings.c
 #
+id: Always
+# Missing translation
+msg: 
+
+id: Ask
+# Missing translation
+msg: 
+
 id: Automatically play next video in list
 msg: Afspil automatisk næste video i listen
 
@@ -1582,6 +1636,10 @@ msg: Aktiver VDPAU
 id: Maximum resolution for deinterlacer
 msg: Maksimal opløsning af deinterlacer
 
+id: Never
+# Missing translation
+msg: 
+
 id: No limit
 msg: Ingen grænser
 
@@ -1595,12 +1653,10 @@ id: Resume video playback
 msg: Fortsæt video afspilning
 
 id: Step when seeking backward
-# Missing translation
-msg: 
+msg: Trin ved søgning tilbage
 
 id: Step when seeking forward
-# Missing translation
-msg: 
+msg: Trin ved søgning fremad
 
 id: Temporal
 msg: Midlertidig

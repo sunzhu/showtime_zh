@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -112,19 +110,30 @@ glw_update_sizes(glw_root_t *gr)
   }
 }
 
-
 /**
  *
  */
 int
 glw_init(glw_root_t *gr)
 {
+  return glw_init3(gr, &prop_courier_poll_timed, prop_courier_create_passive());
+}
+
+
+/**
+ *
+ */
+int
+glw_init3(glw_root_t *gr,
+          void (*dispatcher)(prop_courier_t *pc, int timeout),
+          prop_courier_t *courier)
+{
   char skinbuf[PATH_MAX];
   const char *skin = gconf.skin;
   prop_t *p;
 
-  if(gr->gr_prop_dispatcher == NULL)
-    gr->gr_prop_dispatcher = &prop_courier_poll_timed;
+  gr->gr_prop_dispatcher = dispatcher;
+  gr->gr_courier = courier;
 
   gr->gr_prop_maxtime = -1;
 
@@ -145,11 +154,10 @@ glw_init(glw_root_t *gr)
 
   if(skin == NULL) {
     snprintf(skinbuf, sizeof(skinbuf),
-	     "%s/glwskins/"SHOWTIME_GLW_DEFAULT_SKIN, showtime_dataroot());
+	     "%s/glwskins/"SHOWTIME_GLW_DEFAULT_SKIN, app_dataroot());
     skin = skinbuf;
   }
   hts_mutex_init(&gr->gr_mutex);
-  gr->gr_courier = prop_courier_create_passive();
   gr->gr_token_pool = pool_create("glwtokens", sizeof(token_t), POOL_ZERO_MEM);
   gr->gr_clone_pool = pool_create("glwclone", sizeof(glw_clone_t),
 				  POOL_ZERO_MEM);
@@ -184,6 +192,11 @@ glw_init(glw_root_t *gr)
 		   NULL);
 
   TAILQ_INIT(&gr->gr_destroyer_queue);
+
+  TAILQ_INIT(&gr->gr_view_load_requests);
+  TAILQ_INIT(&gr->gr_view_eval_requests);
+  hts_cond_init(&gr->gr_view_loader_cond, &gr->gr_mutex);
+
   glw_tex_init(gr);
 
   gr->gr_frontface = GLW_CCW;
@@ -191,7 +204,7 @@ glw_init(glw_root_t *gr)
 
   gr->gr_framerate = 60;
   gr->gr_frameduration = 1000000 / gr->gr_framerate;
-  gr->gr_ui_start = showtime_get_ts();
+  gr->gr_ui_start = arch_get_ts();
   gr->gr_frame_start = gr->gr_ui_start;
   glw_reset_screensaver(gr);
   gr->gr_open_osk = glw_osk_open;
@@ -212,19 +225,42 @@ glw_fini(glw_root_t *gr)
     prop_unsubscribe(gr->gr_osk_ev_sub);
   }
 
+  gr->gr_view_loader_run = 0;
+  hts_cond_signal(&gr->gr_view_loader_cond);
+
   glw_text_bitmap_fini(gr);
   rstr_release(gr->gr_default_font);
   glw_tex_fini(gr);
-  free(gr->gr_skin);
   prop_unsubscribe(gr->gr_evsub);
-  pool_destroy(gr->gr_token_pool);
-  pool_destroy(gr->gr_clone_pool);
   prop_courier_destroy(gr->gr_courier);
   hts_mutex_destroy(&gr->gr_mutex);
+
+  /*
+   * The view loader thread sometimes run with gr_mutex unlocked
+   * and when doing so it expects certain variables in glw_root to
+   * be available.
+   *
+   * gr_vpaths (indirectly gr_skin) must be intact
+   *
+   * It may also allocate items from gr_token_pool (although not while
+   * locked but after we've asked it to exit), thus we must not
+   * destroy the pool until after the thread has joined.
+   *
+   */
+
+  if(gr->gr_view_loader_thread)
+    hts_thread_join(&gr->gr_view_loader_thread);
+
+  glw_view_loader_flush(gr);
+
+  pool_destroy(gr->gr_token_pool);
+  pool_destroy(gr->gr_clone_pool);
+
   free(gr->gr_vtmp_buffer);
   free(gr->gr_render_jobs);
   free(gr->gr_render_order);
   free(gr->gr_vertex_buffer);
+  free(gr->gr_skin);
 }
 
 
@@ -242,6 +278,7 @@ glw_unload_universe(glw_root_t *gr)
   glw_flush(gr);
 }
 
+
 /**
  *
  */
@@ -254,8 +291,8 @@ glw_load_universe(glw_root_t *gr)
   rstr_t *universe = rstr_alloc("skin://universe.view");
 
   gr->gr_universe = glw_view_create(gr,
-				    universe, NULL, page,
-				    NULL, NULL, NULL, 0, 1);
+				    universe, NULL, NULL, page,
+				    NULL, NULL, NULL);
 
   rstr_release(universe);
 }
@@ -434,7 +471,8 @@ glw_reap(glw_root_t *gr)
 void
 glw_idle(glw_root_t *gr)
 {
-  gr->gr_prop_dispatcher(gr->gr_courier, gr->gr_prop_maxtime);
+  if(gr->gr_prop_dispatcher != NULL)
+    gr->gr_prop_dispatcher(gr->gr_courier, gr->gr_prop_maxtime);
   glw_reap(gr);
 }
 
@@ -448,8 +486,8 @@ glw_prepare_frame(glw_root_t *gr, int flags)
 
   glw_update_sizes(gr);
 
-  gr->gr_frame_start        = showtime_get_ts();
-  gr->gr_frame_start_avtime = showtime_get_avtime();
+  gr->gr_frame_start        = arch_get_ts();
+  gr->gr_frame_start_avtime = arch_get_avtime();
   gr->gr_time_usec          = gr->gr_frame_start - gr->gr_ui_start;
   gr->gr_time_sec           = gr->gr_time_usec / 1000000.0f;
 
@@ -477,9 +515,8 @@ glw_prepare_frame(glw_root_t *gr, int flags)
   prop_set_int(gr->gr_prop_width, gr->gr_width);
   prop_set_int(gr->gr_prop_height, gr->gr_height);
 
-  gr->gr_prop_dispatcher(gr->gr_courier, gr->gr_prop_maxtime);
-
-  //  glw_cursor_layout_frame(gr);
+  if(gr->gr_prop_dispatcher != NULL)
+    gr->gr_prop_dispatcher(gr->gr_courier, gr->gr_prop_maxtime);
 
   LIST_FOREACH(w, &gr->gr_every_frame_list, glw_every_frame_link)
     w->glw_class->gc_newframe(w, flags);
@@ -515,6 +552,8 @@ glw_prepare_frame(glw_root_t *gr, int flags)
     gr->gr_need_refresh = GLW_REFRESH_FLAG_LAYOUT | GLW_REFRESH_FLAG_RENDER;
     gr->gr_scheduled_refresh = INT64_MAX;
   }
+
+  glw_view_loader_eval(gr);
 }
 
 
@@ -642,6 +681,18 @@ glw_destroy(glw_t *w)
   TAILQ_INSERT_TAIL(&gr->gr_destroyer_queue, w, glw_parent_link);
 
   glw_view_free_chain(gr, w->glw_dynamic_expressions);
+}
+
+
+/**
+ *
+ */
+void
+glw_destroy_childs(glw_t *w)
+{
+  glw_t *c;
+  while((c = TAILQ_FIRST(&w->glw_childs)) != NULL)
+    glw_destroy(c);
 }
 
 
@@ -1593,8 +1644,17 @@ glw_event_to_widget(glw_t *w, event_t *e)
 int
 glw_event(glw_root_t *gr, event_t *e)
 {
-  glw_t *w = gr->gr_universe;
-  return glw_event_to_widget(w, e);
+  if(gr->gr_current_focus != NULL) {
+    if(event_is_action(e, ACTION_FOCUS_NEXT)) {
+      glw_focus_crawl(gr->gr_current_focus, 1, 1);
+      return 1;
+    }
+    if(event_is_action(e, ACTION_FOCUS_PREV)) {
+      glw_focus_crawl(gr->gr_current_focus, 0, 1);
+      return 1;
+    }
+  }
+  return glw_event_to_widget(gr->gr_universe, e);
 }
 
 

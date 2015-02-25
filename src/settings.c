@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +24,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "settings.h"
 #include "event.h"
 #include "navigator.h"
@@ -39,9 +37,10 @@
 #include "db/kvstore.h"
 #include "misc/minmax.h"
 
+#if ENABLE_NETLOG
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
+#endif
 
 #define SETTINGS_URL "settings:"
 static prop_t *settings_model;
@@ -1262,7 +1261,7 @@ settings_init(void)
   setting_create(SETTING_STRING, gconf.settings_network,
 		 SETTINGS_INITIAL_UPDATE | SETTINGS_EMPTY_IS_DEFAULT,
                  SETTING_TITLE(_p("System name")),
-		 SETTING_VALUE("Showtime"),
+		 SETTING_VALUE(APPNAME),
                  SETTING_CALLBACK(set_system_name, NULL),
                  SETTING_HTSMSG("sysname", s, "netinfo"),
                  NULL);
@@ -1349,6 +1348,7 @@ add_dev_bool(htsmsg_t *s, const char *title, const char *id, int *val)
 }
 
 
+#if ENABLE_NETLOG
 /**
  *
  */
@@ -1377,6 +1377,7 @@ set_netlog(void *opaque, const char *str)
     gconf.log_server_ipv4 = addr.s_addr;
   }
 }
+#endif
 
 /**
  *
@@ -1420,11 +1421,13 @@ init_dev_settings(void)
   add_dev_bool(s, "Force plugins to be loaded as ecmascript (duktape)",
 	       "forceecma", &gconf.enable_force_ecmascript);
 
+#if ENABLE_NETLOG
   setting_create(SETTING_STRING, gconf.settings_dev, SETTINGS_INITIAL_UPDATE,
                  SETTING_TITLE_CSTR("Network log destination"),
                  SETTING_CALLBACK(set_netlog, NULL),
                  SETTING_HTSMSG("netlogdest", s, "dev"),
                  NULL);
+#endif
 
   // ---------- debug filtering
 

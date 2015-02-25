@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2013 Andreas Öman
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -13,12 +13,15 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *  This program is also available under a commercial proprietary license.
+ *  For more information, contact andreas@lonelycoder.com
  */
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "navigator.h"
 #include "backend/backend.h"
 #include "misc/str.h"
@@ -54,6 +57,9 @@ static void
 torrent_dump(const torrent_t *to, htsbuf_queue_t *q)
 {
   char str[41];
+
+  int64_t now = async_current_time();
+
   bin2hex(str, sizeof(str), to->to_info_hash, 20);
 
   htsbuf_qprintf(q, "Infohash: %s  %d pieces (%d in RAM) refcount:%d\n", str,
@@ -119,11 +125,11 @@ torrent_dump(const torrent_t *to, htsbuf_queue_t *q)
     LIST_FOREACH(tr, &p->p_requests, tr_peer_link) {
       htsbuf_qprintf(q, "  piece:%-4d offset:0x%-8x length:0x%-5x age:%2.2fs ETA:%-6d req:%d %s  piece deadline:%ld\n",
                      tr->tr_piece, tr->tr_begin, tr->tr_length,
-                     (int)(async_now - tr->tr_send_time) / 1000000.0f,
-                     (int)((tr->tr_send_time + p->p_block_delay) - async_now) / 1000,
+                     (int)(now - tr->tr_send_time) / 1000000.0f,
+                     (int)((tr->tr_send_time + p->p_block_delay) - now) / 1000,
                      tr->tr_req_num,
                      tr->tr_block == NULL ? "ORPHANED " : "",
-		     tr->tr_block ? tr->tr_block->tb_piece->tp_deadline - async_now : -2LL);
+		     tr->tr_block ? tr->tr_block->tb_piece->tp_deadline - now : -2LL);
     }
   }
 
@@ -179,7 +185,7 @@ torrent_dump_http(http_connection_t *hc, const char *remain, void *opaque,
   hts_mutex_unlock(&bittorrent_mutex);
 
   return http_send_reply(hc, 0,
-                         "text/ascii; charset=utf-8", NULL, NULL, 0, &out);
+                         "text/plain; charset=utf-8", NULL, NULL, 0, &out);
 }
 
 /**

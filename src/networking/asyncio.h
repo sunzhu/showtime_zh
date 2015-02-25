@@ -1,7 +1,5 @@
-#pragma once
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,11 +18,9 @@
  *  For more information, contact andreas@lonelycoder.com
  */
 #pragma once
-
 #include "net.h"
 #include "misc/redblack.h"
 
-extern int64_t async_now;
 
 typedef struct asyncio_timer {
   LIST_ENTRY(asyncio_timer) at_link;
@@ -51,26 +47,11 @@ void asyncio_init_early(void);
 
 void asyncio_start(void);
 
-/*************************************************************************
- * Low level FD
- *************************************************************************/
-
-#define ASYNCIO_READ            0x1
-#define ASYNCIO_WRITE           0x2
-#define ASYNCIO_ERROR           0x4
-#define ASYNCIO_TIMEOUT         0x8
-
-asyncio_fd_t *asyncio_add_fd(int fd, int events,
-                             asyncio_fd_callback_t *cb, void *opaque,
-			     const char *name);
-
-void asyncio_set_events(asyncio_fd_t *af, int events);
-
-void asyncio_rem_events(asyncio_fd_t *af, int events);
-
-void asyncio_add_events(asyncio_fd_t *af, int events);
-
 void asyncio_del_fd(asyncio_fd_t *af);
+
+
+// Return current time, must be same time domain as arch_get_ts();
+int64_t async_current_time(void);
 
 /*************************************************************************
  * Workers
@@ -104,13 +85,18 @@ asyncio_fd_t *asyncio_connect(const char *name,
 			      void *opaque,
 			      int timeout);
 
+asyncio_fd_t *asyncio_attach(const char *name, int fd,
+                             asyncio_error_callback_t *error_cb,
+                             asyncio_read_callback_t *read_cb,
+                             void *opaque);
+
 void asyncio_send(asyncio_fd_t *af, const void *buf, size_t len, int cork);
 
 void asyncio_sendq(asyncio_fd_t *af, htsbuf_queue_t *q, int cork);
 
 int asyncio_get_port(asyncio_fd_t *af);
 
-void asyncio_set_timeout(asyncio_fd_t *af, int64_t timeout);
+void asyncio_set_timeout_delta_sec(asyncio_fd_t *af, int seconds);
 
 /*************************************************************************
  * UDP
@@ -133,7 +119,7 @@ void asyncio_udp_send(asyncio_fd_t *af, const void *data, int size,
 void asyncio_timer_init(asyncio_timer_t *at, void (*fn)(void *opaque),
 			void *opque);
 
-void asyncio_timer_arm(asyncio_timer_t *at, int64_t expire);
+void asyncio_timer_arm_delta_sec(asyncio_timer_t *at, int seconds);
 
 void asyncio_timer_disarm(asyncio_timer_t *at);
 

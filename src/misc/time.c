@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -42,6 +41,9 @@ mktime_utc(time_t *tp, unsigned int year, unsigned int month, unsigned int day,
            unsigned int hour, unsigned int min, unsigned int sec)
 {
   int i;
+
+  if(year < 100)
+    year += 2000;
 
   if(year < 1970 || year > 2038 || month >= 12)
     return -1;

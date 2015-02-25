@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,20 +17,19 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <assert.h>
 #include <unistd.h>
 
 #include <jni.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "video/video_decoder.h"
 #include "video/h264_annexb.h"
 
 extern JavaVM *JVM;
 
-// #define PTS_IS_REORDER_INDEX
+#define PTS_IS_REORDER_INDEX
 
 #define CHECKEXCEPTION()    if((*env)->ExceptionOccurred(env)) do { TRACE(TRACE_ERROR, "VIDEO", "Exception occured"); exit(1); } while(0)
 
@@ -180,8 +178,6 @@ get_output(JNIEnv *env, android_video_codec_t *avc, int loop,
 
       jlong slot = (*env)->GetLongField(env, avc->avc_buffer_info, f_pts);
 
-      //      TRACE(TRACE_DEBUG, "IDX", "%d %d", idx, slot);
-
       frame_info_t fi = {};
       // We only support square pixels here
       fi.fi_dar_num = avc->avc_out_width;
@@ -305,7 +301,8 @@ android_codec_decode(struct media_codec *mc, struct video_decoder *vd,
 
     int surface;
     if(avc->avc_direct) {
-      surface = mp->mp_set_video_codec('SURF', mc, mp->mp_video_frame_opaque);
+      surface = mp->mp_set_video_codec('SURF', mc, mp->mp_video_frame_opaque,
+                                       NULL);
     } else {
       surface = 0;
     }
@@ -370,16 +367,17 @@ android_codec_decode(struct media_codec *mc, struct video_decoder *vd,
   jlong pts;
 #ifdef PTS_IS_REORDER_INDEX
   media_buf_meta_t *mbm = &vd->vd_reorder[vd->vd_reorder_ptr];
-  *mbm = mb->mb_meta;
-  pts = vd->vd_reorder_pts;
+  copy_mbm_from_mb(mbm, mb);
+  pts = vd->vd_reorder_ptr;
   vd->vd_reorder_ptr = (vd->vd_reorder_ptr + 1) & VIDEO_DECODER_REORDER_MASK;
 #else
   pts = mb->mb_pts;
 #endif
 
   int timeout = 0;
+  const int flags = mb->mb_keyframe ? 1 : 0; // BUFFER_FLAG_KEY_FRAME
   while(1) {
-    int idx = avc_enq(env, avc, data, size, pts, 0, timeout);
+    int idx = avc_enq(env, avc, data, size, pts, flags, timeout);
 
     if(idx < 0) {
       get_output(env, avc, timeout > 0, vd);
@@ -407,6 +405,18 @@ android_codec_flush(struct media_codec *mc, struct video_decoder *vd)
 static void
 android_codec_close(struct media_codec *mc)
 {
+  android_video_codec_t *avc = mc->opaque;
+  jmethodID mid;
+  JNIEnv *env;
+
+  (*JVM)->GetEnv(JVM, (void **)&env, JNI_VERSION_1_6);
+
+  (*env)->PushLocalFrame(env, 64);
+
+  mid = (*env)->GetMethodID(env, avc->avc_MediaCodec, "release", "()V");
+  (*env)->CallVoidMethod(env, avc->avc_decoder, mid);
+
+  (*env)->PopLocalFrame(env, NULL);
 }
 
 
@@ -421,8 +431,7 @@ android_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
   jmethodID mid;
   const char *type = NULL;
 
-  //  if(mcp == NULL || mcp->width == 0 || mcp->height == 0)
-  //    return 1;
+  return 1;
 
   switch(mc->codec_id) {
 
@@ -490,9 +499,12 @@ android_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
         avc->avc_extradata_size = mcp->extradata_size;
       }
     }
+  } else {
+    avc->avc_width  = 1280;
+    avc->avc_height = 720;
   }
 
-  //  avc->avc_direct = 1;
+  avc->avc_direct = 1;
   mc->opaque = avc;
   mc->close  = android_codec_close;
   mc->decode = android_codec_decode;

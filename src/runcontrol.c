@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
@@ -27,7 +25,7 @@
 #include "htsmsg/htsmsg.h"
 #include "htsmsg/htsmsg_store.h"
 
-#include "showtime.h"
+#include "main.h"
 #include "settings.h"
 #include "runcontrol.h"
 
@@ -53,13 +51,13 @@ static htsmsg_t *rcstore;
 /**
  * Called from various places to indicate that user is active
  *
- * Defined in showtime.h
+ * Defined in main.h
  */
 void
 runcontrol_activity(void)
 {
   if(standby_delay)
-    last_activity = showtime_get_ts();
+    last_activity = arch_get_ts();
 }
 
 
@@ -69,14 +67,14 @@ runcontrol_activity(void)
 static void
 check_autostandby(callout_t *c, void *aux)
 {
-  int64_t idle = showtime_get_ts() - last_activity;
+  int64_t idle = arch_get_ts() - last_activity;
 
   idle /= (1000000 * 60); // Convert to minutes
 
   if(standby_delay && idle >= standby_delay && !active_media) {
     TRACE(TRACE_INFO, "runcontrol", "Automatic standby after %d minutes idle",
 	  standby_delay);
-    showtime_shutdown(SHOWTIME_EXIT_STANDBY);
+    app_shutdown(APP_EXIT_STANDBY);
     return;
   }
   callout_arm(&autostandby_timer, check_autostandby, NULL, 1);
@@ -91,7 +89,7 @@ current_media_playstatus(void *opaque, const char *str)
 {
   // Reset time to avoid risk of turning off as soon as track playback
   // has ended if UI has been idle
-  last_activity = showtime_get_ts();
+  last_activity = arch_get_ts();
 
   active_media = !!str; // If str is something then we're playing, paused, etc
 }
@@ -113,7 +111,7 @@ init_autostandby(void)
                  SETTING_ZERO_TEXT(_p("Off")),
                  NULL);
 
-  last_activity = showtime_get_ts();
+  last_activity = arch_get_ts();
 
   prop_subscribe(0,
 		 PROP_TAG_NAME("global", "media", "current", "playstatus"),
@@ -144,7 +142,7 @@ decrease_sleeptimer(callout_t *c, void *aux)
 
   if(sleeptime < 0) {
     TRACE(TRACE_INFO, "runcontrol", "Automatic standby by sleep timer");
-    showtime_shutdown(SHOWTIME_EXIT_STANDBY);
+    app_shutdown(APP_EXIT_STANDBY);
     return;
   }
   prop_set_int_ex(sleeptime_prop, sleeptime_sub, sleeptime);
@@ -201,32 +199,32 @@ init_sleeptimer(prop_t *rc)
 static void
 do_power_off(void *opaque, prop_event_t event, ...)
 {
-  showtime_shutdown(SHOWTIME_EXIT_POWEROFF);
+  app_shutdown(APP_EXIT_POWEROFF);
 }
 
 static void
 do_logout(void *opaque, prop_event_t event, ...)
 {
-  showtime_shutdown(SHOWTIME_EXIT_LOGOUT);
+  app_shutdown(APP_EXIT_LOGOUT);
 }
 
 static void
 do_open_shell(void *opaque, prop_event_t event, ...)
 {
-  showtime_shutdown(SHOWTIME_EXIT_SHELL);
+  app_shutdown(APP_EXIT_SHELL);
 }
 
 static void
 do_standby(void *opaque, prop_event_t event, ...)
 {
-  showtime_shutdown(SHOWTIME_EXIT_STANDBY);
+  app_shutdown(APP_EXIT_STANDBY);
 }
 
 
 static void
 do_exit(void *opaque, prop_event_t event, ...)
 {
-  showtime_shutdown(0);
+  app_shutdown(0);
 }
 
 
@@ -270,8 +268,8 @@ runcontrol_init(void)
 
   rcstore = htsmsg_store_load("runcontrol") ?: htsmsg_create_map();
 
-  settings_create_separator(gconf.settings_general, 
-			  _p("Starting and stopping Showtime"));
+  settings_create_separator(gconf.settings_general,
+			  _p("Starting and stopping"));
 
   if(gconf.can_standby) {
     init_autostandby();
@@ -293,7 +291,7 @@ runcontrol_init(void)
 			   do_open_shell, NULL, 0, NULL);
 
   if(!gconf.can_not_exit)
-    settings_create_action(gconf.settings_general, _p("Exit Showtime"),
+    settings_create_action(gconf.settings_general, _p("Quit"),
 			   do_exit, NULL, 0, NULL);
 
   if(gconf.showtime_shell_fd > 0) {

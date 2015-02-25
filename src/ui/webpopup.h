@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,9 +17,7 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #pragma once
-
 #include "networking/http.h"
 
 #define WEBPOPUP_TRAPPED_URL    0
@@ -54,3 +51,6 @@ void webpopup_result_free(webpopup_result_t *wr);
 
 void webpopup_finalize_result(webpopup_result_t *wr);
 
+void webbrowser_open(const char *url, const char *title);
+
+void webbrowser_close(void);

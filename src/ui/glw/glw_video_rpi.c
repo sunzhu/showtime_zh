@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,7 +29,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "glw_video_common.h"
 
 #include "video/video_settings.h"
@@ -241,7 +240,9 @@ rvd_blackout(glw_video_t *gv)
 
 
 static int rvd_set_codec(media_codec_t *mc, glw_video_t *gv,
-			 const frame_info_t *fi);
+			 const frame_info_t *fi,
+                         struct glw_video_engine *gve);
+
 
 /**
  * Tunneled OMX
@@ -262,7 +263,8 @@ GLW_REGISTER_GVE(glw_video_rvd);
  *
  */
 static int
-rvd_set_codec(media_codec_t *mc, glw_video_t *gv, const frame_info_t *fi)
+rvd_set_codec(media_codec_t *mc, glw_video_t *gv, const frame_info_t *fi,
+              struct glw_video_engine *gve)
 {
   media_pipe_t *mp = gv->gv_mp;
 

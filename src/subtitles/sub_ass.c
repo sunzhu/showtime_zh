@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,7 +19,7 @@
  */
 #include <stdio.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "video_overlay.h"
 #include "text/text.h"
 #include "image/pixmap.h"

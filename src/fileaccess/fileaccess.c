@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include "config.h"
 
 #include <assert.h>
@@ -36,7 +34,7 @@
 #include <dirent.h>
 #include <limits.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess.h"
 #include "backend/backend.h"
 
@@ -58,6 +56,7 @@
 
 static struct fa_protocol_list fileaccess_all_protocols;
 static HTS_MUTEX_DECL(fap_mutex);
+static fa_protocol_t *native_fap;
 
 /**
  *
@@ -91,7 +90,6 @@ static char *
 fa_resolve_proto(const char *url, fa_protocol_t **p,
 		 const char **vpaths, char *errbuf, size_t errsize)
 {
-  extern fa_protocol_t fa_protocol_fs;
   struct fa_stat fs;
   fa_protocol_t *fap;
   const char *url0 = url;
@@ -112,19 +110,20 @@ fa_resolve_proto(const char *url, fa_protocol_t **p,
 
   if(url[0] != ':' || url[1] != '/' || url[2] != '/') {
     /* No protocol specified, assume a plain file */
-    fap = &fa_protocol_fs;
-    if(url0[0] != '/' && fap->fap_stat(fap, url0, &fs, NULL, 0, 0)) {
+    if(native_fap == NULL ||
+       (url0[0] != '/' &&
+        native_fap->fap_stat(native_fap, url0, &fs, NULL, 0, 0))) {
       snprintf(errbuf, errsize, "File not found");
       return NULL;
     }
-    *p = fap;
+    *p = native_fap;
     return strdup(url0);
   }
 
   url += 3;
 
   if(!strcmp("dataroot", buf)) {
-    const char *pfx = showtime_dataroot();
+    const char *pfx = app_dataroot();
     snprintf(buf, sizeof(buf), "%s%s%s", 
 	     pfx, pfx[strlen(pfx) - 1] == '/' ? "" : "/", url);
     return fa_resolve_proto(buf, p, NULL, errbuf, errsize);
@@ -1120,6 +1119,52 @@ fa_copy(const char *to, const char *from, char *errbuf, size_t errsize)
 }
 
 
+
+static fa_err_code_t
+fa_makedir_p(fa_protocol_t *fap, const char *path)
+{
+  struct fa_stat fs;
+  char *p;
+  int l, r;
+
+  if(!fap->fap_stat(fap, path, &fs, NULL, 0, 0) &&
+     fs.fs_type == CONTENT_DIR)
+    return 0; /* Dir already there */
+
+  r = fap->fap_makedir(fap, path);
+  if(r == 0)
+    return 0; /* Dir created ok */
+
+  if(r == FAP_NOENT) {
+
+    /* Parent does not exist, try to create it */
+    /* Allocate new path buffer and strip off last directory component */
+
+    l = strlen(path);
+    p = alloca(l + 1);
+    memcpy(p, path, l);
+    p[l--] = 0;
+
+    for(; l >= 0; l--)
+      if(p[l] == '/')
+	break;
+    if(l == 0)
+      return FAP_NOENT;
+
+    p[l] = 0;
+
+    if((r = fa_makedir_p(fap, p)) != 0)
+      return r;
+
+    /* Try again */
+    r = fap->fap_makedir(fap, path);
+    if(r == 0)
+      return 0; /* Dir created ok */
+  }
+  return r;
+}
+
+
 /**
  *
  */
@@ -1133,11 +1178,35 @@ fa_makedirs(const char *url, char *errbuf, size_t errsize)
   if((filename = fa_resolve_proto(url, &fap, NULL, errbuf, errsize)) == NULL)
     return -1;
 
-  if(fap->fap_makedirs == NULL) {
+  if(fap->fap_makedir == NULL) {
     snprintf(errbuf, errsize, "No mkdir support in filesystem");
     r = -1;
   } else {
-    r = fap->fap_makedirs(fap, filename, errbuf, errsize);
+    r = fa_makedir_p(fap, filename);
+  }
+  fap_release(fap);
+  free(filename);
+  return r;
+}
+
+
+/**
+ *
+ */
+fa_err_code_t
+fa_makedir(const char *url)
+{
+  fa_protocol_t *fap;
+  char *filename;
+  int r;
+
+  if((filename = fa_resolve_proto(url, &fap, NULL, NULL, 0)) == NULL)
+    return FAP_NOENT;
+
+  if(fap->fap_makedir == NULL) {
+    r = FAP_NOT_SUPPORTED;
+  } else {
+    r = fap->fap_makedir(fap, filename);
   }
   fap_release(fap);
   free(filename);
@@ -1320,6 +1389,8 @@ void
 fileaccess_register_entry(fa_protocol_t *fap)
 {
   LIST_INSERT_HEAD(&fileaccess_all_protocols, fap, fap_link);
+  if(fap->fap_name != NULL && !strcmp(fap->fap_name, "file"))
+    native_fap = fap;
 }
 
 

@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,7 +21,7 @@
 #include <AudioToolbox/AudioQueue.h>
 #include <CoreAudio/HostTime.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "audio.h"
 #include "media/media.h"
 
@@ -321,7 +320,7 @@ mac_audio_deliver(audio_decoder_t *ad, int samples,
   if(ats.mFlags & kAudioTimeStampHostTimeValid &&
      pts != AV_NOPTS_VALUE) {
     int64_t t = AudioConvertHostTimeToNanos(ats.mHostTime) / 1000LL;
-    ad->ad_delay = t - showtime_get_avtime();
+    ad->ad_delay = t - arch_get_avtime();
 
     media_pipe_t *mp = ad->ad_mp;
 

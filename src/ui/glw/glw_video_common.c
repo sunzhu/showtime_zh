@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,12 +17,11 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 
 #include <libavutil/pixdesc.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "media/media.h"
 #include "video/video_playback.h"
 #include "video/video_settings.h"
@@ -296,7 +294,7 @@ glw_video_compute_avdiff(glw_root_t *gr, media_pipe_t *mp,
 	  mp->mp_audio_clock,
 	  gr->gr_frame_start_avtime - lastclock,
 	  statustab[code],
-	  showtime_get_avtime() - aclock);
+	  arch_get_avtime() - aclock);
     lastpts = pts;
     lastaclock = aclock;
     lastclock = gr->gr_frame_start_avtime;
@@ -989,23 +987,6 @@ glw_video_render(glw_t *w, const glw_rctx_t *rc)
 
   glw_project(&gv->gv_rect, &rc1, gr);
 
-  int invisible = 0;
-  if(gv->gv_rect.x1 >= gr->gr_width)
-    invisible = 1;
-  if(gv->gv_rect.x2 < 0)
-    invisible = 1;
-  if(gv->gv_rect.y1 >= gr->gr_height)
-    invisible = 1;
-  if(gv->gv_rect.y2 < 0)
-    invisible = 1;
-
-  if(gv->gv_invisible != invisible) {
-    gv->gv_invisible = invisible;
-    event_t *e = event_create_int(EVENT_VIDEO_VISIBILITY, !gv->gv_invisible);
-    mp_enqueue_event(gv->gv_mp, e);
-    event_release(e);
-  }
-
   if(!glw_renderer_initialized(&gv->gv_quad)) {
     glw_renderer_init_quad(&gv->gv_quad);
 
@@ -1241,13 +1222,15 @@ glw_set_video_codec(uint32_t type, media_codec_t *mc, void *opaque,
     return 0;
   }
 
-  gv->gv_dar_num = fi->fi_dar_num;
-  gv->gv_dar_den = fi->fi_dar_den;
-  gv->gv_vheight = fi->fi_height;
+  if(fi != NULL) {
+    gv->gv_dar_num = fi->fi_dar_num;
+    gv->gv_dar_den = fi->fi_dar_den;
+    gv->gv_vheight = fi->fi_height;
+  }
 
   LIST_FOREACH(gve, &engines, gve_link) {
     if(gve->gve_type == type) {
-      r = gve->gve_set_codec(mc, gv, fi);
+      r = gve->gve_set_codec(mc, gv, fi, gve);
       break;
     }
   }

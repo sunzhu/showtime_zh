@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,9 +17,7 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #pragma once
-
 #include "misc/queue.h"
 #include "misc/rstr.h"
 
@@ -72,9 +69,15 @@ typedef enum {
   CONTENT_ALBUM       = 9,
   CONTENT_PLUGIN      = 10,
   CONTENT_FONT        = 11,
+  CONTENT_SHARE       = 12,
   CONTENT_num
 } contenttype_t;
 
+
+static inline int content_dirish(contenttype_t ct)
+{
+  return ct == CONTENT_DIR || ct == CONTENT_SHARE || ct == CONTENT_ARCHIVE;
+}
 
 /**
  * Metadata types.

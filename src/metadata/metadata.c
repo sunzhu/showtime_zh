@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -28,7 +26,7 @@
 #include "prop/prop.h"
 #include "prop/prop_concat.h"
 
-#include "showtime.h"
+#include "main.h"
 #include "media/media.h"
 #include "htsmsg/htsmsg_json.h"
 #include "misc/str.h"
@@ -165,6 +163,7 @@ static const char *types[] = {
   [CONTENT_ALBUM]    = "album",
   [CONTENT_PLUGIN]   = "plugin",
   [CONTENT_FONT]     = "font",
+  [CONTENT_SHARE]    = "share",
 };
 
 

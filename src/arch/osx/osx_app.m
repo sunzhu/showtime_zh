@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,14 +17,13 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #import <AppKit/AppKit.h>
 #import <CoreAudio/HostTime.h>
 
 #include <sys/types.h>
 #include <sys/sysctl.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "navigator.h"
 #include "arch/arch.h"
 #include "arch/darwin.h"
@@ -46,7 +44,7 @@ static void mainloop_courier_init(void);
  *
  */
 int64_t
-showtime_get_avtime(void)
+arch_get_avtime(void)
 {
   return AudioConvertHostTimeToNanos(AudioGetCurrentHostTime()) / 1000LL;
 }
@@ -111,7 +109,7 @@ main(int argc, char **argv)
 
   gconf.concurrency = get_system_concurrency();
 
-  showtime_init();
+  main_init();
 
 #if ENABLE_WEBPOPUP
   webpopup_init();
@@ -156,7 +154,7 @@ arch_stop_req(void)
  *
  */
 const char *
-showtime_get_system_type(void)
+arch_get_system_type(void)
 {
   return "Apple";
 }
@@ -231,9 +229,9 @@ mainloop_courier_init(void)
  */
 - (void) applicationWillTerminate: (NSNotification *)not;
 {
-  showtime_flush_caches();
+  app_flush_caches();
   shutdown_hook_run(1);
-  showtime_fini();
+  main_fini();
 }
 
 

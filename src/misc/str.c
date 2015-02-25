@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +24,7 @@
 
 #include "buf.h"
 #include "str.h"
-#include "showtime.h"
+#include "main.h"
 #include "sha.h"
 #include "i18n.h"
 
@@ -1585,7 +1583,7 @@ get_random_string(void)
   char buf[40];
   static uint64_t seed;
   int i;
-  seed ^= showtime_get_ts();
+  seed ^= arch_get_ts();
 
   sha1_init(shactx);
   sha1_update(shactx, (void *)&seed, sizeof(uint64_t));

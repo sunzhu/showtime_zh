@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2014 Andreas Öman
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -13,12 +13,14 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *  This program is also available under a commercial proprietary license.
+ *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <string.h>
 #include <unistd.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess/http_client.h"
 #include "networking/asyncio.h"
 #include "htsmsg/htsmsg.h"
@@ -130,7 +132,7 @@ http_callback(http_req_aux_t *req, void *opaque)
     }
   }
  done:
-  asyncio_timer_arm(&tt->tt_timer, async_now + tt->tt_interval * 1000000LL);
+  asyncio_timer_arm_delta_sec(&tt->tt_timer, tt->tt_interval);
 }
 
 

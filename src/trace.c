@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,17 +17,20 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <limits.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+
+#include "main.h"
+#include "prop/prop.h"
+
+#if ENABLE_NETLOG
 #include <netinet/in.h>
 #include <sys/socket.h>
+#endif
 
-#include "prop/prop.h"
-#include "showtime.h"
 
 static hts_mutex_t trace_mutex;
 static prop_t *log_root;
@@ -56,6 +58,7 @@ static int log_fd;
 static int64_t log_start_ts;
 
 
+#if ENABLE_NETLOG
 /**
  *
  */
@@ -126,7 +129,7 @@ trace_net(int level, const char *prefix, const char *str)
 
   trace_net_raw("%s%s %s\033[0m\n", sgr, prefix, str);
 }
-
+#endif
 
 
 /**
@@ -170,7 +173,9 @@ tracev(int flags, int level, const char *subsys, const char *fmt, va_list ap)
     if(!*s)
       continue; // Avoid empty lines
 
+#if ENABLE_NETLOG
     trace_net(level, buf2, s);
+#endif
 
     if(level <= gconf.trace_level)
       trace_arch(level, buf2, s);
@@ -182,7 +187,7 @@ tracev(int flags, int level, const char *subsys, const char *fmt, va_list ap)
       entries++;
     }
     if(log_fd != -1) {
-      int ts = (showtime_get_ts() - log_start_ts) / 1000LL;
+      int ts = (arch_get_ts() - log_start_ts) / 1000LL;
       snprintf(buf3, sizeof(buf3), "%02d:%02d:%02d.%03d: ",
 	       ts / 3600000,
 	       (ts / 60000) % 60,
@@ -329,15 +334,15 @@ trace_init(void)
     close(log_fd);
     log_fd = -1;
   }
-  log_start_ts = showtime_get_ts();
+  log_start_ts = arch_get_ts();
   log_root = prop_create(prop_get_global(), "logbuffer");
   hts_mutex_init(&trace_mutex);
   trace_initialized = 1;
   extern const char *htsversion_full;
 
   TRACE(TRACE_INFO, "SYSTEM",
-        "Showtime %s starting. %d CPU cores. Systemtype:%s OS:%s",
+        APPNAMEUSER" %s starting. %d CPU cores. Systemtype:%s OS:%s",
         htsversion_full, gconf.concurrency,
-        showtime_get_system_type(),
+        arch_get_system_type(),
         gconf.os_info[0] ? gconf.os_info : "<unknown>");
 }

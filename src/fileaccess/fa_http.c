@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,7 +28,7 @@
 #include <assert.h>
 #include <zlib.h>
 
-#include "showtime.h"
+#include "main.h"
 
 #include "keyring.h"
 #include "fileaccess.h"
@@ -1017,8 +1016,8 @@ http_headers_init(struct http_header_list *l, const http_file_t *hf)
   
   http_header_add(l, "Connection",
 		  hf->hf_want_close ? "close" : "keep-alive", 0);
-  snprintf(str, sizeof(str), "Showtime %s %s",
-	   showtime_get_system_type(), htsversion);
+  snprintf(str, sizeof(str), APPNAMEUSER" %s %s",
+	   arch_get_system_type(), htsversion);
   http_header_add(l, "User-Agent", str, 0);
 }
 

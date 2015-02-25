@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
@@ -29,7 +27,7 @@
 
 #include "arch/arch.h"
 #include "text/text.h"
-#include "showtime.h"
+#include "main.h"
 #include "navigator.h"
 
 #include "ui/glw/glw.h"
@@ -38,7 +36,7 @@
 #include "android_glw.h"
 
 JNIEXPORT jint JNICALL
-Java_com_showtimemediacenter_showtime_STCore_glwCreate(JNIEnv *env,
+Java_com_lonelycoder_mediaplayer_Core_glwCreate(JNIEnv *env,
                                                        jobject obj,
                                                        jobject vrp)
 {
@@ -49,11 +47,11 @@ Java_com_showtimemediacenter_showtime_STCore_glwCreate(JNIEnv *env,
   if(glw_init(&agr->gr))
     return 0;
 
-  hts_cond_init(&agr->agr_runcond, &gr->gr_mutex);
+  agr->gr.gr_be.gbr_use_stencil_buffer = 1;
+
+  hts_cond_init(&agr->agr_runcond, &agr->gr.gr_mutex);
 
   agr->agr_vrp = (*env)->NewGlobalRef(env, vrp);
-
-  TRACE(TRACE_DEBUG, "GLW", "GLW %p created", agr);
 
   glw_load_universe(&agr->gr);
   return (intptr_t)agr;
@@ -61,12 +59,11 @@ Java_com_showtimemediacenter_showtime_STCore_glwCreate(JNIEnv *env,
 
 
 JNIEXPORT void JNICALL
-Java_com_showtimemediacenter_showtime_STCore_glwInit(JNIEnv *env,
+Java_com_lonelycoder_mediaplayer_Core_glwInit(JNIEnv *env,
                                                      jobject obj,
                                                      jint id)
 {
   android_glw_root_t *agr = (android_glw_root_t *)id;
-  TRACE(TRACE_DEBUG, "GLW", "GLW %p initialied", agr);
   agr->agr_running = 1;
   glw_opengl_init_context(&agr->gr);
   glClearColor(0,0,0,0);
@@ -74,14 +71,12 @@ Java_com_showtimemediacenter_showtime_STCore_glwInit(JNIEnv *env,
 
 
 JNIEXPORT void JNICALL
-Java_com_showtimemediacenter_showtime_STCore_glwFini(JNIEnv *env,
+Java_com_lonelycoder_mediaplayer_Core_glwFini(JNIEnv *env,
                                                      jobject obj,
                                                      jint id)
 {
   android_glw_root_t *agr = (android_glw_root_t *)id;
   glw_root_t *gr = &agr->gr;
-
-  TRACE(TRACE_DEBUG, "GLW", "GLW %p finishing", agr);
 
   glw_lock(gr);
   // Calling twice will unload all textures, etc
@@ -95,21 +90,17 @@ Java_com_showtimemediacenter_showtime_STCore_glwFini(JNIEnv *env,
 
 
 JNIEXPORT void JNICALL
-Java_com_showtimemediacenter_showtime_STCore_glwDestroy(JNIEnv *env,
+Java_com_lonelycoder_mediaplayer_Core_glwDestroy(JNIEnv *env,
                                                      jobject obj,
                                                      jint id)
 {
   android_glw_root_t *agr = (android_glw_root_t *)id;
   glw_root_t *gr = &agr->gr;
 
-  TRACE(TRACE_DEBUG, "GLW", "GLW %p destroying", agr);
-
   glw_lock(gr);
   while(agr->agr_running == 1)
     hts_cond_wait(&agr->agr_runcond, &gr->gr_mutex);
   glw_unlock(gr);
-
-  TRACE(TRACE_DEBUG, "GLW", "GLW %p destroyed", agr);
 
   (*env)->DeleteGlobalRef(env, agr->agr_vrp);
 
@@ -121,7 +112,7 @@ Java_com_showtimemediacenter_showtime_STCore_glwDestroy(JNIEnv *env,
 
 
 JNIEXPORT void JNICALL
-Java_com_showtimemediacenter_showtime_STCore_glwResize(JNIEnv *env,
+Java_com_lonelycoder_mediaplayer_Core_glwResize(JNIEnv *env,
                                                        jobject obj,
                                                        jint id,
                                                        jint width,
@@ -136,33 +127,43 @@ Java_com_showtimemediacenter_showtime_STCore_glwResize(JNIEnv *env,
 
 
 JNIEXPORT void JNICALL
-Java_com_showtimemediacenter_showtime_STCore_glwStep(JNIEnv *env,
+Java_com_lonelycoder_mediaplayer_Core_glwStep(JNIEnv *env,
                                                      jobject obj,
                                                      jint id)
 {
   android_glw_root_t *agr = (android_glw_root_t *)id;
   glw_root_t *gr = &agr->gr;
+  int zmax;
 
   glw_lock(gr);
-  gr->gr_can_externalize = 1;
-  gr->gr_externalize_cnt = 0;
   glViewport(0, 0, gr->gr_width, gr->gr_height);
-  glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+  glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+  glEnable(GL_STENCIL_TEST);
+  glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+  glDepthMask(GL_FALSE);
+
   glw_prepare_frame(gr, 0);
 
   glw_rctx_t rc;
-  glw_rctx_init(&rc, gr->gr_width, gr->gr_height, 1);
+  glw_rctx_init(&rc, gr->gr_width, gr->gr_height, 1, &zmax);
   glw_layout0(gr->gr_universe, &rc);
   glw_render0(gr->gr_universe, &rc);
 
   glw_unlock(gr);
+
+  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+  glDepthMask(GL_TRUE);
+
   glw_post_scene(gr);
 
+  if(longpress_periodic(&agr->agr_dpad_center, gr->gr_frame_start)) {
+    glw_inject_event(gr, event_create_action(ACTION_ITEMMENU));
+  }
 }
 
 
 JNIEXPORT void JNICALL
-Java_com_showtimemediacenter_showtime_STCore_glwMotion(JNIEnv *env,
+Java_com_lonelycoder_mediaplayer_Core_glwMotion(JNIEnv *env,
                                                        jobject obj,
                                                        jint id,
                                                        jint action,
@@ -198,15 +199,18 @@ const static action_type_t *btn_to_action[end_of_AKEYCODE] = {
   [AKEYCODE_DPAD_UP]         = AVEC(ACTION_UP),
   [AKEYCODE_DPAD_RIGHT]      = AVEC(ACTION_RIGHT),
   [AKEYCODE_DPAD_DOWN]       = AVEC(ACTION_DOWN),
-  [AKEYCODE_DPAD_CENTER]     = AVEC(ACTION_ACTIVATE),
   [AKEYCODE_MENU]            = AVEC(ACTION_MENU),
   [AKEYCODE_STAR]            = AVEC(ACTION_ITEMMENU),
+  [AKEYCODE_MEDIA_REWIND]       = AVEC(ACTION_SEEK_BACKWARD),
+  [AKEYCODE_MEDIA_FAST_FORWARD] = AVEC(ACTION_SEEK_FORWARD),
+  [AKEYCODE_MEDIA_PLAY_PAUSE]   = AVEC(ACTION_PLAYPAUSE),
+  [AKEYCODE_ENTER]           = AVEC(ACTION_ACTIVATE),
+  [AKEYCODE_DEL]             = AVEC(ACTION_NAV_BACK),
 };
 
 
-
 JNIEXPORT jboolean JNICALL
-Java_com_showtimemediacenter_showtime_STCore_glwKeyDown(JNIEnv *env,
+Java_com_lonelycoder_mediaplayer_Core_glwKeyDown(JNIEnv *env,
                                                         jobject obj,
                                                         jint id,
                                                         jint keycode)
@@ -214,6 +218,11 @@ Java_com_showtimemediacenter_showtime_STCore_glwKeyDown(JNIEnv *env,
   android_glw_root_t *agr = (android_glw_root_t *)id;
   glw_root_t *gr = &agr->gr;
   event_t *e = NULL;
+
+  if(keycode == AKEYCODE_DPAD_CENTER) {
+    longpress_down(&agr->agr_dpad_center);
+    return 1;
+  }
 
   if(keycode < end_of_AKEYCODE) {
     const action_type_t *avec = btn_to_action[keycode];
@@ -225,10 +234,32 @@ Java_com_showtimemediacenter_showtime_STCore_glwKeyDown(JNIEnv *env,
     }
   }
 
-  TRACE(TRACE_DEBUG, "ANDROID", "Input key %d -> %p", keycode, e);
-
   if(e != NULL)
     glw_inject_event(gr, e);
 
   return e != NULL;
 }
+
+JNIEXPORT jboolean JNICALL
+Java_com_lonelycoder_mediaplayer_Core_glwKeyUp(JNIEnv *env,
+                                                      jobject obj,
+                                                      jint id,
+                                                      jint keycode)
+{
+  android_glw_root_t *agr = (android_glw_root_t *)id;
+  event_t *e = NULL;
+
+  switch(keycode) {
+  case AKEYCODE_DPAD_CENTER:
+    if(longpress_up(&agr->agr_dpad_center))
+      e = event_create_action(ACTION_ACTIVATE);
+    break;
+  }
+
+  if(e != NULL) {
+    glw_inject_event(&agr->gr, e);
+    return 1;
+  }
+  return 0;
+}
+

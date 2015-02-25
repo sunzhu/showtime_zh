@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include "linux.h"
 
 #if defined(__i386__) || defined(__x86_64__) || defined(__arm__)
@@ -41,7 +39,7 @@
 #include <sys/prctl.h>
 #include <fcntl.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "arch/arch.h"
 
 int (*extra_traphandler)(int sig, siginfo_t *si, void *UC);
@@ -368,7 +366,7 @@ linux_trap_init(void)
     self[r] = 0;
 
   snprintf(line1, sizeof(line1),
-	   "PRG: Showtime (%s) EXE: %s, CWD: %s ", htsversion_full,
+	   "PRG: "APPNAMEUSER" (%s) EXE: %s, CWD: %s ", htsversion_full,
 	   self, getcwd(path, sizeof(path)));
 
   dl_iterate_phdr(callback, NULL);

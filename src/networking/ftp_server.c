@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -28,7 +26,7 @@
 
 #include <netinet/in.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "asyncio.h"
 #include "net.h"
 #include "arch/threads.h"
@@ -96,10 +94,10 @@ ftp_server_open(const char *url, char *errbuf, size_t errlen, int flags)
 /**
  *
  */
-static int
-ftp_server_makedirs(const char *url, char *errbuf, size_t errlen)
+static fa_err_code_t
+ftp_server_makedirs(const char *url)
 {
-  return fa_protocol_vfs.fap_makedirs(&fa_protocol_vfs, url, errbuf, errlen);
+  return fa_protocol_vfs.fap_makedir(&fa_protocol_vfs, url);
 }
 
 
@@ -208,7 +206,7 @@ ftp_write(ftp_connection_t *fc, int code, const char *fmt, ...)
 static int
 cmd_QUIT(ftp_connection_t *fc, char *args)
 {
-  ftp_write(fc, 221, "Thank you for using the Showtime FTP service");
+  ftp_write(fc, 221, "Thank you for using the "APPNAMEUSER" FTP service");
   return 1;
 }
 
@@ -256,7 +254,7 @@ static int
 cmd_SYST(ftp_connection_t *fc, char *args)
 {
   ftp_write(fc, 215, "UNIX Type: L8 Version: %s %s",
-             htsversion, showtime_get_system_type());
+             htsversion, arch_get_system_type());
   return 0;
 }
 
@@ -380,7 +378,7 @@ cmd_CWD(ftp_connection_t *fc, char *args)
   struct fa_stat fs;
   int err = ftp_server_stat(newpath, &fs, errbuf, sizeof(errbuf));
 
-  if(!err && fs.fs_type != CONTENT_DIR) {
+  if(!err && !content_dirish(fs.fs_type)) {
     snprintf(errbuf, sizeof(errbuf), "Not a directory");
     err = 1;
   }
@@ -543,7 +541,7 @@ cmd_LIST(ftp_connection_t *fc, char *args)
 
     tcp_printf(tc,
                "%crwx------  1 nobody nobody %10"PRIu64" May  5 11:20 %s\r\n",
-               fde->fde_type == CONTENT_DIR ? 'd' : '-',
+               content_dirish(fde->fde_type) ? 'd' : '-',
                fde->fde_stat.fs_size,
                rstr_get(fde->fde_filename));
   }
@@ -693,12 +691,13 @@ static int
 cmd_MKD(ftp_connection_t *fc, char *args)
 {
   char pathbuf[1024];
-  char errbuf[256];
 
   construct_path(pathbuf, sizeof(pathbuf), fc, args);
 
-  if(ftp_server_makedirs(pathbuf, errbuf, sizeof(errbuf))) {
-    ftp_write(fc, 550, "%s: %s", args, errbuf);
+  fa_err_code_t err = ftp_server_makedirs(pathbuf);
+
+  if(err) {
+    ftp_write(fc, 550, "%s: error %d", args, err);
     return 0;
   }
   ftp_write(fc, 257, "\"%s\" directory created.", args);

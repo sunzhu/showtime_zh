@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <string.h>
 #include "js.h"
 
@@ -343,7 +341,7 @@ js_http_request(JSContext *cx, jsval *rval,
       htsbuf_queue_init(&hq, 0);
       htsbuf_append(&hq, str, strlen(str));
       postdata = &hq;
-      postcontenttype =  "text/ascii";
+      postcontenttype =  "text/plain";
     }
   }
 

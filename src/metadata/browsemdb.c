@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,12 +17,11 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <limits.h>
 #include <unistd.h>
 #include <stdio.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "backend/backend.h"
 #include "db/db_support.h"
 #include "metadata.h"
@@ -470,9 +468,9 @@ metadata_browse(void *db, const char *url, prop_t *nodes,
       prop_unlink(status);
     }
 
-    //    int64_t ts = showtime_get_ts();
+    //    int64_t ts = arch_get_ts();
     bmdb_query_exec(db, &b);
-    //    printf("Query took %lld\n", showtime_get_ts() - ts);
+    //    printf("Query took %lld\n", arch_get_ts() - ts);
     prop_set(model, "loading", PROP_SET_INT, 0);
     sleep(1);
   }

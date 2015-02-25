@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,9 +17,8 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <time.h>
-#include "showtime.h"
+#include "main.h"
 #include "prop/prop.h"
 #include "callout.h"
 #include "arch/arch.h"
@@ -77,7 +75,7 @@ callout_arm_x(callout_t *d, callout_callback_t *callback,
               void *opaque, int delta,
               const char *file, int line)
 {
-  uint64_t deadline = showtime_get_ts() + delta * 1000000LL;
+  uint64_t deadline = arch_get_ts() + delta * 1000000LL;
   callout_arm_abs(d, callback, opaque, deadline, file, line);
 }
 
@@ -89,7 +87,7 @@ callout_arm_hires_x(callout_t *d, callout_callback_t *callback,
                     void *opaque, uint64_t delta,
                     const char *file, int line)
 {
-  uint64_t deadline = showtime_get_ts() + delta;
+  uint64_t deadline = arch_get_ts() + delta;
   callout_arm_abs(d, callback, opaque, deadline, file, line);
 }
 
@@ -122,7 +120,7 @@ callout_loop(void *aux)
 
   while(1) {
 
-    now = showtime_get_ts();
+    now = arch_get_ts();
 
     while((c = LIST_FIRST(&callouts)) != NULL && c->c_deadline <= now) {
       cc = c->c_callback;
@@ -133,7 +131,7 @@ callout_loop(void *aux)
       hts_mutex_unlock(&callout_mutex);
       cc(c, c->c_opaque);
       hts_mutex_lock(&callout_mutex);
-      int64_t ts = showtime_get_ts();
+      int64_t ts = arch_get_ts();
       if(ts - now > 1000000)
         TRACE(TRACE_DEBUG, "Callout", "%s:%d executed for %dus",
               file, line, (int)(ts - now));

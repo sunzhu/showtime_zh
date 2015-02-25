@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,7 +18,6 @@
  *  For more information, contact andreas@lonelycoder.com
  */
 #pragma once
-
 #include <stdlib.h>
 
 #include "config.h"
@@ -140,6 +138,9 @@ typedef struct frame_info {
     COLOR_SPACE_BT_601,
     COLOR_SPACE_SMPTE_240M,
   } fi_color_space;
+
+  void (*fi_ref_release)(void *aux);
+  void *fi_ref_aux;
 
 } frame_info_t;
 

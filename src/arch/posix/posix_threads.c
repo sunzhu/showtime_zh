@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,11 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-#if defined(__native_client__)
-#define _GNU_SOURCE  // Needed for PTHREAD_MUTEX_RECURSIVE
-#endif
-
 #if defined(linux)
 #include <sys/prctl.h>
 #include <sys/resource.h>
@@ -32,7 +26,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "posix_threads.h"
 
 #include <errno.h>
@@ -59,11 +53,11 @@ hts_cond_wait_timeout(hts_cond_t *c, hts_mutex_t *m, int delta)
 {
   struct timespec ts;
 
-#ifdef __APPLE__
-  /* darwin does not have clock_gettime */
+#if defined(__APPLE__)
   struct timeval tv;
   gettimeofday(&tv, NULL);
-  TIMEVAL_TO_TIMESPEC(&tv, &ts);
+  ts.tv_sec  = tv.tv_sec;
+  ts.tv_nsec = tv.tv_usec * 1000;
 #else
   clock_gettime(CLOCK_MONOTONIC, &ts);
 #endif
@@ -85,8 +79,8 @@ hts_cond_wait_timeout(hts_cond_t *c, hts_mutex_t *m, int delta)
 int
 hts_cond_wait_timeout_abs(hts_cond_t *c, hts_mutex_t *m, int64_t deadline)
 {
-#ifdef __APPLE__
-  int64_t ts = deadline - showtime_get_ts();
+#if defined(__APPLE__)
+  int64_t ts = deadline - arch_get_ts();
   if(ts <= 0)
     return 1;
 
@@ -108,7 +102,7 @@ hts_cond_wait_timeout_abs(hts_cond_t *c, hts_mutex_t *m, int64_t deadline)
 extern void
 hts_cond_init(hts_cond_t *c, hts_mutex_t *m)
 {
-#ifdef __APPLE__
+#if defined(__APPLE__)
   pthread_cond_init(c, NULL);
 #else
   pthread_condattr_t attr;

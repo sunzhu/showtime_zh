@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -271,7 +270,7 @@ android_audio_deliver(audio_decoder_t *ad, int samples, int64_t pts, int epoch)
 
     mp->mp_audio_clock = pts - delay;
     mp->mp_audio_clock_epoch = epoch;
-    mp->mp_audio_clock_avtime = showtime_get_avtime();
+    mp->mp_audio_clock_avtime = arch_get_avtime();
 
     hts_mutex_unlock(&mp->mp_clock_mutex);
   }

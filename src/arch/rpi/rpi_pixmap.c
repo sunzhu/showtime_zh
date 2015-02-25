@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,8 +17,7 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-#include "showtime.h"
+#include "main.h"
 #include "rpi_pixmap.h"
 #include "omx.h"
 #include "image/pixmap.h"
@@ -174,7 +172,7 @@ setup_tunnel(rpi_pixmap_decoder_t *rpd)
 
 #ifdef TIMING
 #define CHECKPOINT(x)				\
-  ts2 = showtime_get_ts();			\
+  ts2 = arch_get_ts();			\
   printf("%s in %lld\n", x, ts2 - ts);		\
   ts = ts2;
 #else
@@ -201,7 +199,7 @@ rpi_pixmap_decode(image_coded_type_t type,
     return NULL;
 
 #ifdef TIMING
-  int64_t ts = showtime_get_ts(), ts2;
+  int64_t ts = arch_get_ts(), ts2;
 #endif
   rpi_pixmap_decoder_t *rpd = pixmap_decoder_create(OMX_IMAGE_CodingJPEG);
 

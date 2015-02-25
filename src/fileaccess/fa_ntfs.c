@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,17 +17,16 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <arpa/inet.h>
 #include <assert.h>
+#include <errno.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess.h"
 #include "fa_proto.h"
 #include "misc/callout.h"
 #include "service.h"
-
 #include "usage.h"
 
 #include "ext/libntfs_ext/include/ntfs.h"
@@ -249,13 +247,17 @@ ntfs_rename(const fa_protocol_t *fap, const char *old, const char *new,
 /**
  *
  */
-static int
-ntfs_makedirs(struct fa_protocol *fap, const char *url,
-	      char *errbuf, size_t errlen)
+static fa_err_code_t
+ntfs_makedir(struct fa_protocol *fap, const char *url)
 {
-  if(ps3ntfs_mkdir(url, 0777)) {
-    snprintf(errbuf, errlen, "%s", strerror(ps3ntfs_errno()));
-    return -1;
+  if(!ps3ntfs_mkdir(url, 0777))
+    return 0;
+
+  switch(ps3ntfs_errno()) {
+    case ENOENT:  return FAP_NOENT;
+    case EPERM:   return FAP_PERMISSION_DENIED;
+    case EEXIST:  return FAP_EXIST;
+    default:      return FAP_ERROR;
   }
   return 0;
 }
@@ -421,7 +423,7 @@ static fa_protocol_t fa_protocol_ntfs = {
   .fap_unlink= ntfs_unlink,
   .fap_rmdir = ntfs_rmdir,
   .fap_rename = ntfs_rename,
-  .fap_makedirs = ntfs_makedirs,
+  .fap_makedir = ntfs_makedir,
 
 
 };

@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,10 +17,9 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <CoreServices/CoreServices.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "backend/backend.h"
 #include "backend/search.h"
 #include "fileaccess.h"
@@ -122,7 +120,7 @@ spotlight_searcher(void *aux)
   char iconpath[PATH_MAX];
 
   snprintf(iconpath, sizeof(iconpath), "%s/resources/fileaccess/fs_icon.png",
-	   showtime_dataroot());
+	   app_dataroot());
 
   fas->fas_pc = prop_courier_create_passive();
   fas->fas_sub = 

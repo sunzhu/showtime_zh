@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,7 +28,7 @@
 
 #include "prop/prop.h"
 
-#include "showtime.h"
+#include "main.h"
 #include "media/media.h"
 #include "metadata.h"
 #include "db/db_support.h"
@@ -108,7 +107,7 @@ metadb_init(void)
   char buf2[256];
 
   snprintf(buf, sizeof(buf), "%s/metadb", gconf.persistent_path);
-  mkdir(buf, 0770);
+  fa_makedir(buf);
   snprintf(buf, sizeof(buf), "%s/metadb/meta.db", gconf.persistent_path);
 
   //  unlink(buf);
@@ -118,7 +117,7 @@ metadb_init(void)
   if(db == NULL)
     return;
 
-  snprintf(buf, sizeof(buf), "%s/resources/metadb", showtime_dataroot());
+  snprintf(buf, sizeof(buf), "%s/resources/metadb", app_dataroot());
   snprintf(buf2, sizeof(buf2), "%s/kvstore/kvstore.db", gconf.persistent_path);
 
   int r = db_upgrade_schema(db, buf, "metadb", "kvstore", buf2);
@@ -1278,6 +1277,7 @@ metadb_metadata_write(void *db, const char *url, time_t mtime,
   case CONTENT_IMAGE:
   case CONTENT_DIR:
   case CONTENT_DVD:
+  case CONTENT_SHARE:
     break;
   default:
     return;
@@ -2152,6 +2152,7 @@ metadata_get(void *db, int item_id, int contenttype, get_cache_t *gc)
     break;
 
   case CONTENT_DIR:
+  case CONTENT_SHARE:
   case CONTENT_DVD:
     r = 0;
     break;

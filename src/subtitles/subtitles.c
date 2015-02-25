@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,8 +17,7 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-#include "showtime.h"
+#include "main.h"
 #include "prop/prop.h"
 #include "arch/threads.h"
 #include "fileaccess/fileaccess.h"
@@ -27,7 +25,6 @@
 #include "media/media.h"
 #include "vobsub.h"
 #include "backend/backend.h"
-#include "js/js.h"
 
 #include "subtitles.h"
 #include "video/video_settings.h"
@@ -364,7 +361,7 @@ fs_sub_scan_dir(sub_scanner_t *ss, const char *url, const char *video,
     if(ss->ss_stop)
       break;
 
-    if(fde->fde_type == CONTENT_DIR) {
+    if(fde->fde_type == CONTENT_DIR || fde->fde_type == CONTENT_SHARE) {
       if(descend_filter == NULL ||
 	 !strcasecmp(rstr_get(fde->fde_filename), descend_filter)) {
 	fs_sub_scan_dir(ss, rstr_get(fde->fde_url), video, descend_filter,

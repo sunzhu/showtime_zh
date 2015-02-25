@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,9 +17,7 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #pragma once
-
 #define VERTEX_SIZE 12 // Number of floats per vertex
 
 /**
@@ -138,6 +135,8 @@ void glw_renderer_init(glw_renderer_t *gr, int vertices, int triangles,
 		       uint16_t *indices);
 
 void glw_renderer_init_quad(glw_renderer_t *gr);
+
+void glw_renderer_init_triangle(glw_renderer_t *gr);
 
 void glw_renderer_triangle(glw_renderer_t *gr, int element, 
 			   uint16_t a, uint16_t b, uint16_t c);

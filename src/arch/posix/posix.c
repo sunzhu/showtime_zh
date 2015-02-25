@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,17 +18,6 @@
  *  For more information, contact andreas@lonelycoder.com
  */
 
-/*
- * Note: Do not place #includes here.
- *
- * #define _GNU_SOURCE
- * #include <sched.h>
- * 
- * Must be first or compilation might fail on linux
- *
- */
-const char *showtime_get_system_type(void);
-
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
@@ -41,7 +29,7 @@ const char *showtime_get_system_type(void);
 #include <sys/time.h>
 #include <signal.h>
 #include "text/text.h"
-#include "showtime.h"
+#include "main.h"
 
 #include "networking/net.h"
 
@@ -201,7 +189,7 @@ trace_arch(int level, const char *prefix, const char *str)
  *
  */
 int64_t
-showtime_get_ts(void)
+arch_get_ts(void)
 {
 #if _POSIX_TIMERS > 0 && defined(_POSIX_MONOTONIC_CLOCK)
   struct timespec tv;

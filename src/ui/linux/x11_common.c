@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include "config.h"
 #include <unistd.h>
 #include <stdio.h>
@@ -50,7 +48,7 @@
 #endif
 
 #include "misc/callout.h"
-#include "showtime.h"
+#include "main.h"
 
 #include "x11_common.h"
 
@@ -415,7 +413,7 @@ wait_for_aclock(media_pipe_t *mp, int64_t pts, int epoch)
   }
 
   hts_mutex_lock(&mp->mp_clock_mutex);
-  rt = showtime_get_avtime();
+  rt = arch_get_avtime();
   aclock = mp->mp_audio_clock + rt - mp->mp_audio_clock_avtime;
   hts_mutex_unlock(&mp->mp_clock_mutex);
 

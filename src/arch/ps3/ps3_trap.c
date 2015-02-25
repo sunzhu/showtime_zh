@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,7 +19,7 @@
  */
 #include <stdio.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess/fileaccess.h"
 #include "arch/halloc.h"
 #include "ps3.h"
@@ -34,7 +33,7 @@ load_syms(void)
   char sympath[256];
   char errbuf[256];
 
-  snprintf(sympath, sizeof(sympath), "%s/showtime.syms", showtime_dataroot());
+  snprintf(sympath, sizeof(sympath), "%s/showtime.syms", app_dataroot());
 
   my_trace("sympath: %s\n", sympath);
 

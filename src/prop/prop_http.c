@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <assert.h>
 
@@ -231,7 +229,7 @@ hc_prop(http_connection_t *hc, const char *remain, void *opaque,
     rval = http_send_reply(hc, 0,
                            html ?
                            "text/html; charset=utf-8" :
-                           "text/ascii; charset=utf-8",
+                           "text/plain; charset=utf-8",
                            NULL, NULL, 0, &out);
     break;
 

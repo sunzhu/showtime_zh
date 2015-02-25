@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -34,7 +32,7 @@
 
 #include <libavutil/avutil.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "media/media.h"
 #include "audio2/audio.h"
 
@@ -64,9 +62,9 @@ typedef struct decoder {
  *
  */
 int64_t
-showtime_get_avtime(void)
+arch_get_avtime(void)
 {
-  return showtime_get_ts();
+  return arch_get_ts();
 }
 
 
@@ -309,7 +307,7 @@ ps3_audio_deliver(audio_decoder_t *ad, int samples, int64_t pts, int epoch)
 
       hts_mutex_lock(&mp->mp_clock_mutex);
       mp->mp_audio_clock = pts;
-      mp->mp_audio_clock_avtime = showtime_get_avtime();
+      mp->mp_audio_clock_avtime = arch_get_avtime();
       mp->mp_audio_clock_epoch = epoch;
       hts_mutex_unlock(&mp->mp_clock_mutex);
       pts = AV_NOPTS_VALUE;

@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,11 +23,11 @@
 const char *htsversion=BUILD_VERSION;
 const char *htsversion_full=BUILD_VERSION;
 
-#include "showtime.h"
+#include "main.h"
 #include <stdio.h>
 
 uint32_t
-showtime_parse_version_int(const char *str)
+parse_version_int(const char *str)
 {
   int major = 0;
   int minor = 0;
@@ -42,8 +41,8 @@ showtime_parse_version_int(const char *str)
 }
 
 uint32_t
-showtime_get_version_int(void) 
+app_get_version_int(void) 
 {
-  return showtime_parse_version_int(BUILD_VERSION);
+  return parse_version_int(BUILD_VERSION);
 }
 

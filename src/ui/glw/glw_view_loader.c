@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include "glw.h"
 #include "glw_transitions.h"
 
@@ -215,7 +213,7 @@ static void
 set_source(glw_t *w, rstr_t *url)
 {
   glw_view_loader_t *a = (glw_view_loader_t *)w;
-  glw_t *c, *d;
+  glw_t *c;
   
   if(w->glw_flags2 & GLW2_DEBUG)
     TRACE(TRACE_DEBUG, "GLW", "Loader loading %s", 
@@ -230,22 +228,20 @@ set_source(glw_t *w, rstr_t *url)
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link)
     glw_suspend_subscriptions(c);
 
-  if(url && rstr_get(url)[0]) {
-    d = glw_view_create(w->glw_root, url, w, 
-			a->prop_self_override ?: a->prop, 
-			a->prop_parent_override ?: a->prop_parent, a->args, 
-			a->prop_clone, 1, 0);
-    if(d != NULL)
-      return;
-  }
+  if(url != NULL && rstr_get(url)[0] == 0)
+    url = NULL;
 
-  if(a->alt_url != NULL) {
-    d = glw_view_create(w->glw_root, a->alt_url, w, 
-			a->prop_self_override ?: a->prop, 
-			a->prop_parent_override ?: a->prop_parent, a->args, 
-			a->prop_clone, 1, 1);
-    if(d != NULL)
-      return;
+  rstr_t *alt_url = a->alt_url;
+
+  if(alt_url != NULL && rstr_get(alt_url)[0] == 0)
+    alt_url = NULL;
+
+  if(url || alt_url) {
+    glw_view_create(w->glw_root, url, alt_url, w,
+                    a->prop_self_override ?: a->prop,
+                    a->prop_parent_override ?: a->prop_parent, a->args,
+                    a->prop_clone);
+    return;
   }
 
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link)

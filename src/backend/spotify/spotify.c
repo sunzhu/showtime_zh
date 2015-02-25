@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +30,7 @@
 #include <limits.h>
 #include <sys/file.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "prop/prop_nodefilter.h"
 #include "navigator.h"
 #include "backend/backend.h"
@@ -4526,7 +4524,7 @@ enable_cb(int enabled)
 
     spotify_setting[0] =
       setting_create(SETTING_BOOL, s, SETTINGS_INITIAL_UPDATE,
-                     SETTING_TITLE(_p("Automatic login when Showtime starts")),
+                     SETTING_TITLE(_p("Automatic login on start")),
                      SETTING_VALUE(1),
                      SETTING_WRITE_BOOL(&spotify_autologin),
                      SETTING_HTSMSG("autologin", store, "spotify"),
@@ -4587,7 +4585,7 @@ spotify_init(void)
 #endif
 
   snprintf(iconurl, sizeof(iconurl),
-	   "%s/resources/spotify/spotify_icon.png", showtime_dataroot());
+	   "%s/resources/spotify/spotify_icon.png", app_dataroot());
   spotify_icon_url = rstr_alloc(iconurl);
 
   TRACE(TRACE_INFO, "Spotify", "Using library version %s", f_sp_build_id());
