@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2014 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -31,7 +30,7 @@
 #include "metadata.h"
 #include "db/db_support.h"
 #include "db/kvstore.h"
-#include "showtime.h"
+#include "main.h"
 #include "playinfo.h"
 #include "video/video_settings.h"
 #include "notifications.h"

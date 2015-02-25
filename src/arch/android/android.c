@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
@@ -29,19 +27,24 @@
 #include <signal.h>
 #include <android/log.h>
 #include <jni.h>
+#include <sys/system_properties.h>
 #include <GLES2/gl2.h>
 
 #include "arch/arch.h"
-#include "showtime.h"
+#include "main.h"
 #include "service.h"
 #include "networking/net.h"
 #include "ui/glw/glw.h"
 #include "prop/prop_jni.h"
 #include "android.h"
 #include "navigator.h"
-#include "arch/linux/linux_process_monitor.h"
+#include <sys/mman.h>
+#include "arch/halloc.h"
 
-#include "arch/sunxi/sunxi.h"
+static char android_manufacturer[PROP_VALUE_MAX];
+static char android_model[PROP_VALUE_MAX];
+static char android_name[PROP_VALUE_MAX];
+static char system_type[256];
 
 JavaVM *JVM;
 jclass STCore;
@@ -61,7 +64,7 @@ trace_arch(int level, const char *prefix, const char *str)
   case TRACE_DEBUG:   prio = ANDROID_LOG_DEBUG; break;
   default:            prio = ANDROID_LOG_ERROR; break;
   }
-  __android_log_print(prio, "Showtime", "%s %s", prefix, str);
+  __android_log_print(prio, APPNAMEUSER, "%s %s", prefix, str);
 }
 
 
@@ -69,7 +72,7 @@ trace_arch(int level, const char *prefix, const char *str)
  *
  */
 int64_t
-showtime_get_ts(void)
+arch_get_ts(void)
 {
   struct timeval tv;
   gettimeofday(&tv, NULL);
@@ -103,8 +106,15 @@ arch_get_seed(void)
 }
 
 
-#include <sys/mman.h>
-#include "arch/halloc.h"
+/**
+ *
+ */
+size_t
+arch_malloc_size(void *ptr)
+{
+  return malloc_usable_size(ptr);
+}
+
 
 /**
  *
@@ -167,9 +177,9 @@ mymemalign(size_t align, size_t size)
 }
 
 const char *
-showtime_get_system_type(void)
+arch_get_system_type(void)
 {
-  return "android";
+  return "Android";
 }
 
 void
@@ -184,13 +194,20 @@ arch_stop_req(void)
   return 0;
 }
 
+void
+arch_localtime(const time_t *now, struct tm *tm)
+{
+  localtime_r(now, tm);
+}
+
+
 /**
  *
  */
 int64_t
-showtime_get_avtime(void)
+arch_get_avtime(void)
 {
-  return showtime_get_ts();
+  return arch_get_ts();
 }
 
 
@@ -198,6 +215,15 @@ jint
 JNI_OnLoad(JavaVM *vm, void *reserved)
 {
   JVM = vm;
+
+  __system_property_get("ro.product.manufacturer", android_manufacturer);
+  __system_property_get("ro.product.model",        android_model);
+  __system_property_get("ro.product.name",         android_name);
+
+  snprintf(system_type, sizeof(system_type),
+           "android/%s/%s/%s", android_manufacturer,
+           android_model, android_name);
+
   return JNI_VERSION_1_6;
 }
 
@@ -206,8 +232,9 @@ JNI_OnLoad(JavaVM *vm, void *reserved)
  *
  */
 JNIEXPORT void JNICALL
-Java_com_showtimemediacenter_showtime_STCore_coreInit(JNIEnv *env, jobject obj, jstring j_settings, jstring j_cachedir)
+Java_com_lonelycoder_mediaplayer_Core_coreInit(JNIEnv *env, jobject obj, jstring j_settings, jstring j_cachedir)
 {
+  trace_arch(TRACE_INFO, "Core", "Native core initializing");
   gconf.trace_level = TRACE_DEBUG;
 
   struct timeval tv;
@@ -229,9 +256,9 @@ Java_com_showtimemediacenter_showtime_STCore_coreInit(JNIEnv *env, jobject obj, 
 
   signal(SIGPIPE, SIG_IGN);
 
-  showtime_init();
+  main_init();
 
-  jclass c = (*env)->FindClass(env, "com/showtimemediacenter/showtime/STCore");
+  jclass c = (*env)->FindClass(env, "com/lonelycoder/mediaplayer/Core");
   STCore = (*env)->NewGlobalRef(env, c);
 
   prop_jni_init(env);
@@ -242,8 +269,6 @@ Java_com_showtimemediacenter_showtime_STCore_coreInit(JNIEnv *env, jobject obj, 
   service_create("music", "Movies", "file:///sdcard/Movies",
                  "video", NULL, 0, 1, SVC_ORIGIN_SYSTEM);
 
-  linux_process_monitor_init();
-
   android_nav = nav_spawn();
 }
 
@@ -252,7 +277,7 @@ Java_com_showtimemediacenter_showtime_STCore_coreInit(JNIEnv *env, jobject obj, 
  *
  */
 JNIEXPORT void JNICALL
-Java_com_showtimemediacenter_showtime_STCore_pollCourier(JNIEnv *env, jobject obj)
+Java_com_lonelycoder_mediaplayer_Core_pollCourier(JNIEnv *env, jobject obj)
 {
   prop_jni_poll();
 }

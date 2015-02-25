@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,16 +17,17 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include <stdio.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "settings.h"
 #include "i18n.h"
 #include "misc/str.h"
 #include "fileaccess/fileaccess.h"
+#if ENABLE_HTTPSERVER
 #include "networking/http_server.h"
+#endif
 #include "htsmsg/htsmsg_store.h"
 
 static void nls_init(prop_t *parent, htsmsg_t *store);
@@ -505,7 +505,7 @@ set_language(void *opaque, const char *str)
     return;
   }
 
-  snprintf(buf, sizeof(buf), "%s/lang/%s.lang", showtime_dataroot(), str);
+  snprintf(buf, sizeof(buf), "%s/lang/%s.lang", app_dataroot(), str);
   TRACE(TRACE_INFO, "i18n", "Loading language %s", str);
   nls_load_lang(buf);
 }
@@ -565,7 +565,7 @@ nls_lang_metadata(const char *path, char *errbuf, size_t errlen,
   return -1;
 }
 
-
+#if ENABLE_HTTPSERVER
 /**
  *
  */
@@ -721,7 +721,7 @@ upload_translation(http_connection_t *hc, const char *remain, void *opaque,
   }
 
   htsbuf_qprintf(&out,
-                 "<h3>Load new translation file into Showtime</h3>"
+                 "<h3>Load new translation file into "APPNAMEUSER"</h3>"
                  "<form method=\"post\" enctype=\"multipart/form-data\">"
                  "<label for=\"file\">.lang file:</label>"
                  "<input type=\"file\" name=\"file\" id=\"file\"><br>"
@@ -730,6 +730,7 @@ upload_translation(http_connection_t *hc, const char *remain, void *opaque,
 
   return http_send_reply(hc, 0, "text/html", NULL, NULL, 0, &out);
 }
+#endif // ENABLE_HTTPSERVER
 
 
 typedef struct lang {
@@ -756,7 +757,7 @@ nls_init(prop_t *parent, htsmsg_t *store)
 {
   char buf[200];
   char buf2[200];
-  snprintf(buf2, sizeof(buf2), "%s/lang", showtime_dataroot());
+  snprintf(buf2, sizeof(buf2), "%s/lang", app_dataroot());
   fa_dir_t *fd = fa_scandir(buf2, buf, sizeof(buf));
   fa_dir_entry_t *fde;
   char language[64];
@@ -765,11 +766,13 @@ nls_init(prop_t *parent, htsmsg_t *store)
   LIST_HEAD(, lang) list;
   lang_t *l;
 
+#if ENABLE_HTTPSERVER
   http_path_add("/showtime/translation", NULL, upload_translation, 1);
+#endif
 
   if(fd == NULL) {
     TRACE(TRACE_ERROR, "i18n", "Unable to scan languages in %s/lang -- %s",
-	  showtime_dataroot(), buf);
+	  app_dataroot(), buf);
     return;
   }
 

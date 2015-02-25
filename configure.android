@@ -9,6 +9,19 @@ source support/configure.inc
 SDK="${ANDROID_HOME}"
 NDK="${ANDROID_HOME}/../ndk"
 
+export ANDROID_API=android-17
+export ANDROID_EABI=arm-linux-androideabi-4.9
+
+install_openssl()
+{
+    OPENSSL_VER="1.0.2"
+
+    download_file http://www.lonelycoder.com/download/openssl-${OPENSSL_VER}-${ANDROID_API}-${ANDROID_EABI}.tar.gz openssltarball
+
+    tar -C "${BUILDDIR}/inst" --strip-components=1 -xf "${openssltarball}"
+}
+
+
 show_help(){
   common_help
   echo "  --sdk=PREFIX          Use Android SDK from this path [$SDK]"
@@ -55,7 +68,7 @@ if [ ! -f "${TOOLCHAIN}gcc" ]; then
         echo "NDK not found, either set NDK environment varable or specify --ndk=/path/to/ndk"
         die
     fi
-    ${NDK}/build/tools/make-standalone-toolchain.sh --platform=android-18 --install-dir=${TOPDIR}/build.android/toolchain
+    ${NDK}/build/tools/make-standalone-toolchain.sh --platform=${ANDROID_API} --install-dir=${TOPDIR}/build.android/toolchain --toolchain=${ANDROID_EABI}
 fi
 
 
@@ -68,34 +81,32 @@ enable sqlite_internal
 enable spidermonkey
 enable glw_backend_opengl_es
 enable glw
-enable polarssl
-enable librtmp
+#enable librtmp
 enable httpserver
-#enable dvd
 enable libfreetype
 enable stdin
+enable openssl
 
 bzip2_setup
 freetype_setup --host=arm-linux-gnueabihf
-
+install_openssl
 ARCH_CFLAGS="-march=armv7-a -mfloat-abi=softfp -mfpu=neon"
 ARCH_LDFLAGS="-march=armv7-a -Wl,--fix-cortex-a8"
 
 LIBAV_CFLAGS="-I${EXT_INSTALL_DIR}/include ${ARCH_CFLAGS}"
 LIBAV_LDFLAGS="-L${EXT_INSTALL_DIR}/lib  ${ARCH_LDFLAGS}"
-LIBAV_ARCH_FLAGS="--cross-prefix=${TOOLCHAIN} --enable-cross-compile --arch=armv7 --target-os=linux"
+LIBAV_ARCH_FLAGS="--cross-prefix=${TOOLCHAIN} --enable-cross-compile --arch=armv7 --target-os=android --enable-shared --disable-static"
 
 libav_setup
 rtmpdump_setup
 xmp_setup
 libyuv_setup
 
-# libspotify_setup "12.1.103-Linux-armv6-bcm2708hardfp"
-
 cat >> ${CONFIG_MAK} <<EOF
 CFLAGS_arch = ${ARCH_CFLAGS}
 CFLAGS_cfg += ${ARCH_CFLAGS}
 LDFLAGS_cfg += ${ARCH_LDFLAGS} -lOpenSLES -lGLESv2 -llog -landroid -ljnigraphics
+LDFLAGS_cfg += -lssl -lcrypto
 SDK = ${SDK}
 NDK = ${NDK}
 ADB = ${SDK}/platform-tools/adb

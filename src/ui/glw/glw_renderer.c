@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include "glw.h"
 #include "glw_renderer.h"
 
@@ -86,18 +84,28 @@ glw_renderer_triangle(glw_renderer_t *gr, int element,
 }
 
 
+static uint16_t quadvertices[6] = {
+  0, 1, 2,
+  0, 2, 3,
+};
+
 /**
  *
  */
 void
 glw_renderer_init_quad(glw_renderer_t *gr)
 {
-  static uint16_t quad[6] = {
-    0, 1, 2,
-    0, 2, 3,
-  };
+  glw_renderer_init(gr, 4, 2, quadvertices);
+}
 
-  glw_renderer_init(gr, 4, 2, quad);
+
+/**
+ *
+ */
+void
+glw_renderer_init_triangle(glw_renderer_t *gr)
+{
+  glw_renderer_init(gr, 3, 1, quadvertices);
 }
 
 

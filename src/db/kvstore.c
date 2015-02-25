@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,26 +17,19 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-
-
-#include <sys/stat.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <stdio.h>
 
 #include <sqlite3.h>
 
-#include <arpa/inet.h>
-
 #include "config.h"
-#include "showtime.h"
+#include "main.h"
 #include "prop/prop.h"
 #include "kvstore.h"
 #include "misc/callout.h"
-
+#include "misc/bytestream.h"
 #include "fileaccess/fileaccess.h"
 
 #if CONFIG_KVSTORE
@@ -120,7 +112,7 @@ kvstore_init(void)
   hts_mutex_init(&deferred_mutex);
 
   snprintf(buf, sizeof(buf), "%s/kvstore", gconf.persistent_path);
-  mkdir(buf, 0770);
+  fa_makedir(buf);
   snprintf(buf, sizeof(buf), "%s/kvstore/kvstore.db", gconf.persistent_path);
 
   //  unlink(buf);
@@ -130,7 +122,7 @@ kvstore_init(void)
   if(db == NULL)
     return;
 
-  snprintf(buf, sizeof(buf), "%s/resources/kvstore", showtime_dataroot());
+  snprintf(buf, sizeof(buf), "%s/resources/kvstore", app_dataroot());
 
   int r = db_upgrade_schema(db, buf, "kvstore", NULL, NULL);
 
@@ -569,7 +561,7 @@ kv_url_opt_get_int(const char *url, int domain, const char *key, int def)
   fa_err_code_t err = opt_get_ea(url, domain, key, &data, &size);
 
   if(err == 0 && size == 4) {
-    int rval = ntohl(*(int *)data);
+    int rval = rd32_be(data);
     free(data);
 
     if(gconf.enable_kvstore_debug)
@@ -731,7 +723,7 @@ kv_write_xattr(const kvstore_write_t *kw)
   const char *value = vtmp;
 
   char ea[512];
-  int i32;
+  uint8_t d4[4];
 #if !defined(__BIG_ENDIAN__)
   int64_t i64;
 #endif
@@ -742,8 +734,8 @@ kv_write_xattr(const kvstore_write_t *kw)
 
   switch(kw->kw_type) {
   case KVSTORE_SET_INT:
-    i32 = htonl(kw->kw_int);
-    data = &i32;
+    wr32_be(d4, kw->kw_int);
+    data = d4;
     size = 4;
     snprintf(vtmp, sizeof(vtmp), "%d", kw->kw_int);
     break;

@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #ifndef FILEACCESS_H
 #define FILEACCESS_H
 
@@ -173,11 +171,13 @@ typedef enum {
  *
  */
 typedef enum {
-  FAP_OK = 0,
-  FAP_ERROR = -1,
-  FAP_NEED_AUTH = -2,
-  FAP_NOT_SUPPORTED = -3,
-  FAP_PERMISSION_DENIED = -3,
+  FAP_OK                =   0,
+  FAP_ERROR             =  -1,
+  FAP_NEED_AUTH         =  -2,
+  FAP_NOT_SUPPORTED     =  -3,
+  FAP_PERMISSION_DENIED =  -4,
+  FAP_NOENT             =  -5,
+  FAP_EXIST             =  -6,
 } fa_err_code_t;
 
 
@@ -240,6 +240,8 @@ int fa_copy_from_fh(const char *to, fa_handle_t *src,
 int fa_copy(const char *to, const char *from, char *errbuf, size_t errsize);
 
 int fa_makedirs(const char *url, char *errbuf, size_t errsize);
+
+fa_err_code_t fa_makedir(const char *url);
 
 void fa_sanitize_filename(char *filename);
 

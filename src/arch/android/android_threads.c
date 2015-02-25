@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,12 +17,10 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-
 #include <errno.h>
 #include <jni.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "arch/posix/posix_threads.h"
 
 extern JavaVM *JVM;
@@ -39,6 +36,17 @@ hts_mutex_init_recursive(hts_mutex_t *m)
   pthread_mutex_init(m, &a);
   pthread_mutexattr_destroy(&a);
 }
+
+
+/**
+ *
+ */
+extern void
+hts_cond_init(hts_cond_t *c, hts_mutex_t *m)
+{
+  pthread_cond_init(c, NULL);
+}
+
 
 /**
  *
@@ -57,6 +65,21 @@ hts_cond_wait_timeout(hts_cond_t *c, hts_mutex_t *m, int delta)
     ts.tv_sec++;
     ts.tv_nsec -= 1000000000;
   }
+  return pthread_cond_timedwait(c, m, &ts) == ETIMEDOUT;
+}
+
+
+/**
+ *
+ */
+int
+hts_cond_wait_timeout_abs(hts_cond_t *c, hts_mutex_t *m, int64_t deadline)
+{
+  struct timespec ts;
+
+  ts.tv_sec  =  deadline / 1000000LL;
+  ts.tv_nsec = (deadline % 1000000LL) * 1000;
+
   return pthread_cond_timedwait(c, m, &ts) == ETIMEDOUT;
 }
 

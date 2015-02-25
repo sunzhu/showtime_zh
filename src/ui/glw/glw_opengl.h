@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #ifndef GLW_OPENGL_H__
 #define GLW_OPENGL_H__
 
@@ -91,6 +89,8 @@ struct glw_program {
 typedef struct glw_backend_root {
 
   struct glw_program *gbr_current;
+
+  int gbr_use_stencil_buffer;
 
   /**
    * Video renderer
@@ -192,5 +192,7 @@ void glw_program_set_uniform_color(glw_backend_root_t *gbr,
 int glw_opengl_ff_init(struct glw_root *gr);
 
 int glw_opengl_shaders_init(struct glw_root *gr, int delayed);
+
+void glw_stencil_quad(struct glw_root *gr, const struct glw_rctx *rc);
 
 #endif /* GLW_OPENGL_H__ */

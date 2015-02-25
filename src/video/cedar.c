@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -28,7 +26,7 @@
 #include <libve.h>
 
 
-#include "showtime.h"
+#include "main.h"
 #include "arch/sunxi/sunxi.h"
 #include "video_decoder.h"
 #include "cedar.h"
@@ -215,7 +213,7 @@ cedar_decode(struct media_codec *mc, struct video_decoder *vd,
 #endif
   //  printf("%s: decode start\n", cd->cd_name);
 
-  int64_t ts = showtime_get_ts();
+  int64_t ts = arch_get_ts();
 
   avgtime_start(&vd->vd_decode_time);
   vresult_e res = libve_decode(0, 0, 0, cd->cd_ve);
@@ -231,7 +229,7 @@ cedar_decode(struct media_codec *mc, struct video_decoder *vd,
     return;
   }
 
-  int dectime = showtime_get_ts() - ts;
+  int dectime = arch_get_ts() - ts;
   if(dectime > 1000000) {
     printf("%s: Decode time %d very high\n", cd->cd_name, dectime);
     exit(0);
@@ -705,9 +703,9 @@ fbm_decoder_request_frame(Handle h)
 {
   fbm_t *fbm = h;
 
-  int64_t ts = showtime_get_ts();
+  int64_t ts = arch_get_ts();
   hts_mutex_lock(&fbm->fbm_mutex);
-  ts = showtime_get_ts() - ts;
+  ts = arch_get_ts() - ts;
   if(ts > 100000) {
     panic("Request frame long timeout %lld", ts);
   }

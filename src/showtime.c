@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,15 +17,13 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-
 #include <sys/time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "event.h"
 #include "prop/prop.h"
 #include "arch/arch.h"
@@ -54,7 +51,9 @@
 #include "subtitles/subtitles.h"
 #include "db/db_support.h"
 #include "htsmsg/htsmsg_store.h"
+#if ENABLE_SPIDERMONKEY
 #include "js/js.h"
+#endif
 #include "db/kvstore.h"
 #include "upgrade.h"
 #include "usage.h"
@@ -72,8 +71,7 @@
 #include <libavutil/avutil.h>
 #endif
 
-
-#include "misc/fs.h"
+#include "fileaccess/fileaccess.h"
 
 inithelper_t *inithelpers;
 
@@ -145,14 +143,14 @@ fflog(void *ptr, int level, const char *fmt, va_list vl)
 static void
 init_global_info(void)
 {
-  prop_t *s = prop_create(prop_get_global(), "showtime");
+  prop_t *s = prop_create(prop_get_global(), "app");
   extern const char *htsversion;
   extern const char *htsversion_full;
 
-  prop_set_string(prop_create(s, "version"), htsversion);
-  prop_set_string(prop_create(s, "fullversion"), htsversion_full);
-  prop_set_string(prop_create(s, "copyright"), "© 2006 - 2015 Lonelycoder AB");
-
+  prop_set(s, "name", PROP_SET_STRING, APPNAMEUSER);
+  prop_set(s, "version", PROP_SET_STRING, htsversion);
+  prop_set(s, "fullversion", PROP_SET_STRING, htsversion_full);
+  prop_set(s, "copyright", PROP_SET_STRING, "© 2006 - 2015 Lonelycoder AB");
 }
 
 /**
@@ -218,6 +216,9 @@ swthread(void *aux)
 
     usage_report_send(1);
   }
+
+  load_site_news();
+
   hts_mutex_lock(&gconf.state_mutex);
   gconf.swrefresh = 0;
 
@@ -238,6 +239,7 @@ swthread(void *aux)
       plugins_upgrade_check();
     upgrade_refresh();
     usage_report_send(0);
+    load_site_news();
     hts_mutex_lock(&gconf.state_mutex);
   }
   hts_mutex_unlock(&gconf.state_mutex);
@@ -249,7 +251,7 @@ swthread(void *aux)
  *
  */
 void
-showtime_swrefresh(void)
+swrefresh(void)
 {
   hts_mutex_lock(&gconf.state_mutex);
   gconf.swrefresh = 1;
@@ -263,9 +265,9 @@ showtime_swrefresh(void)
  *
  */
 void
-showtime_init(void)
+main_init(void)
 {
-  int r;
+  char errbuf[512];
 
   hts_mutex_init(&gconf.state_mutex);
   hts_cond_init(&gconf.state_cond, &gconf.state_mutex);
@@ -301,13 +303,15 @@ showtime_init(void)
   /* Usage counters */
   usage_init();
 
-  TRACE(TRACE_DEBUG, "core", "Loading resources from %s", showtime_dataroot());
+  TRACE(TRACE_DEBUG, "core", "Loading resources from %s", app_dataroot());
+
+  TRACE(TRACE_DEBUG, "core", "Cache path: %s", gconf.cache_path);
 
   /* Try to create cache path */
   if(gconf.cache_path != NULL &&
-     (r = makedirs(gconf.cache_path)) != 0) {
-    TRACE(TRACE_ERROR, "cache", "Unable to create cache path %s -- %s",
-	  gconf.cache_path, strerror(r));
+     fa_makedirs(gconf.cache_path, errbuf, sizeof(errbuf))) {
+    TRACE(TRACE_ERROR, "core", "Unable to create cache path %s -- %s",
+	  gconf.cache_path, errbuf);
     gconf.cache_path = NULL;
   }
 
@@ -319,12 +323,15 @@ showtime_init(void)
   /* Initializte blob cache */
   blobcache_init();
 
+
+  TRACE(TRACE_DEBUG, "core", "Persistent path: %s", gconf.persistent_path);
+
   /* Try to create settings path */
   if(gconf.persistent_path != NULL &&
-     (r = makedirs(gconf.persistent_path)) != 0) {
-    TRACE(TRACE_ERROR, "settings",
+     fa_makedirs(gconf.persistent_path, errbuf, sizeof(errbuf))) {
+    TRACE(TRACE_ERROR, "core",
 	  "Unable to create path for persistent storage %s -- %s",
-	  gconf.persistent_path, strerror(r));
+	  gconf.persistent_path, errbuf);
     gconf.persistent_path = NULL;
   }
 
@@ -427,7 +434,7 @@ parse_opts(int argc, char **argv)
 
   while(argc > 0) {
     if(!strcmp(argv[0], "-h") || !strcmp(argv[0], "--help")) {
-      printf("Showtime %s\n"
+      printf(APPNAMEUSER" %s\n"
 	     "Copyright (C) 2007-2015 Lonelycoder AB\n"
 	     "\n"
 	     "Usage: %s [options] [<url>]\n"
@@ -440,7 +447,7 @@ parse_opts(int argc, char **argv)
 	     "   --libav-log       - Print libav log messages.\n"
 	     "   --with-standby    - Enable system standby.\n"
 	     "   --with-poweroff   - Enable system power-off.\n"
-	     "   -s <path>         - Non-default Showtime settings path.\n"
+	     "   -s <path>         - Non-default settings path.\n"
 	     "   --ui <ui>         - Use specified user interface.\n"
 	     "   -L <ip:host>      - Send log messages to remote <ip:host>.\n"
 	     "   --syslog          - Send log messages to syslog.\n"
@@ -461,7 +468,7 @@ parse_opts(int argc, char **argv)
 	     "   -j <path>           Load javascript file\n"
 	     "   --skin <skin>     Select skin (for GLW ui)\n"
 	     "\n"
-	     "  URL is any URL-type supported by Showtime, "
+	     "  URL is any URL-type supported, "
 	     "e.g., \"file:///...\"\n"
 	     "\n",
 	     htsversion_full,
@@ -646,7 +653,7 @@ shutdown_hook_run(int early)
  *
  */
 void
-showtime_flush_caches(void)
+app_flush_caches(void)
 {
   kvstore_deferred_flush();
   htsmsg_store_flush();
@@ -664,28 +671,18 @@ shutdown_eject(void *aux)
   return NULL;
 }
 
-
 /**
  *
  */
-void
-showtime_shutdown(int retcode)
+static void *
+do_shutdown(void *aux)
 {
-  TRACE(TRACE_DEBUG, "core", "Shutdown requested, returncode = %d", retcode);
-
-  if(gconf.exit_code != 1) {
-    // Force exit
-    gconf.exit_code = retcode;
-    arch_exit();
-  }
-
-  hts_thread_create_detached("eject", shutdown_eject, NULL, THREAD_PRIO_BGTASK);
+  shutdown_hook_run(2);
 
   event_dispatch(event_create_action(ACTION_STOP));
   prop_destroy_by_name(prop_get_global(), "popups");
-  gconf.exit_code = retcode;
 
-  showtime_flush_caches();
+  app_flush_caches();
 
   TRACE(TRACE_DEBUG, "core", "Caches flushed");
 
@@ -704,6 +701,28 @@ showtime_shutdown(int retcode)
     // function may be called from UI thread)
     shutdown_hook_run(1);
   }
+  return NULL;
+}
+
+/**
+ *
+ */
+void
+app_shutdown(int retcode)
+{
+  TRACE(TRACE_DEBUG, "core", "Shutdown requested, returncode = %d", retcode);
+
+  if(gconf.exit_code != 1) {
+    // Force exit
+    gconf.exit_code = retcode;
+    arch_exit();
+  }
+
+  gconf.exit_code = retcode;
+
+  hts_thread_create_detached("eject", shutdown_eject, NULL, THREAD_PRIO_BGTASK);
+  hts_thread_create_detached("shutdown", do_shutdown, NULL, THREAD_PRIO_BGTASK);
+
 }
 
 
@@ -711,7 +730,7 @@ showtime_shutdown(int retcode)
  * The end of all things
  */
 void
-showtime_fini(void)
+main_fini(void)
 {
   prop_destroy_by_name(prop_get_global(), "popups");
   fini_group(INIT_GROUP_API);
@@ -738,6 +757,6 @@ showtime_fini(void)
   notifications_fini();
   usage_fini();
   htsmsg_store_flush();
-  TRACE(TRACE_DEBUG, "core", "Showtime terminated normally");
+  TRACE(TRACE_DEBUG, "core", APPNAMEUSER" terminated normally");
   trace_fini();
 }

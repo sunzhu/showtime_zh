@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,9 +17,7 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
-#include <arpa/inet.h>
 #include <assert.h>
 
 #include "config.h"
@@ -34,7 +31,7 @@
 #error No crypto
 #endif
 
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess/fileaccess.h"
 #include "fileaccess/fa_proto.h"
 #include "keyring.h"
@@ -459,7 +456,7 @@ nbt_write(cifs_connection_t *cc, void *buf, int len)
 
   nbt->msg = NBT_SESSION_MSG;
   nbt->flags = 0;
-  nbt->length = htons(len - 4);
+  wr16_be((void *)&nbt->length, len - 4);
   tcp_write_data(cc->cc_tc, buf, len);
   return 0;
 }
@@ -622,7 +619,7 @@ smb_setup_andX(cifs_connection_t *cc, char *errbuf, size_t errlen,
 
   char *username = NULL;
   const char *os = "Unix";
-  const char *lanmgr = "Showtime";
+  const char *lanmgr = APPNAMEUSER;
 
   char *domain = NULL;
 
@@ -1418,7 +1415,8 @@ smb_tree_connect_andX(cifs_connection_t *cc, const char *share,
 static int
 cifs_resolve(const char *url, char *filename, size_t filenamesize,
 	     char *errbuf, size_t errlen, int non_interactive,
-	     cifs_tree_t **p_ct, cifs_connection_t **p_cc)
+	     cifs_tree_t **p_ct, cifs_connection_t **p_cc,
+             int need_file)
 {
   char hostname[128];
   int port;
@@ -1472,6 +1470,11 @@ cifs_resolve(const char *url, char *filename, size_t filenamesize,
   }
 
   snprintf(filename, filenamesize, "%s", fn ?: "");
+
+  if(need_file && strchr(filename, '/') == NULL) {
+      snprintf(errbuf, errlen, "Invalid URL for operation");
+      return CIFS_RESOLVE_ERROR;
+  }
 
   ct = get_tree_no_create(hostname, port, p);
 
@@ -1803,7 +1806,7 @@ parse_enum_shares(const uint8_t *data, int len, cifs_connection_t *cc,
 
     if(typearray[i] == 0) {
       // 0 for DISKTREE shares
-      fa_dir_add(fd, url, sharename, CONTENT_DIR);
+      fa_dir_add(fd, url, sharename, CONTENT_SHARE);
     }
   }
   return 0;
@@ -1952,7 +1955,7 @@ cifs_delete(const char *url, char *errbuf, size_t errlen, int dir)
   cifs_connection_t *cc;
 
   r = cifs_resolve(url, filename, sizeof(filename), errbuf, errlen,
-		   0, &ct, &cc);
+		   0, &ct, &cc, 1);
 
   if(r != CIFS_RESOLVE_TREE)
     return -1;
@@ -2196,7 +2199,7 @@ smb_scandir(fa_protocol_t *fap, fa_dir_t *fa, const char *url,
   cifs_connection_t *cc;
   int r;
   r = cifs_resolve(url, filename, sizeof(filename), errbuf, errlen, 0,
-		   &ct, &cc);
+		   &ct, &cc, 0);
   switch(r) {
   default:
     return -1;
@@ -2240,7 +2243,7 @@ smb_open(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
   smb_file_t *sf;
 
   int r = cifs_resolve(url, filename, sizeof(filename), errbuf, errlen, 0,
-		       &ct, NULL);
+		       &ct, NULL, 1);
   if(r != CIFS_RESOLVE_TREE)
     return NULL;
 
@@ -2492,7 +2495,7 @@ smb_stat(fa_protocol_t *fap, const char *url, struct fa_stat *fs,
   cifs_tree_t *ct;
   cifs_connection_t *cc;
   r = cifs_resolve(url, filename, sizeof(filename), errbuf, errlen,
-		   non_interactive, &ct, &cc);
+		   non_interactive, &ct, &cc, 0);
 
   switch(r) {
   default:
@@ -2511,7 +2514,7 @@ smb_stat(fa_protocol_t *fap, const char *url, struct fa_stat *fs,
     memset(fs, 0, sizeof(struct fa_stat));
     fs->fs_size = 0;
     fs->fs_mtime = 0;
-    fs->fs_type = CONTENT_DIR;
+    fs->fs_type = CONTENT_SHARE;
     cc->cc_refcount--;
     hts_mutex_unlock(&smb_global_mutex);
     return FAP_OK;
@@ -2562,19 +2565,12 @@ smb_set_xattr(struct fa_protocol *fap, const char *url,
   char filename[512];
   int r;
   cifs_tree_t *ct;
-  cifs_connection_t *cc;
   const int name_len = strlen(name);
 
   if(data == NULL)
     data_len = 0;
 
-  r = cifs_resolve(url, filename, sizeof(filename), NULL, 0, 0, &ct, &cc);
-
-  if(r == CIFS_RESOLVE_CONNECTION) {
-    cc->cc_refcount--;
-    hts_mutex_unlock(&smb_global_mutex);
-    return FAP_NOT_SUPPORTED;
-  }
+  r = cifs_resolve(url, filename, sizeof(filename), NULL, 0, 0, &ct, NULL, 1);
 
   if(r != CIFS_RESOLVE_TREE)
     return -1;
@@ -2636,22 +2632,14 @@ smb_get_xattr(struct fa_protocol *fap, const char *url,
   char filename[512];
   int r;
   cifs_tree_t *ct;
-  cifs_connection_t *cc;
   const int name_len = strlen(name);
 
-  r = cifs_resolve(url, filename, sizeof(filename), NULL, 0, 0, &ct, &cc);
-
-  if(r == CIFS_RESOLVE_CONNECTION) {
-    cc->cc_refcount--;
-    hts_mutex_unlock(&smb_global_mutex);
-    return FAP_NOT_SUPPORTED;
-  }
+  r = cifs_resolve(url, filename, sizeof(filename), NULL, 0, 0, &ct, NULL, 1);
 
   if(r != CIFS_RESOLVE_TREE)
     return -1;
 
   backslashify(filename);
-  cc = ct->ct_cc;
   int plen = utf8_to_smb(ct->ct_cc, NULL, filename);
   int dlen = sizeof(get_eahdr_t) + name_len + 1;
   int tlen = sizeof(SMB_TRANS2_PATH_QUERY_req_t) + plen + dlen;

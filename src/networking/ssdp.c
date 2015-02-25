@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -29,7 +27,7 @@
 
 #include <netinet/in.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "ssdp.h"
 #include "http.h"
 #include "http_server.h"
@@ -178,7 +176,7 @@ ssdp_send(int fd, uint32_t myaddr, struct sockaddr_in *dst,
 	   "%s\r\n"
 	   "USN: uuid:%s%s\r\n"
 	   "%s"
-	   "SERVER: Showtime,%s,UPnP/1.0,Showtime,%s\r\n"
+	   "SERVER: "APPNAMEUSER",%s,UPnP/1.0,"APPNAMEUSER",%s\r\n"
 	   "%s%s%s"
 	   "%s"
 	   "LOCATION: http://%d.%d.%d.%d:%d%s\r\n"
@@ -479,10 +477,10 @@ ssdp_loop(int log_fail)
 
   while(ssdp_run) {
     
-    int64_t delta = next_send - showtime_get_ts();
+    int64_t delta = next_send - arch_get_ts();
     if(delta <= 0) {
       delta = 15000000LL;
-      next_send = showtime_get_ts() + delta;
+      next_send = arch_get_ts() + delta;
       ssdp_send_notify("ssdp:alive");
     }
     r = poll(fds, 2, (delta / 1000) + 1);

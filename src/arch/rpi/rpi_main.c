@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -36,7 +34,7 @@
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "arch/arch.h"
 #include "arch/posix/posix.h"
 
@@ -69,7 +67,7 @@ static int ctrlc;
  *
  */
 int64_t
-showtime_get_avtime(void)
+arch_get_avtime(void)
 {
   struct timeval tv;
   gettimeofday(&tv, NULL);
@@ -384,7 +382,8 @@ ui_create(void)
   gr->gr_prop_ui = prop_create_root("ui");
   gr->gr_prop_nav = nav_spawn();
 
-  if(glw_init(gr)) {
+  if(glw_init3(gr, &prop_courier_poll_with_alarm,
+               prop_courier_create_passive())) {
     TRACE(TRACE_ERROR, "GLW", "Unable to init GLW");
     exit(1);
   }
@@ -409,7 +408,6 @@ ui_create(void)
   signal(SIGINT, doexit);
   pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 
-  gr->gr_prop_dispatcher = &prop_courier_poll_with_alarm;
   gr->gr_prop_maxtime = 5000;
 
   return gr;
@@ -642,7 +640,7 @@ rpi_mainloop(void)
 
   while(runmode != RUNMODE_EXIT && !ctrlc) {
     if(ui_should_run()) {
-      showtime_swrefresh();
+      swrefresh();
       ui_run(gr, dpy);
     } else {
       glw_lock(gr);
@@ -802,7 +800,7 @@ main(int argc, char **argv)
 
   linux_init();
 
-  showtime_init();
+  main_init();
 
   tv_init();
 
@@ -833,7 +831,7 @@ main(int argc, char **argv)
 
   rpi_mainloop();
   shutdown_hook_run(1);
-  showtime_fini();
+  main_fini();
   arch_exit();
 }
 

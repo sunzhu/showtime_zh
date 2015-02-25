@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,7 +20,7 @@
 #ifndef PERFTIMER_H__
 #define PERFTIMER_H__
 
-#include "showtime.h"
+#include "main.h"
 
 typedef struct perftimer {
   int avg;
@@ -32,12 +31,12 @@ typedef struct perftimer {
 
 static __inline void perftimer_start(perftimer_t *pt)
 {
-  pt->start = showtime_get_ts();
+  pt->start = arch_get_ts();
 }
 
 static __inline void perftimer_stop(perftimer_t *pt, const char *str)
 {
-  int64_t now = showtime_get_ts();
+  int64_t now = arch_get_ts();
   int d = now - pt->start;
   int s;
 

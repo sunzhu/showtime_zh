@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include "glw.h"
 
@@ -113,7 +111,7 @@ setup_floater(glw_freefloat_t *ff, glw_t *c)
   cd->s = 0.001;
   cd->s2 = 0;
 
-  cd->a = showtime_get_ts();
+  cd->a = arch_get_ts();
   cd->x = -1.0 + (ff->xpos % ff->num_visible) * 2 /
     ((float)ff->num_visible - 1);
 
@@ -265,7 +263,7 @@ static void
 glw_freefloat_ctor(glw_t *w)
 {
   glw_freefloat_t *ff = (glw_freefloat_t *)w;
-  ff->rand = showtime_get_ts();
+  ff->rand = arch_get_ts();
   ff->num_visible = GLW_FREEFLOAT_MAX_VISIBLE;
 }
 

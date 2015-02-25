@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #ifndef GLW_VIDEO_COMMON_H
 #define GLW_VIDEO_COMMON_H
 
@@ -70,11 +68,12 @@ typedef struct glw_video_surface {
   void *gvs_opaque;
   int gvs_format;
 
+  glw_backend_texture_t gvs_texture;
+  int gvs_uploaded;
+
 #if CONFIG_GLW_BACKEND_OPENGL
   GLuint gvs_pbo[3];
   int gvs_size[3];
-  int gvs_uploaded;
-  glw_backend_texture_t gvs_texture;
 #endif
 
 #if CONFIG_GLW_BACKEND_RSX
@@ -88,6 +87,12 @@ typedef struct glw_video_surface {
   VdpOutputSurface gvs_vdpau_surface;
   GLvdpauSurfaceNV gvs_gl_surface;
 #endif
+
+  struct AVFrame *gvs_frame;
+  float gvs_tex_width;
+
+  void *gvs_ref_aux;
+  void (*gvs_ref_release)(void *aux);
 
 } glw_video_surface_t;
 
@@ -252,7 +257,8 @@ typedef struct glw_video_engine {
                      struct glw_video_engine *gve);
 
   int (*gve_set_codec)(media_codec_t *mc, glw_video_t *gv,
-		       const frame_info_t *fi);
+		       const frame_info_t *fi,
+                       struct glw_video_engine *gve);
 
   void (*gve_blackout)(glw_video_t *gv);
 

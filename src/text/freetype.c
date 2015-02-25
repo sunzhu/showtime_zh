@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,11 +17,10 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include "misc/minmax.h"
 #include <assert.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "misc/queue.h"
 #include "misc/str.h"
 #include "image/pixmap.h"
@@ -1302,6 +1300,11 @@ text_render0(const uint32_t *uc, const int len,
       w += d;
     }
   }
+
+
+  if(max_width && bbox.xMax > max_width)
+    bbox.xMax = max_width;
+
   int margin = MAX(-MIN(bbox.xMin, 0), MAX(0, bbox.xMax - siz_x));
 
   TAILQ_FOREACH(li, &lq, link) {
@@ -1489,7 +1492,7 @@ freetype_init(void)
 
   snprintf(url, sizeof(url),
 	   "%s/resources/fonts/liberation/LiberationSans-Regular.ttf",
-	   showtime_dataroot());
+	   app_dataroot());
 
   freetype_load_default_font(url, 0);
 

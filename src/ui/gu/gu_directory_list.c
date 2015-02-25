@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,10 +17,9 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <string.h>
 #include <assert.h>
-#include "showtime.h"
+#include "main.h"
 #include "navigator.h"
 #include "gu.h"
 #include "gu_directory.h"
@@ -298,7 +296,7 @@ contentstr_to_icon(const char *str, int height)
     return NULL;
 
   snprintf(buf, sizeof(buf), 
-	   "%s/guresources/content-%s.png", showtime_dataroot(), str);
+	   "%s/guresources/content-%s.png", app_dataroot(), str);
   return gu_pixbuf_get_sync(buf, -1, height);
 }
 
@@ -666,7 +664,7 @@ starred2pixbuf(GtkTreeViewColumn *tree_column, GtkCellRenderer *cell,
     char path[PATH_MAX];
 
     snprintf(path, sizeof(path), "%s/guresources/%sstar.png",
-	     showtime_dataroot(), g_value_get_int(&gv) ? "" : "no");
+	     app_dataroot(), g_value_get_int(&gv) ? "" : "no");
     pb = gu_pixbuf_get_sync(path, -1, 16);
     g_object_set(G_OBJECT(cell), "pixbuf", pb, NULL);
     if(pb != NULL)

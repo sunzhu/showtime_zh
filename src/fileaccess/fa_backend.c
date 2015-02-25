@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,15 +17,13 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "backend/backend.h"
 #include "navigator.h"
 #include "fileaccess.h"
@@ -106,6 +103,7 @@ file_open_dir(prop_t *page, const char *url, time_t mtime,
     break;
     
   case CONTENT_DIR:
+  case CONTENT_SHARE:
   case CONTENT_ARCHIVE:
     file_open_browse(page, url, mtime, model);
     break;
@@ -263,6 +261,9 @@ be_file_open(prop_t *page, const char *url, int sync)
   } else if(fs.fs_type == CONTENT_DIR) {
     usage_inc_counter("fa_open_dir", 1);
     file_open_dir(page, url, fs.fs_mtime, model);
+  } else if(fs.fs_type == CONTENT_SHARE) {
+    usage_inc_counter("fa_open_share", 1);
+    file_open_browse(page, url, fs.fs_mtime, model);
   } else {
     usage_inc_counter("fa_open_file", 1);
     file_open_file(page, url, &fs, model, loading, io, loading_status);

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2013 Andreas Öman
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -13,12 +13,14 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *  This program is also available under a commercial proprietary license.
+ *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <string.h>
 #include <unistd.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "navigator.h"
 #include "backend/backend.h"
 #include "misc/str.h"
@@ -168,7 +170,7 @@ tracker_torrent_periodic(void *aux)
       tracker_torrent_destroy(tt);
     } else {
       // Resend stop request
-      asyncio_timer_arm(&tt->tt_timer, async_now + 5000000LL);
+      asyncio_timer_arm_delta_sec(&tt->tt_timer, 5);
     }
     return;
   }
@@ -232,7 +234,7 @@ torrent_announce_all(torrent_t *to)
 static void
 tracker_init(void)
 {
-  uint32_t x = showtime_get_ts();
+  uint32_t x = arch_get_ts();
   for(int i = 0; i < 20; i++) {
     x = x * 1664525 + 1013904223;
     btg.btg_peer_id[i] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_."[x & 0x3f];

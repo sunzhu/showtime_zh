@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #ifndef HTSBUF_H__
 #define HTSBUF_H__
 
@@ -54,7 +52,7 @@ void htsbuf_qprintf(htsbuf_queue_t *hq, const char *fmt, ...);
 
 void htsbuf_append(htsbuf_queue_t *hq, const void *buf, size_t len);
 
-void htsbuf_append_prealloc(htsbuf_queue_t *hq, const void *buf, size_t len);
+void htsbuf_append_prealloc(htsbuf_queue_t *hq, void *buf, size_t len);
 
 void htsbuf_append_buf(htsbuf_queue_t *hq, buf_t *b);
 

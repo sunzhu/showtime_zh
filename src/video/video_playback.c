@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,13 +17,12 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "video_playback.h"
 #include "video_settings.h"
 #include "event.h"
@@ -717,7 +715,7 @@ video_player_idle(void *aux)
     }
 
     if(event_is_type(e, EVENT_EOF) && mp->mp_auto_standby) {
-      showtime_shutdown(SHOWTIME_EXIT_STANDBY);
+      app_shutdown(APP_EXIT_STANDBY);
       event_release(e);
       e = NULL;
       break;

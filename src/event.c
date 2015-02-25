@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <sys/time.h>
 #include <errno.h>
 #include <stdio.h>
@@ -27,7 +25,7 @@
 #include <string.h>
 #include <assert.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "event.h"
 #include "misc/strtab.h"
 #include "prop/prop.h"
@@ -489,13 +487,13 @@ event_dispatch(event_t *e)
 				 1, NULL), e);
   
   if(event_is_action(e, ACTION_QUIT)) {
-    showtime_shutdown(0);
+    app_shutdown(0);
 
   } else if(event_is_action(e, ACTION_STANDBY)) {
-    showtime_shutdown(10);
+    app_shutdown(10);
 
   } else if(event_is_action(e, ACTION_POWER_OFF)) {
-    showtime_shutdown(11);
+    app_shutdown(11);
 
   } else if(event_is_action(e, ACTION_NAV_BACK) ||
 	    event_is_action(e, ACTION_NAV_FWD) ||

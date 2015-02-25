@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <string.h>
 #include <limits.h>
 
@@ -26,12 +24,14 @@
 #include "glw_renderer.h"
 #include "fileaccess/fileaccess.h"
 
+#if ENABLE_GLW_BACKEND_OPENGL
 const static float projection[16] = {
   2.414213,0.000000,0.000000,0.000000,
   0.000000,2.414213,0.000000,0.000000,
   0.000000,0.000000,1.033898,-1.000000,
   0.000000,0.000000,2.033898,0.000000
 };
+#endif
 
 typedef struct render_state {
   const struct glw_backend_texture *t0;
@@ -168,7 +168,7 @@ render_unlocked(glw_root_t *gr)
   glw_backend_root_t *gbr = &gr->gr_be;
   render_state_t rs = {0};
 
-  int64_t ts = showtime_get_ts();
+  int64_t ts = arch_get_ts();
 
   int current_blendmode = GLW_BLEND_NORMAL;
   glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
@@ -197,10 +197,17 @@ render_unlocked(glw_root_t *gr)
   for(int j = 0; j < gr->gr_num_render_jobs; j++) {
     const glw_render_order_t *ro = gr->gr_render_order + j;
     const glw_render_job_t *rj = ro->job;
+
+    if(unlikely(rj->num_vertices == 0))
+      continue;
+
     const struct glw_backend_texture *t0 = rj->t0;
 
     glw_program_t *gp =
       load_program(gr, t0, rj->t1, rj->blur, rj->flags, rj->gpa, &rs, rj);
+
+    if(gbr->gbr_use_stencil_buffer)
+      glStencilFunc(GL_GEQUAL, ro->zindex, 0xFF);
 
     if(unlikely(gp == NULL)) {
 
@@ -286,7 +293,7 @@ render_unlocked(glw_root_t *gr)
     glBlendFuncSeparate(GL_SRC_COLOR, GL_ONE,
 			GL_ONE_MINUS_DST_ALPHA, GL_ONE);
   }
-  ts = showtime_get_ts() - ts;
+  ts = arch_get_ts() - ts;
   static int hold;
   
   hold++;
@@ -452,7 +459,7 @@ glw_program_set_uniform_color(glw_backend_root_t *gbr,
 
 #define SHADERPATH(FILENAME) \
   snprintf(path, sizeof(path), "%s/src/ui/glw/glsl/%s", \
-	   showtime_dataroot(), FILENAME);
+	   app_dataroot(), FILENAME);
 
 /**
  *
@@ -608,3 +615,58 @@ glw_opengl_shaders_init(glw_root_t *gr, int delayed)
 
   return 0;
 }
+
+
+
+/**
+ *
+ */
+static const float stencilquad[6][VERTEX_SIZE] = {
+  {-1, -1, 0, 0, 1,1,1,1, 0,0,0,0},
+  { 1, -1, 0, 0, 1,1,1,1, 0,0,0,0},
+  { 1,  1, 0, 0, 1,1,1,1, 0,0,0,0},
+
+  {-1, -1, 0, 0, 1,1,1,1, 0,0,0,0},
+  { 1,  1, 0, 0, 1,1,1,1, 0,0,0,0},
+  { -1, 1, 0, 0, 1,1,1,1, 0,0,0,0},
+};
+
+
+/**
+ *
+ */
+void
+glw_stencil_quad(glw_root_t *gr, const glw_rctx_t *rc)
+{
+  glw_backend_root_t *gbr = &gr->gr_be;
+  glw_program_t *gp = gbr->gbr_renderer_flat;
+
+  glStencilFunc(GL_NEVER, rc->rc_zindex, 0xFF);
+  glStencilOp(GL_REPLACE, GL_KEEP, GL_KEEP);
+  glStencilMask(0xff);
+
+  glUseProgram(gp->gp_program);
+
+  glUniformMatrix4fv(gp->gp_uniform_modelview, 1, 0, glw_mtx_get(rc->rc_mtx));
+
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+  glFrontFace(GL_CCW);
+
+  const float *vertices = &stencilquad[0][0];
+
+  glVertexAttribPointer(0, 4, GL_FLOAT, 0, sizeof(float) * VERTEX_SIZE,
+                       vertices);
+
+  glVertexAttribPointer(1, 4, GL_FLOAT, 0, sizeof(float) * VERTEX_SIZE,
+                       vertices + 4);
+
+  glVertexAttribPointer(2, 4, GL_FLOAT, 0, sizeof(float) * VERTEX_SIZE,
+                       vertices + 8);
+
+  glDrawArrays(GL_TRIANGLES, 0, 6);
+
+  glUseProgram(0);
+  gbr->gbr_current = NULL;
+}
+

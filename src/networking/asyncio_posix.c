@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,8 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-
 #include <assert.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -29,20 +26,23 @@
 #include <errno.h>
 #include <netinet/in.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "arch/arch.h"
 #include "arch/threads.h"
 #include "asyncio.h"
 #include "misc/queue.h"
 #include "prop/prop.h"
 #include "misc/minmax.h"
-#include "fileaccess/http_client.h"
+
+#define ASYNCIO_READ            0x1
+#define ASYNCIO_WRITE           0x2
+#define ASYNCIO_ERROR           0x4
+#define ASYNCIO_TIMEOUT         0x8
 
 LIST_HEAD(asyncio_fd_list, asyncio_fd);
 LIST_HEAD(asyncio_worker_list, asyncio_worker);
 LIST_HEAD(asyncio_timer_list, asyncio_timer);
 TAILQ_HEAD(asyncio_dns_req_queue, asyncio_dns_req);
-LIST_HEAD(asyncio_http_req_list, asyncio_http_req);
 
 static hts_thread_t asyncio_thread_id;
 
@@ -62,15 +62,9 @@ static int asyncio_dns_worker;
 static struct asyncio_dns_req_queue asyncio_dns_pending;
 static struct asyncio_dns_req_queue asyncio_dns_completed;
 
-static hts_mutex_t asyncio_http_mutex;
-static int asyncio_http_worker;
-static struct asyncio_http_req_list asyncio_http_completed;
-
 static void adr_deliver_cb(void);
 
-static void ahr_deliver_cb(void);
-
-int64_t async_now;
+static int64_t async_now;
 
 static __inline void asyncio_verify_thread(void) {
   assert(hts_thread_current() == asyncio_thread_id);
@@ -120,6 +114,19 @@ struct asyncio_fd {
 };
 
 
+/**
+ *
+ */
+int64_t
+async_current_time(void)
+{
+  return async_now;
+}
+
+
+/**
+ *
+ */
 static void
 no_sigpipe(int fd)
 {
@@ -127,6 +134,52 @@ no_sigpipe(int fd)
   int val = 1;
   setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &val, sizeof(val));
 #endif
+}
+
+
+/**
+ *
+ */
+static void
+net_addr_from_sockaddr_in(net_addr_t *na, const struct sockaddr_in *sin)
+{
+  na->na_family = 4;
+  na->na_port = ntohs(sin->sin_port);
+  memcpy(na->na_addr, &sin->sin_addr, 4);
+}
+
+
+/**
+ *
+ */
+static void
+net_local_addr_from_fd(net_addr_t *na, int fd)
+{
+  socklen_t slen = sizeof(struct sockaddr_in);
+  struct sockaddr_in self;
+
+  if(!getsockname(fd, (struct sockaddr *)&self, &slen)) {
+    net_addr_from_sockaddr_in(na, &self);
+  } else {
+    memset(na, 0, sizeof(net_addr_t));
+  }
+}
+
+
+/**
+ *
+ */
+static void
+net_remote_addr_from_fd(net_addr_t *na, int fd)
+{
+  socklen_t slen = sizeof(struct sockaddr_in);
+  struct sockaddr_in self;
+
+  if(!getpeername(fd, (struct sockaddr *)&self, &slen)) {
+    net_addr_from_sockaddr_in(na, &self);
+  } else {
+    memset(na, 0, sizeof(net_addr_t));
+  }
 }
 
 
@@ -160,6 +213,7 @@ asyncio_wakeup_worker(int id)
   return asyncio_wakeup(id);
 }
 
+
 /**
  *
  */
@@ -188,7 +242,7 @@ at_compar(const asyncio_timer_t *a, const asyncio_timer_t *b)
 /**
  *
  */
-void
+static void
 asyncio_timer_arm(asyncio_timer_t *at, int64_t expire)
 {
   asyncio_verify_thread();
@@ -197,6 +251,16 @@ asyncio_timer_arm(asyncio_timer_t *at, int64_t expire)
 
   at->at_expire = expire;
   LIST_INSERT_SORTED(&asyncio_timers, at, at_link, at_compar, asyncio_timer_t);
+}
+
+
+/**
+ *
+ */
+void
+asyncio_timer_arm_delta_sec(asyncio_timer_t *at, int delta)
+{
+  asyncio_timer_arm(at, async_now + delta * 1000000LL);
 }
 
 
@@ -286,7 +350,7 @@ asyncio_dopoll(void)
 
   poll(fds, n, timeout);
 
-  async_now = showtime_get_ts();
+  async_now = arch_get_ts();
 
   for(int i = 0; i < n; i++) {
     af = afds[i];
@@ -314,7 +378,7 @@ asyncio_dopoll(void)
                     (fds[i].revents & POLLOUT ? ASYNCIO_WRITE : 0), 0);
 
     if(0) {
-      int64_t now = showtime_get_ts();
+      int64_t now = arch_get_ts();
 
       if(now - async_now > 10000) {
         TRACE(TRACE_ERROR, "ASYNCIO", "Long callback on socktet %s (%d µs)",
@@ -335,7 +399,7 @@ asyncio_dopoll(void)
 /**
  *
  */
-void
+static void
 asyncio_set_events(asyncio_fd_t *af, int events)
 {
   asyncio_verify_thread();
@@ -351,7 +415,7 @@ asyncio_set_events(asyncio_fd_t *af, int events)
 /**
  *
  */
-void
+static void
 asyncio_add_events(asyncio_fd_t *af, int events)
 {
   asyncio_set_events(af, af->af_ext_events | events);
@@ -361,7 +425,7 @@ asyncio_add_events(asyncio_fd_t *af, int events)
 /**
  *
  */
-void
+static void
 asyncio_rem_events(asyncio_fd_t *af, int events)
 {
   asyncio_set_events(af, af->af_ext_events & ~events);
@@ -371,7 +435,7 @@ asyncio_rem_events(asyncio_fd_t *af, int events)
 /**
  *
  */
-asyncio_fd_t *
+static asyncio_fd_t *
 asyncio_add_fd(int fd, int events, asyncio_fd_callback_t *cb, void *opaque,
 	       const char *name)
 {
@@ -415,9 +479,9 @@ asyncio_del_fd(asyncio_fd_t *af)
  *
  */
 void
-asyncio_set_timeout(asyncio_fd_t *af, int64_t timeout)
+asyncio_set_timeout_delta_sec(asyncio_fd_t *af, int delta)
 {
-  af->af_timeout = timeout;
+  af->af_timeout = delta * 1000000LL + async_now;
 }
 
 /**
@@ -484,12 +548,11 @@ asyncio_thread(void *aux)
   asyncio_add_fd(asyncio_pipe[0], ASYNCIO_READ, asyncio_handle_pipe,
                  asyncio_courier, "Pipe");
 
+  asyncio_dns_worker = asyncio_add_worker(adr_deliver_cb);
+
   init_group(INIT_GROUP_ASYNCIO);
 
-  asyncio_dns_worker = asyncio_add_worker(adr_deliver_cb);
-  asyncio_http_worker = asyncio_add_worker(ahr_deliver_cb);
-
-  async_now = showtime_get_ts();
+  async_now = arch_get_ts();
 
   while(1)
     asyncio_dopoll();
@@ -508,7 +571,6 @@ asyncio_init_early(void)
 
   hts_mutex_init(&asyncio_worker_mutex);
   hts_mutex_init(&asyncio_dns_mutex);
-  hts_mutex_init(&asyncio_http_mutex);
 
   arch_pipe(asyncio_pipe);
 }
@@ -600,7 +662,6 @@ asyncio_listen(const char *name, int port, asyncio_accept_callback_t *cb,
 
     si.sin_port = htons(port);
     if(bind(fd, (struct sockaddr *)&si, sizeof(struct sockaddr_in))) {
-
       if(!bind_any) {
         TRACE(TRACE_ERROR, "TCP", "%s: Bind failed -- %s", name,
               strerror(errno));
@@ -824,10 +885,9 @@ asyncio_connect(const char *name, const net_addr_t *addr,
 				    asyncio_tcp_connected, opaque,
                                     name);
 
-  af->af_fd = fd;
   af->af_error_callback = error_cb;
   af->af_read_callback  = read_cb;
-  af->af_timeout = showtime_get_ts() + timeout * 1000;
+  af->af_timeout = arch_get_ts() + timeout * 1000;
 
   int r = connect(fd, (struct sockaddr *)&si, sizeof(struct sockaddr_in));
   if(r == -1) {
@@ -842,6 +902,31 @@ asyncio_connect(const char *name, const net_addr_t *addr,
   } else {
     asyncio_add_events(af, ASYNCIO_WRITE);
   }
+  return af;
+}
+
+
+/**
+ *
+ */
+asyncio_fd_t *
+asyncio_attach(const char *name, int fd,
+		asyncio_error_callback_t *error_cb,
+		asyncio_read_callback_t *read_cb,
+		void *opaque)
+{
+  no_sigpipe(fd);
+  net_change_nonblocking(fd, 1);
+  net_change_ndelay(fd, 1);
+
+  asyncio_fd_t *af = asyncio_add_fd(fd, ASYNCIO_READ | ASYNCIO_ERROR,
+				    asyncio_tcp_connected, opaque,
+                                    name);
+
+  af->af_connected = 1;
+  af->af_fd = fd;
+  af->af_error_callback = error_cb;
+  af->af_read_callback  = read_cb;
   return af;
 }
 
@@ -1099,90 +1184,3 @@ asyncio_udp_send(asyncio_fd_t *af, const void *data, int size,
 	 (const struct sockaddr *)&sin, sizeof(struct sockaddr_in));
 }
 
-
-/*************************************************************************
- * HTTP(S)
- *************************************************************************/
-
-struct asyncio_http_req {
-  LIST_ENTRY(asyncio_http_req) ahr_link;
-  int ahr_cancelled;
-
-  http_req_aux_t *ahr_req;
-
-  void (*ahr_cb)(http_req_aux_t *hra, void *opaque);
-  void *ahr_opaque;
-};
-
-
-/**
- *
- */
-static void
-asyncio_http_cb(http_req_aux_t *hra, void *opaque, int error)
-{
-  asyncio_http_req_t *ahr = opaque;
-  ahr->ahr_req = http_req_retain(hra);
-
-  // This arrives on a different thread so we need to reschedule
-
-  hts_mutex_lock(&asyncio_http_mutex);
-  LIST_INSERT_HEAD(&asyncio_http_completed, ahr, ahr_link);
-  hts_mutex_unlock(&asyncio_http_mutex);
-  asyncio_wakeup(asyncio_http_worker);
-}
-
-
-/**
- *
- */
-asyncio_http_req_t *
-asyncio_http_req(const char *url,
-                 void (*cb)(http_req_aux_t *req, void *opaque),
-                 void *opaque,
-                 ...)
-{
-  asyncio_http_req_t *ahr = calloc(1, sizeof(asyncio_http_req_t));
-  va_list ap;
-
-  ahr->ahr_cb = cb;
-  ahr->ahr_opaque = opaque;
-
-  va_start(ap, opaque);
-  http_reqv(url, ap, asyncio_http_cb, ahr);
-  va_end(ap);
-  return ahr;
-}
-
-
-void
-asyncio_http_cancel(asyncio_http_req_t *ahr)
-{
-  asyncio_verify_thread();
-  ahr->ahr_cancelled = 1;
-}
-
-
-static void
-ahr_deliver_cb(void)
-{
-  asyncio_http_req_t *ahr;
-
-  hts_mutex_lock(&asyncio_http_mutex);
-
-  while((ahr = LIST_FIRST(&asyncio_http_completed)) != NULL) {
-    LIST_REMOVE(ahr, ahr_link);
-    hts_mutex_unlock(&asyncio_http_mutex);
-
-    if(!ahr->ahr_cancelled)
-      ahr->ahr_cb(ahr->ahr_req, ahr->ahr_opaque);
-
-    http_req_release(ahr->ahr_req);
-    free(ahr);
-
-
-    hts_mutex_lock(&asyncio_http_mutex);
-  }
-
-  hts_mutex_unlock(&asyncio_http_mutex);
-}

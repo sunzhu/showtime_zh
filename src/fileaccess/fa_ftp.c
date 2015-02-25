@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,12 +17,10 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
-#include <arpa/inet.h>
 #include <assert.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess.h"
 #include "fa_proto.h"
 #include "keyring.h"
@@ -179,7 +176,7 @@ fc_connect(const char *hostname, int port,
 {
   tcpcon_t *tc;
   ftp_connection_t *fc;
-  int64_t now = showtime_get_ts();
+  int64_t now = arch_get_ts();
   int id;
 
  again:
@@ -310,7 +307,7 @@ ftp_file_release(ftp_file_t *ff, int drop)
 
     } else {
 
-      fc->fc_expire = showtime_get_ts() + 10000000;
+      fc->fc_expire = arch_get_ts() + 10000000;
       hts_mutex_lock(&ftp_global_mutex);
       LIST_INSERT_HEAD(&ftp_connections, fc, fc_link);
       hts_mutex_unlock(&ftp_global_mutex);

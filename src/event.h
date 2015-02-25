@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #ifndef EVENT_H__
 #define EVENT_H__
 
@@ -160,7 +158,6 @@ typedef enum {
   EVENT_SELECT_SUBTITLE_TRACK,
 
   EVENT_PLAYBACK_PRIORITY,   // 0 = best, higher value == less important 
-  EVENT_VIDEO_VISIBILITY,    // 1 = visible (default), 0 = not visible
 
   EVENT_STOP_UI,
 

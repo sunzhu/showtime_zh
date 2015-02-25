@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,7 +20,7 @@
 #ifndef AVGTIME_H__
 #define AVGTIME_H__
 
-#include "showtime.h"
+#include "main.h"
 #include "prop/prop.h"
 
 typedef struct avgtime {
@@ -36,12 +35,12 @@ typedef struct avgtime {
 
 static __inline void avgtime_start(avgtime_t *a)
 {
-  a->start = showtime_get_ts();
+  a->start = arch_get_ts();
 }
 
 static __inline int avgtime_stop(avgtime_t *a, prop_t *avg, prop_t *peak)
 {
-  int64_t now = showtime_get_ts();
+  int64_t now = arch_get_ts();
   int d = now - a->start;
   int i, sum;
 

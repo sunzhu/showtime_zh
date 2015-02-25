@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <sys/types.h>
 #include <string.h>
 #include <assert.h>
@@ -1462,7 +1460,7 @@ js_init(void)
   showtimeobj = JS_NewObject(cx, &showtime_class, NULL, NULL);
   JS_DefineFunctions(cx, showtimeobj, showtime_functions);
 
-  val = INT_TO_JSVAL(showtime_get_version_int());
+  val = INT_TO_JSVAL(app_get_version_int());
   JS_SetProperty(cx, showtimeobj, "currentVersionInt", &val);
 
   val = STRING_TO_JSVAL(JS_NewStringCopyZ(cx, htsversion));

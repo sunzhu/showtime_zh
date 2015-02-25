@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2014 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,12 +17,11 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "navigator.h"
 #include "backend/backend.h"
 #include "misc/str.h"
@@ -31,6 +29,7 @@
 
 #include "ecmascript.h"
 
+#if ENABLE_HTTPSERVER
 
 /**
  *
@@ -94,7 +93,7 @@ dumpstats(http_connection_t *hc, const char *remain, void *opaque,
   htsbuf_qprintf(&out, "\n");
 
   return http_send_reply(hc, 0,
-                         "text/ascii; charset=utf-8", NULL, NULL, 0, &out);
+                         "text/plain; charset=utf-8", NULL, NULL, 0, &out);
 }
 
 
@@ -102,9 +101,11 @@ dumpstats(http_connection_t *hc, const char *remain, void *opaque,
  *
  */
 static void
-torrent_stats_init(void)
+ecmascript_stats_init(void)
 {
   http_path_add("/showtime/ecmascript/stats", NULL, dumpstats, 1);
 }
 
-INITME(INIT_GROUP_API, torrent_stats_init, NULL);
+INITME(INIT_GROUP_API, ecmascript_stats_init, NULL);
+
+#endif // ENABLE_HTTPSERVER

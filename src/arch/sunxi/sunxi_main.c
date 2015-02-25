@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
@@ -27,7 +25,7 @@
 #include <signal.h>
 #include <unistd.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "navigator.h"
 #include "arch/arch.h"
 #include "arch/posix/posix.h"
@@ -273,7 +271,7 @@ ui_run(void)
 
     glw_post_scene(gr);
     
-    int64_t ts2 = showtime_get_ts();
+    int64_t ts2 = arch_get_ts();
     eglSwapBuffers(su.su_dpy, surface);
 #if 0
     int err = ioctl(sunxi.fb0fd, 0x4741, framenum);
@@ -288,10 +286,10 @@ ui_run(void)
       foo = framenum;
     }
 #endif
-    int64_t ts3 = showtime_get_ts();
+    int64_t ts3 = arch_get_ts();
     if(0)printf("ts3-ts2 = %lld\n", ts3 - ts2);
 
-    int64_t ts = showtime_get_ts();
+    int64_t ts = arch_get_ts();
 
     if(0)printf("%lld\n", ts - ts0);
     ts0 = ts;
@@ -300,7 +298,7 @@ ui_run(void)
 
     if(ctrlc == 1) {
       ctrlc = 2;
-      showtime_shutdown(0);
+      app_shutdown(0);
     }
 
   }
@@ -349,7 +347,7 @@ main(int argc, char **argv)
 
   gconf.concurrency =   sysconf(_SC_NPROCESSORS_CONF);
 
-  showtime_init();
+  main_init();
 
   trap_init();
 
@@ -380,7 +378,7 @@ main(int argc, char **argv)
 
   sunxi_fini();
 
-  showtime_fini();
+  main_fini();
 
   arch_exit();
 }

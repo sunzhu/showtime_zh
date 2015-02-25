@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,7 +24,7 @@
 #include <stdarg.h>
 
 #include "htsbuf.h"
-#include "showtime.h"
+#include "main.h"
 #include "misc/rstr.h"
 #include "misc/minmax.h"
 
@@ -107,7 +105,7 @@ htsbuf_append(htsbuf_queue_t *hq, const void *buf, size_t len)
  *
  */
 void
-htsbuf_append_prealloc(htsbuf_queue_t *hq, const void *buf, size_t len)
+htsbuf_append_prealloc(htsbuf_queue_t *hq, void *buf, size_t len)
 {
   htsbuf_data_t *hd;
 

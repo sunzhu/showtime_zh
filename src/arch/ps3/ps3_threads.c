@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,14 +17,12 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-
 #include <unistd.h>
 #include <stdio.h>
 
 #include <psl1ght/lv2.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "ps3.h"
 #include "ps3_threads.h"
 
@@ -729,7 +726,7 @@ hts_cond_wait_timeout(hts_cond_t *c, hts_mutex_t *m, int delay)
 int
 hts_cond_wait_timeout_abs(hts_cond_t *c, hts_mutex_t *m, int64_t ts)
 {
-  ts = ts - showtime_get_ts();
+  ts = ts - arch_get_ts();
   if(ts <= 0)
     return 1;
 

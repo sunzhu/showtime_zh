@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2013 Andreas Öman
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -13,14 +13,16 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *  This program is also available under a commercial proprietary license.
+ *  For more information, contact andreas@lonelycoder.com
  */
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <netinet/in.h>
 #include <limits.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "navigator.h"
 #include "backend/backend.h"
 #include "misc/str.h"
@@ -413,7 +415,7 @@ torrent_diskio_verify(torrent_t *to)
   int cnt = 0;
   int max_block = -1;
   for(int i = 0; i < to->to_num_pieces; i++) {
-    int location = ntohl(to->to_cachefile_piece_map[i]);
+    unsigned int location = rd32_be((void *)&to->to_cachefile_piece_map[i]);
 
     if(location >= to->to_num_pieces)
       location = -1;

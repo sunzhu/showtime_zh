@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <string.h>
 
 #include <rsx/reality.h>
@@ -61,7 +59,7 @@ load_vp(const char *filename)
   char url[512];
 
   snprintf(url, sizeof(url), "%s/src/ui/glw/rsx/%s", 
-	   showtime_dataroot(), filename);
+	   app_dataroot(), filename);
 
   if((b = fa_load(url, FA_LOAD_ERRBUF(errmsg, sizeof(errmsg)),
                    NULL)) == NULL) {
@@ -139,7 +137,7 @@ load_fp(glw_root_t *gr, const char *filename)
 
   char url[512];
   snprintf(url, sizeof(url), "%s/src/ui/glw/rsx/%s", 
-	   showtime_dataroot(), filename);
+	   app_dataroot(), filename);
 
   if((b = fa_load(url, FA_LOAD_ERRBUF(errmsg, sizeof(errmsg)),
                    NULL)) == NULL) {

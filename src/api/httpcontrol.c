@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <assert.h>
 #include <sys/stat.h>
@@ -124,10 +122,10 @@ hc_root_old(http_connection_t *hc)
 
   htsbuf_qprintf(&out, 
 		 "<form name=\"input\" method=\"get\">"
-		 "Open URL in Showtime: "
+		 "Open URL in %s: "
 		 "<input type=\"text\" name=\"url\" style=\"width:500px\"/>"
 		 "<input type=\"submit\" value=\"Open\" />"
-		 "</form>");
+		 "</form>", APPNAMEUSER);
   
   htsbuf_qprintf(&out, "<h3>Diagnostics</h3>"); 
 
@@ -149,7 +147,7 @@ hc_done(http_connection_t *hc, const char *remain, void *opaque,
 
   htsbuf_queue_init(&out, 0);
   htsbuf_qprintf(&out, "OK");
-  return http_send_reply(hc, 0, "text/ascii", NULL, NULL, 0, &out);
+  return http_send_reply(hc, 0, "text/plain", NULL, NULL, 0, &out);
 }
 
 
@@ -305,7 +303,7 @@ hc_binreplace(http_connection_t *hc, const char *remain, void *opaque,
   
   close(fd);
   TRACE(TRACE_INFO, "BINREPLACE", "All done, restarting");
-  showtime_shutdown(13);
+  app_shutdown(13);
   return HTTP_STATUS_OK;
 }
 
@@ -455,7 +453,7 @@ hc_memstats(http_connection_t *hc, const char * remain, void *opaque,
   htsbuf_queue_init(&out, 0);
 
   htsbuf_append(&out, hugebuf, hugeptr);
-  return http_send_reply(hc, 0, "text/ascii", NULL, NULL, 0, &out);
+  return http_send_reply(hc, 0, "text/plain", NULL, NULL, 0, &out);
 }
 
 /**
@@ -508,7 +506,7 @@ hc_hexdump(http_connection_t *hc, const char *remain, void *opaque,
   htsbuf_queue_init(&out, 0);
 
   hexdump("mem", a, len, &out);
-  return http_send_reply(hc, 0, "text/ascii", NULL, NULL, 0, &out);
+  return http_send_reply(hc, 0, "text/plain", NULL, NULL, 0, &out);
 }
 
 #endif

@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -5098,7 +5096,7 @@ glwf_rand(glw_view_eval_context_t *ec, struct token *self,
   glw_root_t *gr = ec->w->glw_root;
 
   if(self->t_extra_int == 0) {
-    gr->gr_random = (showtime_get_ts() ^ gr->gr_random) * 1664525 + 1013904223;
+    gr->gr_random = (arch_get_ts() ^ gr->gr_random) * 1664525 + 1013904223;
     self->t_extra_int = 0x10000 | (gr->gr_random & 0xffff);
   }
 

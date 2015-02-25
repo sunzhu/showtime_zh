@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,13 +17,11 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #pragma once
-
 #include "compiler.h"
 
 
-#if (__GNUC__ >= 4 && __GNUC_MINOR__ >=3) || defined(__APPLE__)
+#if (__GNUC__ >= 4 && __GNUC_MINOR__ >=3) || defined(__APPLE__) || defined(__native_client__)
 
 typedef struct atomic {
   int v;

@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -44,7 +42,7 @@
 #include "arch/threads.h"
 #include "arch/atomic.h"
 #include "arch/arch.h"
-#include "showtime.h"
+#include "main.h"
 #include "service.h"
 #include "misc/callout.h"
 #include "misc/md5.h"
@@ -160,7 +158,7 @@ memlogger_fn(callout_t *co, void *aux)
  *
  */
 int64_t
-showtime_get_ts(void)
+arch_get_ts(void)
 {
   return mftb() / ticks_per_us;
 }
@@ -376,16 +374,16 @@ ps3_early_init(int argc, char **argv)
 
 
   if(argc == 0) {
-    my_trace("Showtime starting from ???\n");
+    my_trace(APPNAMEUSER" starting from ???\n");
     return;
   }
-  my_trace("Showtime starting from %s\n", argv[0]);
+  my_trace(APPNAMEUSER" starting from %s\n", argv[0]);
   gconf.binary = strdup(argv[0]);
 
   snprintf(buf, sizeof(buf), "%s", argv[0]);
   x = strrchr(buf, '/');
   if(x == NULL) {
-    my_trace("Showtime starting but argv[0] seems invalid");
+    my_trace(APPNAMEUSER" starting but argv[0] seems invalid");
     exit(0);
   }
   x++;
@@ -443,7 +441,7 @@ preload_fonts(void)
 }
 
 const char *
-showtime_get_system_type(void)
+arch_get_system_type(void)
 {
   return "PS3";
 }
@@ -533,11 +531,11 @@ arch_localtime(const time_t *now, struct tm *tm)
 void
 arch_exit(void)
 {
-  if(gconf.exit_code == SHOWTIME_EXIT_STANDBY) {
+  if(gconf.exit_code == APP_EXIT_STANDBY) {
     unlink("/dev_hdd0/tmp/turnoff");
     Lv2Syscall3(379, 0x100, 0, 0 );
   }
-  if(gconf.exit_code == SHOWTIME_EXIT_RESTART)
+  if(gconf.exit_code == APP_EXIT_RESTART)
     sysProcessExitSpawn2(gconf.binary, 0, 0, 0, 0, 1200, 0x70);
 
   exit(gconf.exit_code);
@@ -587,7 +585,7 @@ main(int argc, char **argv)
 
   my_trace("The binary is: %s\n", gconf.binary);
   set_device_id();
-  showtime_init();
+  main_init();
 
   sysprop = prop_create(prop_get_global(), "system");
   memprop = prop_create(sysprop, "mem");
@@ -626,7 +624,7 @@ main(int argc, char **argv)
   extern void glw_ps3_start(void);
   glw_ps3_start();
 
-  showtime_fini();
+  main_fini();
 
   arch_exit();
 

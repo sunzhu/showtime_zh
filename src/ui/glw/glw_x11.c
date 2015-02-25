@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include <sys/time.h>
 #include <math.h>
@@ -37,7 +35,7 @@
 #include <X11/Xatom.h>
 #include <X11/XF86keysym.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "ui/linux/x11_common.h"
 #include "ui/linux/nvidia.h"
 #include "settings.h"
@@ -242,12 +240,12 @@ check_vsync(glw_x11_t *gx11)
 
   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
   glXSwapBuffers(gx11->display, gx11->win);
-  c = showtime_get_ts();
+  c = arch_get_ts();
   for(i = 0; i < 5; i++) {
     glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
     glXSwapBuffers(gx11->display, gx11->win);
   }
-  c = showtime_get_ts() - c;
+  c = arch_get_ts() - c;
 
   return c > 25000; // Probably working
 }
@@ -1077,7 +1075,7 @@ glw_x11_mainloop(glw_x11_t *gx11)
       case ClientMessage:
 	if((Atom)event.xclient.data.l[0] == gx11->atom_deletewindow) {
 	  /* Window manager wants us to close */
-	  showtime_shutdown(0);
+	  app_shutdown(0);
 	}
 	break;
 	  

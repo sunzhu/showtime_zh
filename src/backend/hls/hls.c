@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,7 +23,7 @@
 #include "navigator.h"
 #include "backend/backend.h"
 #include "media/media.h"
-#include "showtime.h"
+#include "main.h"
 #include "i18n.h"
 #include "misc/isolang.h"
 #include "misc/str.h"
@@ -488,7 +487,7 @@ hls_segment_open(hls_segment_t *hs)
   if(hs->hs_byte_offset != -1)
     flags &= ~FA_STREAMING;
 
-  hs->hs_opened_at = showtime_get_ts();
+  hs->hs_opened_at = arch_get_ts();
   hs->hs_block_cnt = h->h_blocked;
 
   fh = fa_open_ex(hs->hs_url, errbuf, sizeof(errbuf), flags, &foe);
@@ -548,7 +547,7 @@ hls_variant_update_bw(hls_segment_t *hs)
   if(hs == NULL || !hs->hs_opened_at)
     return;
 
-  int ts = showtime_get_ts() - hs->hs_opened_at;
+  int ts = arch_get_ts() - hs->hs_opened_at;
   if(h->h_blocked != hs->hs_block_cnt)
     return;
 

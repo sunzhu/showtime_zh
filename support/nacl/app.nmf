@@ -1,0 +1,14 @@
+{
+  "program": {
+    "portable": {
+      "pnacl-translate": {
+        "url": "app.pexe",
+        "optlevel": 2
+      },
+      "pnacl-debug": {
+        "url": "app.bundle",
+        "optlevel": 0
+      }
+    }
+  }
+}

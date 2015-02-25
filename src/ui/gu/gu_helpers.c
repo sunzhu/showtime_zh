@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,10 +17,9 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include "gu.h"
-#include "showtime.h"
+#include "main.h"
 
 
 /**
@@ -245,7 +243,7 @@ gu_contentstr_to_icon(const char *str, int height)
     return NULL;
 
   snprintf(buf, sizeof(buf), 
-	   "%s/guresources/content-%s.png", showtime_dataroot(), str);
+	   "%s/guresources/content-%s.png", app_dataroot(), str);
   return gu_pixbuf_get_sync(buf, -1, height);
 }
 

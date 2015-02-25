@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -30,9 +28,8 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess.h"
-#include "misc/fs.h"
 #include "misc/minmax.h"
 
 #include "fa_proto.h"
@@ -447,17 +444,16 @@ fs_unlink(const fa_protocol_t *fap, const char *url,
 /**
  *
  */
-static int
-fs_makedirs(struct fa_protocol *fap, const char *url,
-            char *errbuf, size_t errsize)
+static fa_err_code_t
+fs_makedir(struct fa_protocol *fap, const char *url)
 {
-
-  int r = makedirs(url);
-
-  if(r) {
-    snprintf(errbuf, errsize, "Unable to create directory: %s",
-             strerror(errno));
-    return -1;
+  if(mkdir(url, 0770)) {
+    switch(errno) {
+    case ENOENT:  return FAP_NOENT;
+    case EPERM:   return FAP_PERMISSION_DENIED;
+    case EEXIST:  return FAP_EXIST;
+    default:      return FAP_ERROR;
+    }
   }
   return 0;
 }
@@ -804,13 +800,6 @@ fs_fsinfo(struct fa_protocol *fap, const char *url, fa_fsinfo_t *ffi)
   return r ? FAP_ERROR : 0;
 }
 
-
-#elif defined(__native_client__)
-static fa_err_code_t
-fs_fsinfo(struct fa_protocol *fap, const char *url, fa_fsinfo_t *ffi)
-{
-    return FAP_NOT_SUPPORTED;
-}
 #else
 #error Not sure how to do fs_fsinfo()
 #endif
@@ -849,7 +838,7 @@ fa_protocol_t fa_protocol_fs = {
 #if ENABLE_REALPATH
   .fap_normalize = fs_normalize,
 #endif
-  .fap_makedirs = fs_makedirs,
+  .fap_makedir = fs_makedir,
 
 #ifdef __APPLE__
   .fap_set_xattr = fs_set_xattr,

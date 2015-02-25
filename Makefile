@@ -25,7 +25,7 @@ include ${C}/config.default
 BUILDDIR ?= ${C}/build.${BUILD}
 
 # All targets deps on Makefile, but we can comment that out during dev:ing
-ALLDEPS=${BUILDDIR}/config.mak Makefile src/arch/${OS}/${OS}.mk
+#ALLDEPS=${BUILDDIR}/config.mak Makefile src/arch/${OS}/${OS}.mk
 
 ALLDEPS += ${STAMPS}
 
@@ -127,7 +127,6 @@ SRCS +=	src/misc/ptrvec.c \
 	src/misc/str.c \
 	src/misc/time.c \
 	src/misc/codepages.c \
-	src/misc/fs.c \
 	src/misc/extents.c \
 	src/misc/isolang.c \
 	src/misc/dbl.c \
@@ -211,7 +210,6 @@ SRCS +=	src/htsmsg/htsbuf.c \
 ##############################################################
 SRCS += src/fileaccess/fileaccess.c \
 	src/fileaccess/fa_vfs.c \
-	src/fileaccess/fa_fs.c \
 	src/fileaccess/fa_http.c \
 	src/fileaccess/fa_zip.c \
 	src/fileaccess/fa_zlib.c \
@@ -274,6 +272,7 @@ SRCS-$(CONFIG_AIRPLAY) += src/api/airplay.c
 ##############################################################
 SRCS += src/networking/net_common.c \
 	src/networking/http.c \
+	src/networking/asyncio_http.c \
 
 SRCS-$(CONFIG_FTPSERVER) += src/networking/ftp_server.c
 
@@ -321,7 +320,6 @@ SRCS += src/subtitles/subtitles.c \
 	src/subtitles/ext_subtitles.c \
 	src/subtitles/dvdspu.c \
 	src/subtitles/vobsub.c \
-	src/subtitles/sub_scanner.c \
 	src/subtitles/video_overlay.c \
 
 ##############################################################
@@ -811,7 +809,7 @@ ${BUILDDIR}/zipbundles/bundle.zip:
 	mkdir -p ${BUILDDIR}/zipbundles
 	zip -0r ${BUILDDIR}/zipbundles/bundle.zip ${BUNDLES}
 
-$(BUILDDIR)/support/dataroot/ziptail.o: src/showtime.h
+$(BUILDDIR)/support/dataroot/ziptail.o: src/main.h
 
 ${PROG}.ziptail: $(OBJS) $(ALLDEPS) $(BUILDDIR)/support/dataroot/ziptail.o
 	$(CC) -o $@ $(OBJS) $(BUILDDIR)/support/dataroot/ziptail.o $(LDFLAGS) ${LDFLAGS_cfg}

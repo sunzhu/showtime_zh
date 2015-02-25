@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,7 +19,7 @@
  */
 #include <assert.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "navigator.h"
 #include "gu.h"
 #include "event.h"
@@ -102,7 +101,7 @@ gw_close(GtkWidget *widget,GdkEvent *event, gpointer data)
   gu_win_destroy(gw);
 
   if(LIST_FIRST(&gu->gu_windows) == NULL)
-    showtime_shutdown(0);
+    app_shutdown(0);
 
   return TRUE;
 }

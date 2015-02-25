@@ -1,3 +1,22 @@
+/*
+ *  Copyright (C) 2007-2015 Lonelycoder AB
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *  This program is also available under a commercial proprietary license.
+ *  For more information, contact andreas@lonelycoder.com
+ */
 #include <errno.h>
 #include "net_i.h"
 
@@ -36,6 +55,34 @@ polarssl_write(tcpcon_t *tc, const void *data, size_t len)
 }
 
 
+/**
+ *
+ */
+static int
+raw_recv(void *ctx, unsigned char *buf, size_t len)
+{
+  tcpcon_t *tc = ctx;
+  int ret = tc->raw_read(tc, buf, len, 0, NULL, NULL);
+  if(ret == -1)
+    return POLARSSL_ERR_NET_CONN_RESET;
+
+  return ret;
+}
+
+
+/**
+ *
+ */
+static int
+raw_send( void *ctx, const unsigned char *buf, size_t len)
+{
+  tcpcon_t *tc = ctx;
+  if(tc->raw_write(tc, buf, len))
+    return POLARSSL_ERR_NET_CONN_RESET;
+
+  return len;
+}
+
 
 /**
  *
@@ -49,18 +96,21 @@ tcp_ssl_open(tcpcon_t *tc, char *errbuf, size_t errlen)
     return -1;
   }
 
+  tc->raw_read  = tc->read;
+  tc->raw_write = tc->write;
+
   tc->ssn = malloc(sizeof(ssl_session));
   tc->hs = malloc(sizeof(havege_state));
 
   havege_init(tc->hs);
   memset(tc->ssn, 0, sizeof(ssl_session));
 
-  ssl_set_endpoint(tc->ssl, SSL_IS_CLIENT );
-  ssl_set_authmode(tc->ssl, SSL_VERIFY_NONE );
+  ssl_set_endpoint(tc->ssl, SSL_IS_CLIENT);
+  ssl_set_authmode(tc->ssl, SSL_VERIFY_NONE);
 
-  ssl_set_rng(tc->ssl, havege_random, tc->hs );
-  ssl_set_bio(tc->ssl, net_recv, &tc->fd, net_send, &tc->fd);
-  ssl_set_ciphersuites(tc->ssl, ssl_default_ciphersuites );
+  ssl_set_rng(tc->ssl, havege_random, tc->hs);
+  ssl_set_bio(tc->ssl, raw_recv, tc, raw_send, tc);
+  ssl_set_ciphersuites(tc->ssl, ssl_default_ciphersuites);
   ssl_set_session(tc->ssl, tc->ssn );
 
   tc->read = polarssl_read;

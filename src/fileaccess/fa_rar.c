@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,21 +17,7 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-#include "config.h"
-
-#include <assert.h>
-#include <alloca.h>
-#include <string.h>
-#include <stdlib.h>
-#include <inttypes.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <stdio.h>
-
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess.h"
 #include "fa_proto.h"
 #include "usage.h"
@@ -690,7 +675,7 @@ rar_open(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
   if(rf->rf_method != '0') {
     rar_file_unref(rf);
     snprintf(errbuf, errlen,
-	     "Showtime does not support compressed files in RAR archives");
+	     "Compressed files in RAR archives is not supported");
     return NULL;
   }
 

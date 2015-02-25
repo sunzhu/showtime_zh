@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,7 +27,7 @@
 
 #include "arch/atomic.h"
 
-#include "showtime.h"
+#include "main.h"
 #include "prop_i.h"
 #include "misc/str.h"
 #include "event.h"
@@ -908,9 +906,9 @@ prop_notify_dispatch(struct prop_notify_queue *q, const char *trace_name)
 #else
       snprintf(info, sizeof(info), "%p", n->hpn_sub);
 #endif
-      int64_t ts = showtime_get_ts();
+      int64_t ts = arch_get_ts();
       prop_dispatch_one(n, PROP_LOCK_LOCK);
-      ts = showtime_get_ts() - ts;
+      ts = arch_get_ts() - ts;
       if(ts > 10000) {
         TRACE(ts > 100000 ? TRACE_INFO : TRACE_DEBUG,
               "PROP", "%s: Dispatch of [%s] took %d us",
@@ -1663,6 +1661,8 @@ prop_send_subscription_monitor_active(prop_t *p)
 void
 prop_send_ext_event(prop_t *p, event_t *e)
 {
+  if(p == NULL)
+    return;
   hts_mutex_lock(&prop_mutex);
   prop_send_ext_event0(p, e);
   hts_mutex_unlock(&prop_mutex);
@@ -4966,13 +4966,13 @@ prop_courier_poll_timed(prop_courier_t *pc, int maxtime)
     hts_mutex_unlock(&prop_mutex);
   }
 
-  int64_t ts = showtime_get_ts();
+  int64_t ts = arch_get_ts();
 
   while((n = TAILQ_FIRST(&pc->pc_dispatch_queue)) != NULL) {
     prop_dispatch_one(n, PROP_LOCK_LOCK);
     TAILQ_REMOVE(&pc->pc_dispatch_queue, n, hpn_link);
     TAILQ_INSERT_TAIL(&pc->pc_free_queue, n, hpn_link);
-    if(showtime_get_ts() > ts + maxtime)
+    if(arch_get_ts() > ts + maxtime)
       break;
   }
 }

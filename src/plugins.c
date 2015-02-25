@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,16 +17,7 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <unistd.h>
-#include <limits.h>
-#include <assert.h>
-
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess/fileaccess.h"
 #include "plugins.h"
 #include "settings.h"
@@ -219,8 +209,8 @@ update_state(plugin_t *pl)
 
   int version_dep_ok =
     pl->pl_showtime_min_version == NULL ||
-    showtime_parse_version_int(pl->pl_showtime_min_version) <=
-    showtime_get_version_int();
+    parse_version_int(pl->pl_showtime_min_version) <=
+    app_get_version_int();
 
   prop_set(pl->pl_status, "minver", PROP_SET_VOID);
   pl->pl_new_version_avail = 0;
@@ -247,9 +237,9 @@ update_state(plugin_t *pl)
     if(pl->pl_repo_ver != NULL) {
       pl->pl_new_version_avail = 1;
 
-      int repo_ver = showtime_parse_version_int(pl->pl_repo_ver);
+      int repo_ver = parse_version_int(pl->pl_repo_ver);
       if(pl->pl_inst_ver != NULL &&
-	 repo_ver > showtime_parse_version_int(pl->pl_inst_ver)) {
+	 repo_ver > parse_version_int(pl->pl_inst_ver)) {
 
 	if(!version_dep_ok) {
 	  status = _("Not upgradable");
@@ -533,8 +523,13 @@ plugin_load(const char *url, char *errbuf, size_t errlen, int flags)
   int r;
   char fullpath[URL_MAX];
 
-  if(gconf.enable_force_ecmascript && !strcmp(type, "javascript"))
-    type = "ecmascript";
+  if(!strcmp(type, "javascript")) {
+#if ENABLE_SPIDERMONKEY
+    if(gconf.enable_force_ecmascript)
+#endif
+      type = "ecmascript";
+  }
+
 
   if(!strcmp(type, "views")) {
     // No special tricks here, we always loads 'glwviews' from all plugins
@@ -656,8 +651,7 @@ plugin_load_installed(void)
   char errbuf[200];
   fa_dir_entry_t *fde;
 
-  snprintf(path, sizeof(path), "file://%s/installedplugins",
-	   gconf.persistent_path);
+  snprintf(path, sizeof(path), "%s/installedplugins", gconf.persistent_path);
 
   fa_dir_t *fd = fa_scandir(path, NULL, 0);
 
@@ -867,7 +861,7 @@ plugin_setup_start_model(void)
   prop_set(plugin_start_model, "contents", PROP_SET_STRING, "plugins");
   prop_set(plugin_start_model, "type",     PROP_SET_STRING, "directory");
 
-  prop_link(_p("Apps"),
+  prop_link(_p("Plugins"),
 	    prop_create(prop_create(plugin_start_model, "metadata"), "title"));
 
   pc = prop_concat_create(prop_create(plugin_start_model, "nodes"), 0);
@@ -878,7 +872,7 @@ plugin_setup_start_model(void)
   
   p = prop_create(sta, NULL);
   prop_set_string(prop_create(p, "type"), "directory");
-  prop_link(_p("Browse available apps"),
+  prop_link(_p("Browse available plugins"),
 	    prop_create(prop_create(p, "metadata"), "title"));
   prop_set_string(prop_create(p, "url"), "plugin:repo");
 
@@ -892,7 +886,7 @@ plugin_setup_start_model(void)
                        PROP_NF_CMP_NEQ, 1, NULL, PROP_NF_MODE_EXCLUDE);
 
   d = prop_create_root(NULL);
-  prop_link(_p("Installed apps"),
+  prop_link(_p("Installed plugins"),
 	    prop_create(prop_create(d, "metadata"), "title"));
   prop_set_string(prop_create(d, "type"), "separator");
   prop_concat_add_source(pc, inst, d);
@@ -914,7 +908,7 @@ plugin_setup_repo_model(void)
   prop_set(model, "safeui",   PROP_SET_INT,    1);
   prop_set(model, "contents", PROP_SET_STRING, "plugins");
 
-  prop_link(_p("Available apps"),
+  prop_link(_p("Available plugins"),
 	    prop_create(prop_create(model, "metadata"), "title"));
 
   pc = prop_concat_create(prop_create(model, "nodes"), 0);
@@ -1252,7 +1246,7 @@ plugin_remove(plugin_t *pl)
 
   snprintf(path, sizeof(path), "%s/installedplugins/%s.zip",
 	   gconf.persistent_path, pl->pl_id);
-  unlink(path);
+  fa_unlink(path, NULL, 0);
 
   TRACE(TRACE_DEBUG, "plugin", "Uninstalling %s", pl->pl_id);
   htsmsg_store_remove("plugins/%s", pl->pl_id);
@@ -1322,39 +1316,39 @@ plugin_install(plugin_t *pl, const char *package)
   prop_link(_p("Installing"), status);
 
   snprintf(path, sizeof(path), "%s/installedplugins", gconf.persistent_path);
-  mkdir(path, 0770);
+  fa_makedir(path);
 
   plugin_unload(pl);
 
   snprintf(path, sizeof(path), "%s/installedplugins/%s.zip",
 	   gconf.persistent_path, pl->pl_id);
-  if(unlink(path)) {
+
+  if(fa_unlink(path, errbuf, sizeof(errbuf))) {
     TRACE(TRACE_DEBUG, "plugins", "First unlinking %s -- %s",
-	  path, strerror(errno));
+	  path, errbuf);
   }
 
-  int fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0660);
-  if(fd == -1) {
+  fa_handle_t *out = fa_open_ex(path, errbuf, sizeof(errbuf), FA_WRITE, NULL);
+  if(out == NULL) {
     TRACE(TRACE_ERROR, "plugins", "Unable to write to %s -- %s",
-	  path, strerror(errno));
+	  path, errbuf);
     prop_link(_p("File open error"), status);
     buf_release(b);
     goto cleanup;
   }
   size_t bsize = b->b_size;
-  size_t r = write(fd, buf, bsize);
+  size_t r = fa_write(out, buf, bsize);
   buf_release(b);
-  if(close(fd) || r != bsize) {
-    TRACE(TRACE_ERROR, "plugins", "Unable to write to %s -- %s",
-	  path, strerror(errno));
+  fa_close(out);
+  if(r != bsize) {
+    TRACE(TRACE_ERROR, "plugins", "Unable to write to %s", path);
     buf_release(b);
     prop_link(_p("Disk write error"), status);
     goto cleanup;
   }
 
-
   snprintf(path, sizeof(path),
-	   "zip://file://%s/installedplugins/%s.zip", gconf.persistent_path,
+	   "zip://%s/installedplugins/%s.zip", gconf.persistent_path,
 	   pl->pl_id);
 
 #ifdef STOS

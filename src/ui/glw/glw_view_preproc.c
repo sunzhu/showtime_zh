@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include "glw_view.h"
 #include <stdio.h>
@@ -96,7 +94,8 @@ macro_add_arg(macro_t *m, rstr_t *name)
  */
 static int
 glw_view_preproc0(glw_root_t *gr, token_t *p, errorinfo_t *ei,
-		  struct macro_list *ml, struct import_list *il)
+		  struct macro_list *ml, struct import_list *il,
+                  int may_unlock)
 {
   token_t *t, *n, *x, *a, *b, *c, *d, *e;
   macro_t *m;
@@ -305,7 +304,7 @@ glw_view_preproc0(glw_root_t *gr, token_t *p, errorinfo_t *ei,
 	  return glw_view_seterr(ei, t, "Invalid filename after include");
 
 	x = t->next;
-	if((n = glw_view_load1(gr, t->t_rstring, ei, t, NULL)) == NULL)
+	if((n = glw_view_load1(gr, t->t_rstring, ei, t, may_unlock)) == NULL)
 	  return -1;
 
 	n->next = x;
@@ -336,7 +335,7 @@ glw_view_preproc0(glw_root_t *gr, token_t *p, errorinfo_t *ei,
 	  LIST_INSERT_HEAD(il, i, link);
 
 	  x = t->next;
-	  if((n = glw_view_load1(gr, t->t_rstring, ei, t, NULL)) == NULL)
+	  if((n = glw_view_load1(gr, t->t_rstring, ei, t, may_unlock)) == NULL)
 	    return -1;
 	  
 	  n->next = x;
@@ -477,7 +476,7 @@ glw_view_preproc0(glw_root_t *gr, token_t *p, errorinfo_t *ei,
  *
  */
 int
-glw_view_preproc(glw_root_t *gr, token_t *p, errorinfo_t *ei)
+glw_view_preproc(glw_root_t *gr, token_t *p, errorinfo_t *ei, int may_unlock)
 {
   struct macro_list ml;
   macro_t *m;
@@ -488,7 +487,7 @@ glw_view_preproc(glw_root_t *gr, token_t *p, errorinfo_t *ei)
   LIST_INIT(&ml);
   LIST_INIT(&il);
   
-  r = glw_view_preproc0(gr, p, ei, &ml, &il);
+  r = glw_view_preproc0(gr, p, ei, &ml, &il, may_unlock);
   
   while((m = LIST_FIRST(&ml)) != NULL)
     macro_destroy(gr, m);

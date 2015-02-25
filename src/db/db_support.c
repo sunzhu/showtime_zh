@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,12 +17,11 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
 
-#include "showtime.h"
+#include "main.h"
 #include "fileaccess/fileaccess.h"
 #include "misc/minmax.h"
 
@@ -262,7 +260,7 @@ db_upgrade_schema(sqlite3 *db, const char *schemadir, const char *dbname,
 
   if(ver > tgtver) {
     TRACE(TRACE_ERROR, "DB", "%s: Installed version %d is too high for "
-	  "this version of Showtime", dbname, ver);
+	  "this version of "APPNAMEUSER, dbname, ver);
     if(detach[0]) db_one_statement(db, detach, NULL);
     return -1;
   }

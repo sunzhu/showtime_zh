@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,7 +26,7 @@
 #include <xmmintrin.h>
 #endif
 
-#include "showtime.h"
+#include "main.h"
 #include "audio2/audio.h"
 #include "media/media.h"
 #include "notifications.h"
@@ -51,7 +50,7 @@ typedef struct decoder {
  *
  */
 int64_t
-showtime_get_avtime(void)
+arch_get_avtime(void)
 {
   struct timeval tv;
   gettimeofday(&tv, NULL);
@@ -218,7 +217,7 @@ pulseaudio_get_mode(audio_decoder_t *ad, int codec_id,
   pa_format_info_set_rate(vec[0], 48000);
   pa_format_info_set_channels(vec[0], 2);
 
-  d->s = pa_stream_new_extended(ctx, "Showtime playback", vec, 1, NULL);
+  d->s = pa_stream_new_extended(ctx, APPNAMEUSER" playback", vec, 1, NULL);
   int flags = 0;
 
   pa_stream_set_state_callback(d->s, stream_state_callback, d);
@@ -327,12 +326,12 @@ pulseaudio_audio_reconfig(audio_decoder_t *ad)
   else
     pa_proplist_sets(pl, PA_PROP_MEDIA_ROLE, "music");
 
-  d->s = pa_stream_new_with_proplist(ctx, "Showtime playback", 
+  d->s = pa_stream_new_with_proplist(ctx, APPNAMEUSER" playback", 
 				     &d->ss, &map, pl);
   pa_proplist_free(pl);
 
 #else
-  d->s = pa_stream_new(ctx, "Showtime playback", &ss, &map);  
+  d->s = pa_stream_new(ctx, APPNAMEUSER" playback", &ss, &map);  
 #endif
  
   int flags = 0;
@@ -595,14 +594,14 @@ audio_driver_init(struct prop *asettings, struct htsmsg *store)
 #if PA_API_VERSION >= 12
   pa_proplist *pl = pa_proplist_new();
 
-  pa_proplist_sets(pl, PA_PROP_APPLICATION_ID, "com.lonelycoder.hts.showtime");
-  pa_proplist_sets(pl, PA_PROP_APPLICATION_NAME, "Showtime");
+  pa_proplist_sets(pl, PA_PROP_APPLICATION_ID, "com.lonelycoder."APPNAME);
+  pa_proplist_sets(pl, PA_PROP_APPLICATION_NAME, APPNAMEUSER);
   
   /* Create a new connection context */
-  ctx = pa_context_new_with_proplist(api, "Showtime", pl);
+  ctx = pa_context_new_with_proplist(api, APPNAMEUSER, pl);
   pa_proplist_free(pl);
 #else
-  ctx = pa_context_new(api, "Showtime");
+  ctx = pa_context_new(api, APPNAMEUSER);
 #endif
 
   pa_context_set_state_callback(ctx, context_state_callback, NULL);

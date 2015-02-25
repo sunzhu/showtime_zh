@@ -1,7 +1,5 @@
-#pragma once
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,9 +18,8 @@
  *  For more information, contact andreas@lonelycoder.com
  */
 #pragma once
-
 #include <jni.h>
-
+#include "ui/longpress.h"
 
 typedef struct android_glw_root {
   glw_root_t gr;
@@ -31,6 +28,8 @@ typedef struct android_glw_root {
 
   int agr_running;
   hts_cond_t agr_runcond;
+
+  lphelper_t agr_dpad_center;
 
 } android_glw_root_t;
 

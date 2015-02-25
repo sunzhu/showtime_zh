@@ -1,6 +1,5 @@
 /*
- *  Showtime Mediacenter
- *  Copyright (C) 2007-2013 Lonelycoder AB
+ *  Copyright (C) 2007-2015 Lonelycoder AB
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,7 +17,6 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -29,7 +27,7 @@
 #include "arch/threads.h"
 #include "arch/atomic.h"
 
-#include "showtime.h"
+#include "main.h"
 #include "prop/prop_nodefilter.h"
 #include "networking/net.h"
 #include "navigator.h"
@@ -368,7 +366,7 @@ htsp_login(htsp_connection_t *hc)
   htsmsg_t *m;
 
   m = htsmsg_create_map();
-  htsmsg_add_str(m, "clientname", "HTS Showtime");
+  htsmsg_add_str(m, "clientname", APPNAMEUSER);
   htsmsg_add_u32(m, "htspversion", 1);
   htsmsg_add_str(m, "method", "hello");
 
