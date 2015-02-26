@@ -32,6 +32,7 @@
 
 typedef struct svg_state {
   float cur[2];
+  float last_ctrl[2];  // For s/S command
   float ctm[9];
   image_component_vector_t *icv;
   float scaling;
@@ -230,15 +231,14 @@ cmd_curveto_rel(svg_state_t *state, const float *p)
   c[0] = state->cur[0] + p[0];
   c[1] = state->cur[1] + p[1];
 
-  d[0] = state->cur[0] + p[2];
-  d[1] = state->cur[1] + p[3];
+  state->last_ctrl[0] = d[0] = state->cur[0] + p[2];
+  state->last_ctrl[1] = d[1] = state->cur[1] + p[3];
 
   e[0] = state->cur[0] + p[4];
   e[1] = state->cur[1] + p[5];
-  
+
   state->cur[0] = e[0];
   state->cur[1] = e[1];
-
 
   float ts[2], tc[2], td[3], te[2];
 
@@ -262,12 +262,12 @@ cmd_curveto_abs(svg_state_t *state, const float *p)
   c[0] = p[0];
   c[1] = p[1];
 
-  d[0] = p[2];
-  d[1] = p[3];
+  state->last_ctrl[0] = d[0] = p[2];
+  state->last_ctrl[1] = d[1] = p[3];
 
   e[0] = p[4];
   e[1] = p[5];
-  
+
   state->cur[0] = e[0];
   state->cur[1] = e[1];
 
@@ -281,6 +281,69 @@ cmd_curveto_abs(svg_state_t *state, const float *p)
 
   cmd_curve(state, ts, tc, td, te);
 }
+
+
+static void
+cmd_shorthand_rel(svg_state_t *state, const float *p)
+{
+  float s[2], c[2], d[3], e[2];
+
+  s[0] = state->cur[0];
+  s[1] = state->cur[1];
+
+  c[0] = state->cur[0] + (state->cur[0] - state->last_ctrl[0]);
+  c[1] = state->cur[1] + (state->cur[1] - state->last_ctrl[1]);
+
+  state->last_ctrl[0] = d[0] = state->cur[0] + p[0];
+  state->last_ctrl[1] = d[1] = state->cur[1] + p[1];
+
+  e[0] = state->cur[0] + p[2];
+  e[1] = state->cur[1] + p[3];
+
+  state->cur[0] = e[0];
+  state->cur[1] = e[1];
+
+  float ts[2], tc[2], td[3], te[2];
+
+  svg_mtx_vec_mul(ts, state->ctm, s);
+  svg_mtx_vec_mul(tc, state->ctm, c);
+  svg_mtx_vec_mul(td, state->ctm, d);
+  svg_mtx_vec_mul(te, state->ctm, e);
+
+  cmd_curve(state, ts, tc, td, te);
+}
+
+
+static void
+cmd_shorthand_abs(svg_state_t *state, const float *p)
+{
+  float s[2], c[2], d[3], e[2];
+
+  s[0] = state->cur[0];
+  s[1] = state->cur[1];
+
+  c[0] = state->cur[0] + (state->cur[0] - state->last_ctrl[0]);
+  c[1] = state->cur[1] + (state->cur[1] - state->last_ctrl[1]);
+
+  state->last_ctrl[0] = d[0] = p[0];
+  state->last_ctrl[1] = d[1] = p[1];
+
+  e[0] = p[2];
+  e[1] = p[3];
+
+  state->cur[0] = e[0];
+  state->cur[1] = e[1];
+
+  float ts[2], tc[2], td[3], te[2];
+
+  svg_mtx_vec_mul(ts, state->ctm, s);
+  svg_mtx_vec_mul(tc, state->ctm, c);
+  svg_mtx_vec_mul(td, state->ctm, d);
+  svg_mtx_vec_mul(te, state->ctm, e);
+
+  cmd_curve(state, ts, tc, td, te);
+}
+
 
 static void
 cmd_lineto(svg_state_t *state)
@@ -423,6 +486,16 @@ stroke_path(svg_state_t *state, const char *str)
       num_params = 6;
       break;
 
+    case 's':
+      next_cmd = cur_cmd = cmd_shorthand_rel;
+      num_params = 4;
+      break;
+
+    case 'S':
+      next_cmd = cur_cmd = cmd_shorthand_abs;
+      num_params = 4;
+      break;
+
     case 'l':
       next_cmd = cur_cmd = cmd_lineto_rel;
       num_params = 2;
@@ -511,6 +584,49 @@ stroke_rect_element(svg_state_t *s, htsmsg_t *attribs)
   cmd_lineto_abs(s, v);
   v[0] = x;
   cmd_lineto_abs(s, v);
+  cmd_close(s);
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
+stroke_polygon_element(svg_state_t *s, htsmsg_t *attribs)
+{
+  const char *str = htsmsg_get_str(attribs, "points");
+  if(str == NULL)
+    return -1;
+
+  const char *endptr;
+  int num = 0;
+  while(1) {
+    float v[2];
+    while(*str < 33 && *str)
+      str++;
+    v[0] = my_str2double(str, &endptr);
+    if(endptr == str)
+      break;
+    str = endptr;
+    while(*str < 33 && *str)
+      str++;
+    if(*str == ',')
+      str++;
+    while(*str < 33 && *str)
+      str++;
+    v[1] = my_str2double(str, &endptr);
+    if(endptr == str)
+      break;
+    str = endptr;
+
+    if(num == 0) {
+      cmd_move_abs(s, v);
+    } else {
+      cmd_lineto_abs(s, v);
+    }
+    num++;
+  }
   cmd_close(s);
   return 0;
 }
@@ -630,6 +746,8 @@ svg_parse_root(svg_state_t *s, htsmsg_t *tags)
       svg_parse_element(s, c, stroke_path_element);
     else if(!strcmp(f->hmf_name, "rect"))
       svg_parse_element(s, c, stroke_rect_element);
+    else if(!strcmp(f->hmf_name, "polygon"))
+      svg_parse_element(s, c, stroke_polygon_element);
     else if(!strcmp(f->hmf_name, "g"))
       svg_parse_g(s, c);
   }
