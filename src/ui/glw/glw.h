@@ -705,6 +705,8 @@ typedef struct glw_root {
   void (*gr_prop_dispatcher)(prop_courier_t *pc, int timeout);
   int gr_prop_maxtime;
 
+  int gr_keyboard_mode;
+
   int gr_reduce_cpu;
   prop_sub_t *gr_evsub;
 
@@ -837,6 +839,10 @@ typedef struct glw_root {
   prop_t *gr_last_focused_interactive;
   prop_t *gr_pointer_visible;
   int gr_focus_work;
+
+  struct glw *gr_current_cursor;
+  void (*gr_cursor_focus_tracker)(struct glw *w, const struct glw_rctx *rc,
+                                  struct glw *cursor);
 
   /**
    * Backend specifics
@@ -1112,8 +1118,6 @@ typedef struct glw {
                                                navigating with keyboard input */
 #define GLW2_HOMOGENOUS             0x20000
 #define GLW2_DEBUG                  0x40000     /* Debug this object */
-#define GLW2_LAYOUTFIXED_X          0x80000
-#define GLW2_LAYOUTFIXED_Y          0x100000
 #define GLW2_NAV_WRAP               0x200000
 #define GLW2_AUTO_FOCUS_LIMIT       0x400000
 #define GLW2_CURSOR                 0x800000
@@ -1294,7 +1298,7 @@ void glw_view_eval_signal(glw_t *w, glw_signal_t sig);
 
 void glw_view_eval_layout(glw_t *w, const glw_rctx_t *rc, int mask);
 
-void glw_view_eval_em(glw_t *w);
+void glw_view_eval_dynamics(glw_t *w, int flags);
 
 /**
  * Transitions

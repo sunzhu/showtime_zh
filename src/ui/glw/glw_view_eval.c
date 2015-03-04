@@ -1122,12 +1122,12 @@ glw_view_eval_layout(glw_t *w, const glw_rctx_t *rc, int mask)
  *
  */
 void
-glw_view_eval_em(glw_t *w)
+glw_view_eval_dynamics(glw_t *w, int flags)
 {
   glw_view_eval_context_t ec;
 
   memset(&ec, 0, sizeof(ec));
-  run_dynamics(w, &ec, GLW_VIEW_EVAL_EM);
+  run_dynamics(w, &ec, flags);
 }
 
 
@@ -3083,7 +3083,11 @@ glwf_onEvent(glw_view_eval_context_t *ec, struct token *self,
     return glw_view_seterr(ec->ei, a, "Invalid source event type");
 
   if(!strcmp(rstr_get(a->t_rstring), "KeyCode")) {
-    action = -1;
+    action = GLW_EVENT_KEYCODE;
+  } else if(!strcmp(rstr_get(a->t_rstring), "GainedFocus")) {
+    action = GLW_EVENT_GAINED_FOCUS;
+  } else if(!strcmp(rstr_get(a->t_rstring), "LostFocus")) {
+    action = GLW_EVENT_LOST_FOCUS;
   } else {
     action = action_str2code(rstr_get(a->t_rstring));
 
@@ -4469,7 +4473,25 @@ glwf_isFocused(glw_view_eval_context_t *ec, struct token *self,
 
 
 /**
- * Return 1 if the current widget is in focus
+ * Return 1 if the current widget is in focus for navigation
+ */
+static int
+glwf_isNavFocused(glw_view_eval_context_t *ec, struct token *self,
+                  token_t **argv, unsigned int argc)
+{
+  token_t *r;
+
+  ec->dynamic_eval |= GLW_VIEW_EVAL_FHP_CHANGE;
+
+  r = eval_alloc(self, ec, TOKEN_INT);
+  r->t_int = glw_is_focused(ec->w) && ec->w->glw_root->gr_keyboard_mode;
+  eval_push(ec, r);
+  return 0;
+}
+
+
+/**
+ * Return 1 if the current widget is hovered
  */
 static int
 glwf_isHovered(glw_view_eval_context_t *ec, struct token *self,
@@ -4522,6 +4544,35 @@ glwf_focusedChild(glw_view_eval_context_t *ec, struct token *self,
   if(c != NULL && c->glw_originating_prop != NULL) {
     r = eval_alloc(self, ec, TOKEN_PROPERTY_REF);
     r->t_prop = prop_ref_inc(c->glw_originating_prop);
+    eval_push(ec, r);
+    return 0;
+  }
+
+  r = eval_alloc(self, ec, TOKEN_VOID);
+  eval_push(ec, r);
+  return 0;
+}
+
+
+/**
+ * Returns the focused clone (or void if nothing is focused)
+ */
+static int
+glwf_focusedClone(glw_view_eval_context_t *ec, struct token *self,
+		  token_t **argv, unsigned int argc)
+{
+  glw_t *w = ec->w, *c;
+  token_t *r;
+
+  if(w == NULL)
+    return glw_view_seterr(ec->ei, self, "focusedClone() without widget");
+
+  ec->dynamic_eval |= GLW_VIEW_EVAL_OTHER;
+
+  c = w->glw_focused;
+  if(c != NULL && c->glw_clone != NULL) {
+    r = eval_alloc(self, ec, TOKEN_PROPERTY_REF);
+    r->t_prop = prop_ref_inc(c->glw_clone->c_clone_root);
     eval_push(ec, r);
     return 0;
   }
@@ -6372,7 +6423,7 @@ glwf_propName(glw_view_eval_context_t *ec, struct token *self,
   if((a = resolve_property_name2(ec, argv[0])) == NULL)
     return -1;
 
-  if(a->type == TOKEN_PROPERTY_REF) {
+  if(a->type == TOKEN_PROPERTY_REF && a->t_prop != NULL) {
     r = eval_alloc(self, ec, TOKEN_RSTRING);
     r->t_rstring = prop_get_name(a->t_prop);
   } else {
@@ -6454,9 +6505,11 @@ static const token_func_t funcvec[] = {
   {"createChild", 1, glwf_createchild},
   {"delete", 1, glwf_delete},
   {"isFocused", 0, glwf_isFocused},
+  {"isNavFocused", 0, glwf_isNavFocused},
   {"isHovered", 0, glwf_isHovered},
   {"isPressed", 0, glwf_isPressed},
   {"focusedChild", 0, glwf_focusedChild},
+  {"focusedClone", 0, glwf_focusedClone},
   {"focusedIndex", 0, glwf_focusedIndex},
   {"getCaption", 1, glwf_getCaption},
   {"bind", 1, glwf_bind},
