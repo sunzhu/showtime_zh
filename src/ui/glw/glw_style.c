@@ -1089,7 +1089,7 @@ glw_style_bind(glw_t *w, glw_style_t *gs, glw_view_eval_context_t *ec)
     glw_set_height(w, gs->w.glw_req_size_y, gs);
 
   if(gs->gs_flags & GS_SET_ALIGN)
-    glw_set_align(w, gs->w.glw_req_size_y, gs);
+    glw_set_align(w, gs->w.glw_alignment, gs);
 
   if(gs->gs_flags & GS_SET_SOURCE)
     if(w->glw_class->gc_set_source != NULL)
@@ -1119,7 +1119,7 @@ glw_style_update_em(glw_root_t *gr)
   glw_style_t *gs;
   LIST_FOREACH(gs, &gr->gr_all_styles, gs_link)
     if(gs->w.glw_dynamic_eval & GLW_VIEW_EVAL_EM)
-      glw_view_eval_em(&gs->w);
+      glw_view_eval_dynamics(&gs->w, GLW_VIEW_EVAL_EM);
 
 
 }

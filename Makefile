@@ -25,7 +25,7 @@ include ${C}/config.default
 BUILDDIR ?= ${C}/build.${BUILD}
 
 # All targets deps on Makefile, but we can comment that out during dev:ing
-#ALLDEPS=${BUILDDIR}/config.mak Makefile src/arch/${OS}/${OS}.mk
+ALLDEPS=${BUILDDIR}/config.mak Makefile src/arch/${OS}/${OS}.mk
 
 ALLDEPS += ${STAMPS}
 
@@ -413,6 +413,7 @@ SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
 			src/ui/glw/glw_playfield.c \
 			src/ui/glw/glw_layer.c \
 			src/ui/glw/glw_expander.c \
+			src/ui/glw/glw_resizer.c \
 			src/ui/glw/glw_slider.c \
 			src/ui/glw/glw_rotator.c  \
 			src/ui/glw/glw_detachable.c  \

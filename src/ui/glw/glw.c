@@ -42,6 +42,7 @@ static void glw_focus_leave(glw_t *w);
 static void glw_root_set_hover(glw_root_t *gr, glw_t *w);
 static void glw_eventsink(void *opaque, prop_event_t event, ...);
 static void glw_update_em(glw_root_t *gr);
+static void glw_set_keyboard_mode(glw_root_t *gr, int on);
 
 glw_settings_t glw_settings;
 
@@ -944,9 +945,16 @@ glw_path_modify(glw_t *w, int set, int clr, glw_t *stop)
   glw_path_flood(w, set, clr);
 
   for(; w != NULL && w != stop; w = w->glw_parent) {
+
+    int old_flags = w->glw_flags;
+
     w->glw_flags = (w->glw_flags | set) & clr;
     if(!(w->glw_flags & GLW_DESTROYING))
       glw_signal0(w, GLW_SIGNAL_FHP_PATH_CHANGED, NULL);
+
+    if((old_flags ^ w->glw_flags) & GLW_IN_FOCUS_PATH)
+      glw_event_glw_action(w, w->glw_flags & GLW_IN_FOCUS_PATH ?
+                           GLW_EVENT_GAINED_FOCUS : GLW_EVENT_LOST_FOCUS);
   }
 }
 
@@ -1402,27 +1410,33 @@ glw_focus_open_path_close_all_other(glw_t *w)
 {
   glw_t *c;
   glw_t *p = w->glw_parent;
-
+  int do_clear = 0;
   TAILQ_FOREACH(c, &p->glw_childs, glw_parent_link) {
     if(c == w)
       continue;
     c->glw_flags |= GLW_FOCUS_BLOCKED;
     if(c->glw_flags & GLW_IN_FOCUS_PATH) {
-      glw_focus_set(w->glw_root, NULL, GLW_FOCUS_SET_AUTOMATIC);
+      do_clear = 1;
     }
   }
 
   w->glw_flags &= ~GLW_FOCUS_BLOCKED;
   c = glw_focus_by_path(w);
 
-  if(c != NULL)
+  if(c != NULL) {
     glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_AUTOMATIC);
-  else if(p->glw_parent->glw_focused == p && 
-	  w->glw_root->gr_current_focus == NULL) {
+    return;
+  } else if(p->glw_parent->glw_focused == p && do_clear) {
     glw_t *r = glw_focus_crawl1(w, 1);
-    if(r != NULL)
+    if(r != NULL) {
       glw_focus_set(w->glw_root, r, GLW_FOCUS_SET_AUTOMATIC);
+      return;
+    }
   }
+
+  if(do_clear)
+    glw_focus_set(w->glw_root, NULL, GLW_FOCUS_SET_AUTOMATIC);
+
 }
 
 
@@ -1692,7 +1706,9 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
 	switch(gpe->type) {
 
 	case GLW_POINTER_RIGHT_PRESS:
-	  glw_focus_set(gr, w, GLW_FOCUS_SET_INTERACTIVE);
+          e = event_create_action(ACTION_ITEMMENU);
+          glw_event_to_widget(w, e);
+          event_release(e);
 	  return 1;
 
 	case GLW_POINTER_LEFT_PRESS:
@@ -1758,6 +1774,7 @@ glw_pointer_event(glw_root_t *gr, glw_pointer_event_t *gpe)
     runcontrol_activity();
     glw_reset_screensaver(gr);
     gr->gr_screensaver_force_enable = 0;
+    glw_set_keyboard_mode(gr, 0);
   }
 
   /* If a widget has grabbed to pointer (such as when holding the button
@@ -1961,7 +1978,9 @@ glw_dispatch_event(glw_root_t *gr, event_t *e)
        event_is_type(e, EVENT_SELECT_SUBTITLE_TRACK)
 
      )) {
-    
+
+    glw_set_keyboard_mode(gr, 1);
+
     if(glw_kill_screensaver(gr)) {
       return;
     }
@@ -2498,8 +2517,15 @@ glw_store_matrix(glw_t *w, const glw_rctx_t *rc)
 
   if(w->glw_matrix == NULL)
     w->glw_matrix = malloc(sizeof(Mtx));
-  
+
   memcpy(w->glw_matrix, rc->rc_mtx, sizeof(Mtx));
+
+  if(likely(!(w->glw_flags & (GLW_IN_FOCUS_PATH | GLW_IN_HOVER_PATH))))
+    return;
+
+  if(w->glw_root->gr_cursor_focus_tracker != NULL)
+    w->glw_root->gr_cursor_focus_tracker(w, rc,
+                                         w->glw_root->gr_current_cursor);
 }
 
 
@@ -2833,15 +2859,15 @@ glw_need_refresh0(glw_root_t *gr, int how, const char *file, int line)
 
 
 static void
-glw_update_em_r(glw_t *w)
+glw_update_dynamics_r(glw_t *w, int flags)
 {
   glw_t *c;
 
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link)
-    glw_update_em_r(c);
+    glw_update_dynamics_r(c, flags);
 
-  if(w->glw_dynamic_eval & GLW_VIEW_EVAL_EM)
-    glw_view_eval_em(w);
+  if(w->glw_dynamic_eval & flags)
+    glw_view_eval_dynamics(w, flags);
 }
 
 
@@ -2849,7 +2875,21 @@ static void
 glw_update_em(glw_root_t *gr)
 {
   if(gr->gr_universe != NULL)
-    glw_update_em_r(gr->gr_universe);
+    glw_update_dynamics_r(gr->gr_universe, GLW_VIEW_EVAL_EM);
 
   glw_style_update_em(gr);
+}
+
+
+static void
+glw_set_keyboard_mode(glw_root_t *gr, int on)
+{
+  if(gr->gr_keyboard_mode == on)
+    return;
+
+  gr->gr_keyboard_mode = on;
+  prop_set(gr->gr_prop_ui, "keyboard", PROP_SET_INT, on);
+
+  if(gr->gr_universe != NULL)
+    glw_update_dynamics_r(gr->gr_universe, GLW_VIEW_EVAL_FHP_CHANGE);
 }
