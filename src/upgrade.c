@@ -48,6 +48,7 @@
 
 #if STOS
 #include <sys/mount.h>
+#include <sys/utsname.h>
 #endif
 
 extern char *showtime_bin;
@@ -65,9 +66,10 @@ static prop_t *upgrade_progress;
 static prop_t *upgrade_task;
 static char *upgrade_track;
 
-static char *showtime_download_url;
-static uint8_t showtime_download_digest[20];
-static int showtime_download_size;
+static char *app_download_url;
+static uint8_t app_download_digest[20];
+static int app_download_size;
+static char *app_download_name;
 
 static int notify_upgrades;
 static int inhibit_checks = 1;
@@ -109,8 +111,87 @@ static htsmsg_t *stos_artifacts;
  */
 
 
+TAILQ_HEAD(artifact_queue, artifact);
+
+typedef struct artifact {
+  TAILQ_ENTRY(artifact) a_link;
+  int a_size;
+  char *a_url;
+  char *a_temp_path;
+  char *a_final_path;
+  rstr_t *a_task;
+  char *a_name;
+
+  uint8_t a_digest[20];
+
+  char a_check_partial_update;
+
+  float a_progress_offset;
+  float a_progress_scale;
+
+  int a_progress_part;
+  int a_progress_num_parts;
+
+} artifact_t;
+
+
 /**
- * 
+ *
+ */
+static void
+artifacts_free(struct artifact_queue *aq)
+{
+  artifact_t *a;
+  while((a = TAILQ_FIRST(aq)) != NULL) {
+    TAILQ_REMOVE(aq, a, a_link);
+    free(a->a_url);
+    free(a->a_temp_path);
+    free(a->a_final_path);
+    free(a->a_name);
+    rstr_release(a->a_task);
+    free(a);
+  }
+}
+
+
+/**
+ *
+ */
+static void
+artifacts_compute_progressbar_scale(struct artifact_queue *aq)
+{
+  int total_size = 0;
+  artifact_t *a;
+  float offset = 0;
+
+  TAILQ_FOREACH(a, aq, a_link)
+    total_size += a->a_size;
+
+  if(total_size == 0)
+    return;
+
+  TAILQ_FOREACH(a, aq, a_link) {
+    a->a_progress_scale = (float)a->a_size / total_size;
+    a->a_progress_offset = offset;
+    offset += a->a_progress_scale;
+  }
+}
+
+
+/**
+ *
+ */
+static void
+artifact_update_progress(const artifact_t *a, float p)
+{
+  p = p / a->a_progress_num_parts;
+  p += (float)a->a_progress_part / a->a_progress_num_parts;
+
+  prop_set_float(upgrade_progress,
+                 a->a_progress_offset + a->a_progress_scale * p);
+}
+/**
+ *
  */
 static buf_t *
 patched_config_file(buf_t *upd, char *upd_begin, char *upd_end,
@@ -168,7 +249,7 @@ patched_config_file(buf_t *upd, char *upd_begin, char *upd_end,
     goto fail;
   }
 
- 
+
   if(cur_end < cur_begin) {
     TRACE(TRACE_DEBUG, "upgrade",
 	  "Partial update ignored, END marker before BEGIN marker");
@@ -199,7 +280,7 @@ patched_config_file(buf_t *upd, char *upd_begin, char *upd_end,
   memcpy(out,               cur_data,  seg1);
   memcpy(out + seg1,        upd_begin, seg2);
   memcpy(out + seg1 + seg2, cur_end,   seg3);
-  
+
   free(cur_data);
 
   buf_release(upd);
@@ -220,14 +301,12 @@ install_error(const char *str, const char *url)
   prop_set_string(upgrade_error, str);
   prop_set_string(upgrade_status, "upgradeError");
   if(url)
-    TRACE(TRACE_ERROR, "upgrade", "Download of %s failed -- %s", 
+    TRACE(TRACE_ERROR, "upgrade", "Download of %s failed -- %s",
 	  url, str);
   else
     TRACE(TRACE_ERROR, "upgrade", "Error occured: %s", str);
 }
 
-
-static int current_download_size;
 
 /**
  *
@@ -235,11 +314,12 @@ static int current_download_size;
 static int
 download_callback(void *opaque, int loaded, int total)
 {
-  if(!total)
-    total = current_download_size;
+  const artifact_t *a = opaque;
 
-  prop_set(upgrade_root, "size", PROP_SET_INT, total);
-  prop_set_float(upgrade_progress, (float)loaded / (float)total);
+  if(!total)
+    total = a->a_size;
+
+  artifact_update_progress(a, (float)loaded / (float)total);
   return 0;
 }
 
@@ -247,10 +327,7 @@ download_callback(void *opaque, int loaded, int total)
  *
  */
 static int
-upgrade_file(const char *fname, const char *url,
-	     int size, const uint8_t *expected_digest, const char *task,
-	     int check_partial_update, int overwrite,
-             const char *patch_from)
+download_file(artifact_t *a, int try_patch)
 {
   uint8_t digest[20];
   char digeststr[41];
@@ -262,26 +339,32 @@ upgrade_file(const char *fname, const char *url,
   void *current_data = NULL;
   int current_size = 0;
 
-  current_download_size = size;
+  if(a->a_url == NULL)
+    return 0; // Nothing to download
 
   sha1_decl(shactx);
+
+  TRACE(TRACE_INFO, "upgrade", "Downloading artifact %s", a->a_name);
 
   LIST_INIT(&req_headers);
   LIST_INIT(&response_headers);
 
-  prop_set_string(upgrade_task, task);
+  a->a_progress_num_parts = 2;
 
-  prop_set_float(upgrade_progress, 0);
-  prop_set_string(upgrade_status, "prepare");
+  a->a_progress_part = 0;
+  artifact_update_progress(a, 0);
+  prop_set_rstring(upgrade_task, a->a_task);
 
 #if CONFIG_BSPATCH
   char ae[128];
   ae[0] = 0;
-  if(patch_from) {
+  if(try_patch) {
+
+    TRACE(TRACE_DEBUG, "upgrade", "Computing hash of %s", a->a_final_path);
 
     // Figure out SHA-1 of currently running binary
 
-    fd = open(patch_from, O_RDONLY);
+    fd = open(a->a_final_path, O_RDONLY);
     if(fd != -1) {
 
       struct stat st;
@@ -310,28 +393,27 @@ upgrade_file(const char *fname, const char *url,
       snprintf(ae, sizeof(ae), "bspatch-from-%s", digeststr);
       http_header_add(&req_headers, "Accept-Encoding", ae, 0);
       TRACE(TRACE_DEBUG, "upgrade", "Asking for patch for %s (%s)",
-	    patch_from, digeststr);
+	    a->a_final_path, digeststr);
     }
   }
 #endif
 
-  prop_set_string(upgrade_status, "download");
-  TRACE(TRACE_INFO, "upgrade", "Starting download of %s (%d bytes)", 
-	url, size);
- 
+  TRACE(TRACE_DEBUG, "upgrade", "Starting download of %s (%d bytes)",
+	a->a_url, a->a_size);
+
   buf_t *b;
 
-  int r = http_req(url,
+  int r = http_req(a->a_url,
                    HTTP_RESULT_PTR(&b),
                    HTTP_ERRBUF(errbuf, sizeof(errbuf)),
                    HTTP_FLAGS(FA_COMPRESSION),
                    HTTP_RESPONSE_HEADERS(&response_headers),
                    HTTP_REQUEST_HEADERS(&req_headers),
-                   HTTP_PROGRESS_CALLBACK(download_callback, NULL),
+                   HTTP_PROGRESS_CALLBACK(download_callback, a),
                    NULL);
-  
+
   if(r) {
-    install_error(errbuf, url);
+    install_error(errbuf, a->a_url);
 
     if(current_data)
       hfree(current_data, current_size);
@@ -352,7 +434,6 @@ upgrade_file(const char *fname, const char *url,
       TRACE(TRACE_DEBUG, "upgrade", "Received upgrade as patch (%d bytes)",
 	    (int)b->b_size);
 
-      prop_set_string(upgrade_status, "patch");
       buf_t *new = bspatch(current_data, current_size, b->b_ptr, b->b_size);
       buf_release(b);
       if(new == NULL) {
@@ -370,32 +451,25 @@ upgrade_file(const char *fname, const char *url,
         (int)b->b_size);
 
 
-  prop_set_string(upgrade_status, "verify");
-
   int match;
 
   sha1_init(shactx);
   sha1_update(shactx, b->b_ptr, b->b_size);
   sha1_final(shactx, digest);
 
-  match = !memcmp(digest, expected_digest, 20);
+  match = !memcmp(digest, a->a_digest, 20);
 
   bin2hex(digeststr, sizeof(digeststr), digest, sizeof(digest));
   TRACE(TRACE_DEBUG, "upgrade", "SHA-1 of downloaded file: %s (%s)", digeststr,
 	match ? "match" : "no match");
 
   if(!match) {
-    install_error("SHA-1 sum mismatch", url);
+    install_error("SHA-1 sum mismatch", a->a_url);
     buf_release(b);
     return -1;
   }
 
-  prop_set_string(upgrade_status, "install");
-
-  prop_set(upgrade_root, "size", PROP_SET_INT, b->b_size);
-  prop_set_float(upgrade_progress, 0);
-
-  if(check_partial_update) {
+  if(a->a_check_partial_update) {
     char *new_begin =
       find_str(buf_str(b), buf_len(b), "# BEGIN SHOWTIME CONFIG\n");
 
@@ -404,53 +478,25 @@ upgrade_file(const char *fname, const char *url,
 
     if(new_begin && new_end > new_begin) {
       TRACE(TRACE_DEBUG, "upgrade",
-	    "Attempting partial rewrite of %s", patch_from);
-      b = patched_config_file(b, new_begin, new_end, patch_from);
+	    "Attempting partial rewrite of %s", a->a_final_path);
+      b = patched_config_file(b, new_begin, new_end, a->a_final_path);
     }
   }
 
-
-  const char *instpath;
-
-  if(overwrite) {
-
-    if(overwrite != 2) {
-      if(unlink(fname)) {
-        if(gconf.upgrade_path == NULL) {
-          install_error("Unlink failed", url);
-          buf_release(b);
-          return -1;
-        }
-      } else {
-        TRACE(TRACE_DEBUG, "upgrade", "Executable removed, rewriting");
-      }
-    }
-
-    instpath = fname;
-
-  } else {
-
-    char dlpath[PATH_MAX];
-    snprintf(dlpath, sizeof(dlpath), "%s.tmp", fname);
-    instpath = dlpath;
+  const char *dstpath = a->a_temp_path ? a->a_temp_path : a->a_final_path;
 
 
-  }
+  TRACE(TRACE_DEBUG, "upgrade", "Writing %s from %d bytes received",
+	dstpath, (int)b->b_size);
 
-  TRACE(TRACE_INFO, "upgrade", "Writing %s from %d bytes received",
-	instpath, (int)b->b_size);
-
-  int flags = O_CREAT | O_RDWR;
-#ifdef STOS
+  int flags = O_CREAT | O_RDWR | O_TRUNC;
+#if STOS
   flags |= O_SYNC;
 #endif
 
-  if(!overwrite)
-    flags |= O_TRUNC;
-
-  fd = open(instpath, flags, 0777);
+  fd = open(dstpath, flags, 0777);
   if(fd == -1) {
-    install_error("Unable to open file", url);
+    install_error("Unable to open file", dstpath);
     buf_release(b);
     return -1;
   }
@@ -459,6 +505,7 @@ upgrade_file(const char *fname, const char *url,
   int len = b->b_size;
   void *ptr = b->b_ptr;
 
+  a->a_progress_part++;
 
   while(len > 0) {
     int to_write = MIN(len, 65536);
@@ -471,17 +518,17 @@ upgrade_file(const char *fname, const char *url,
       char err[256];
       snprintf(err, sizeof(err), "Write(%d) failed (%d): %s (%d)",
                to_write, r, strerror(errno), errno);
-      install_error(err, url);
+      install_error(err, dstpath);
       close(fd);
-      unlink(instpath);
+      unlink(dstpath);
       buf_release(b);
       return -1;
     }
 
     len -= r;
     ptr += r;
-    prop_set_float(upgrade_progress,
-		   (float)(b->b_size - len) / (float)b->b_size);
+
+    artifact_update_progress(a, (float)(b->b_size - len) / b->b_size);
   }
 
   buf_release(b);
@@ -489,25 +536,10 @@ upgrade_file(const char *fname, const char *url,
   if(close(fd)) {
     char err[256];
     snprintf(err, sizeof(err), "Close failed: %s (%d)", strerror(errno), errno);
-    install_error(err, url);
-    unlink(instpath);
+    install_error(err, dstpath);
+    unlink(dstpath);
     return -1;
   }
-
-  if(!overwrite) {
-    TRACE(TRACE_INFO, "upgrade", "Renaming %s -> %s", instpath, fname);
-    if(rename(instpath, fname)) {
-      char err[256];
-      snprintf(err, sizeof(err), "Rename failed: %s", strerror(errno));
-      install_error(err, url);
-      unlink(instpath);
-      return -1;
-    }
-  }
-
-#ifdef STOS
-  arch_sync_path(fname);
-#endif
   return 0;
 }
 
@@ -551,7 +583,7 @@ stos_check_upgrade(void)
   stos_avail_version = parse_version_int(version);
   TRACE(TRACE_DEBUG, "STOS", "Available version: %s (%d)",
 	version, stos_avail_version);
-  
+
 
   htsmsg_release(stos_artifacts);
   stos_artifacts = NULL;
@@ -671,6 +703,10 @@ check_upgrade(int set_news)
 
 	TRACE(TRACE_DEBUG, "STOS",
 	      "Need to perform STOS upgrade, checking what is available");
+      }
+
+      if(stos_upgrade_needed) {
+
 	if(stos_check_upgrade()) {
 	  prop_set_string(upgrade_error,
 			  "Failed to find any STOS updates");
@@ -691,6 +727,7 @@ check_upgrade(int set_news)
 
   const char *dlurl = NULL;
   const char *sha1 = NULL;
+  const char *name = NULL;
   int dlsize = 0;
   const char *ver;
 
@@ -709,6 +746,7 @@ check_upgrade(int set_news)
 
       dlurl = htsmsg_get_str(a, "url");
       sha1 = htsmsg_get_str(a, "sha1");
+      name = htsmsg_get_str(a, "name");
       dlsize = htsmsg_get_u32_or_default(a, "size", 0);
       break;
     }
@@ -721,19 +759,18 @@ check_upgrade(int set_news)
     goto err;
   }
 
-  hex2bin(showtime_download_digest, sizeof(showtime_download_digest), sha1);
+  hex2bin(app_download_digest, sizeof(app_download_digest), sha1);
 
-  mystrset(&showtime_download_url, dlurl);
+  mystrset(&app_download_url, dlurl);
+  mystrset(&app_download_name, name);
 
   prop_set(upgrade_root, "track", PROP_SET_STRING, upgrade_track);
   prop_set(upgrade_root, "availableVersion", PROP_SET_STRING, ver);
 
-  showtime_download_size = dlsize;
-
-  prop_set(upgrade_root, "size", PROP_SET_INT, dlsize);
+  app_download_size = dlsize;
 
   int canUpgrade = gconf.enable_omnigrade;
-  
+
   if(ver != NULL) {
     int current_ver = app_get_version_int();
     int available_ver = parse_version_int(ver);
@@ -791,8 +828,37 @@ check_upgrade(int set_news)
   return 0;
 }
 
-#if STOS
 
+
+/**
+ *
+ */
+static void
+app_add_artifact(struct artifact_queue *aq)
+{
+  artifact_t *a = calloc(1, sizeof(artifact_t));
+  a->a_name = strdup(app_download_name ?: APPNAME);
+  a->a_task = rstr_alloc(APPNAMEUSER);
+  a->a_url = strdup(app_download_url);
+  a->a_size = app_download_size;
+  memcpy(a->a_digest, app_download_digest, 20);
+
+  a->a_final_path = strdup(gconf.upgrade_path ?: gconf.binary);
+
+#if STOS
+  char tmp[PATH_MAX];
+  snprintf(tmp, sizeof(tmp), "%s.tmp", a->a_final_path);
+  a->a_temp_path = strdup(tmp);
+#endif
+
+  TAILQ_INSERT_TAIL(aq, a, a_link);
+}
+
+
+#if STOS
+/**
+ *
+ */
 static void
 clean_dl_dir(void)
 {
@@ -822,70 +888,37 @@ clean_dl_dir(void)
   free(namelist);
 }
 
+
 /**
  *
  */
-static int
-stos_perform_upgrade(int accept_patch)
+static void
+stos_add_artifacts(struct artifact_queue *aq)
 {
-  int rval;
-  if(mount("/dev/mmcblk0p1", "/boot", "vfat", MS_REMOUNT, NULL)) {
-    install_error("Unable to remount /boot to read-write", NULL);
-    return 2;
-  }
-
-  rval = mkdir("/boot/dl", 0770);
-  if(rval == -1 && errno != EEXIST) {
-    install_error("Unable to create temp directory /boot/dl", NULL);
-    return 2;
-  }
-
-
-  clean_dl_dir();
+  struct utsname uts;
+  uname(&uts);
 
   htsmsg_field_t *f;
 
-  int x = 0;
-  int num_artifacts = 0;
-  htsmsg_t **alist;
-
-  HTSMSG_FOREACH(f, stos_artifacts)
-    x++;
-
-  alist = alloca(x * sizeof(htsmsg_t *));
-
   HTSMSG_FOREACH(f, stos_artifacts) {
-    htsmsg_t *a;
-    if((a = htsmsg_get_map_by_field(f)) == NULL)
+    htsmsg_t *msg;
+    if((msg = htsmsg_get_map_by_field(f)) == NULL)
       continue;
 
-    const char *type = htsmsg_get_str(a, "type");
+    const char *type = htsmsg_get_str(msg, "type");
+    if(type == NULL)
+      continue;
     if(strcmp(type, "sqfs") && strcmp(type, "bin") && strcmp(type, "txt"))
       continue;
-    alist[num_artifacts++] = a;
-  }
 
-  const char **dlpaths;
-  const char **finalpaths;
+    const char *dlurl = htsmsg_get_str(msg, "url");
+    const char *sha1  = htsmsg_get_str(msg, "sha1");
+    int dlsize        = htsmsg_get_u32_or_default(msg, "size", 0);
+    const char *name  = htsmsg_get_str(msg, "name");
+    const char *selectors  = htsmsg_get_str(msg, "selectors");
+    if(dlurl == NULL || sha1 == NULL || name == NULL)
+      continue;
 
-  dlpaths    = alloca(num_artifacts * sizeof(const char *));
-  finalpaths = alloca(num_artifacts * sizeof(const char *));
-  int rename_ops = 0;
-
-
-  rval = 0;
-  for(int i = 0; i < num_artifacts; i++) {
-
-    htsmsg_t *a = alist[i];
-
-    const char *dlurl = htsmsg_get_str(a, "url");
-    const char *sha1  = htsmsg_get_str(a, "sha1");
-    int dlsize        = htsmsg_get_u32_or_default(a, "size", 0);
-    const char *name  = htsmsg_get_str(a, "name");
-    const char *type  = htsmsg_get_str(a, "type");
-
-    uint8_t digest[20];
-    hex2bin(digest, sizeof(digest), sha1);
 
     /**
      * Construct local filename
@@ -910,49 +943,53 @@ stos_perform_upgrade(int accept_patch)
     snprintf(dlpath,    sizeof(dlpath),    "/boot/dl/%s%s", n, postfix);
     snprintf(finalpath, sizeof(finalpath), "/boot/%s%s",    n, postfix);
 
-    TRACE(TRACE_DEBUG, "STOS", "Downloading %s (%s) to %s",
-	  dlurl, name, dlpath);
+    artifact_t *a = calloc(1, sizeof(artifact_t));
 
-    dlpaths[rename_ops]    = mystrdupa(dlpath);
-    finalpaths[rename_ops] = mystrdupa(finalpath);
 
-    rename_ops++;
+    if(selectors != NULL) {
+      char *s = strdup(selectors);
+      char *s2 = s;
+      while(s2) {
+        const char *key = s2;
+        char *value = strchr(key, '=');
+        if(value == NULL)
+          goto done;
+        *value = 0;
+        value++;
+        char *n = strchr(value, ',');
+        if(n != NULL) {
+          *n = 0;
+          s2 = n + 1;
+        } else {
+          s2 = NULL;
+        }
 
-    int check_partial_update = !strcmp(type, "txt");
+        if(!strcmp(key, "machine")) {
+          // Machine must match for this artifact to be used, otherwise delete
+          if(strcmp(value, uts.machine)) {
+            TRACE(TRACE_DEBUG, "Upgrade",
+                  "%s [%s] skipped (not for this machine [%s])",
+                  name, value, uts.machine);
+            dlurl = NULL;
+          }
+        }
+      }
 
-    if(upgrade_file(dlpath, dlurl, dlsize, digest, n,
-		    check_partial_update, 2,
-                    accept_patch ? finalpath : NULL)) {
-      rval = 1;
-      break;
+    done:
+      free(s);
     }
+
+    a->a_task = _("System");
+    a->a_name = strdup(name);
+    a->a_url = dlurl ? strdup(dlurl) : NULL;
+    a->a_temp_path = strdup(dlpath);
+    a->a_final_path = strdup(finalpath);
+    hex2bin(a->a_digest, sizeof(a->a_digest), sha1);
+    a->a_size = dlsize;
+
+    a->a_check_partial_update = !strcmp(type, "txt");
+    TAILQ_INSERT_TAIL(aq, a, a_link);
   }
-
-  TRACE(TRACE_DEBUG, "STOS", "Syncing filesystems");
-  sync();
-  TRACE(TRACE_DEBUG, "STOS", "Syncing filesystems done");
-
-  if(rval)
-    return rval;
-
-  TRACE(TRACE_DEBUG, "STOS", "Moving files into place");
-
-  for(int i = 0; i < rename_ops; i++) {
-
-    TRACE(TRACE_DEBUG, "STOS", "Moving %s -> %s", dlpaths[i], finalpaths[i]);
-
-    int r = rename(dlpaths[i], finalpaths[i]);
-    if(r) {
-      TRACE(TRACE_ERROR, "STOS", "Rename of %s -> %s failed -- %s (%d)",
-            dlpaths[i], finalpaths[i], strerror(errno), errno);
-    }
-  }
-
-  TRACE(TRACE_DEBUG, "STOS", "Syncing filesystems");
-  sync();
-  TRACE(TRACE_DEBUG, "STOS", "Syncing filesystems done");
-
-  return rval;
 }
 
 #endif
@@ -961,39 +998,145 @@ stos_perform_upgrade(int accept_patch)
 /**
  *
  */
-static int
-attempt_upgrade(int accept_patch)
+static void
+move_files_into_place(struct artifact_queue *aq)
 {
+  artifact_t *a;
 #if STOS
-  if(stos_upgrade_needed && stos_artifacts != NULL) {
-    int r = stos_perform_upgrade(accept_patch);
-    if(r)
-      return r;
+  TRACE(TRACE_DEBUG, "Upgrade", "Syncing filesystems");
+  sync();
+  TRACE(TRACE_DEBUG, "Upgrade", "Syncing filesystems done");
+#endif
+
+  TRACE(TRACE_DEBUG, "Upgrade", "Moving files into place");
+
+  TAILQ_FOREACH(a, aq, a_link) {
+
+    if(a->a_temp_path == NULL || a->a_url == NULL)
+      continue;
+
+    TRACE(TRACE_DEBUG, "Upgrade", "Moving %s -> %s",
+          a->a_temp_path, a->a_final_path);
+
+    int r = rename(a->a_temp_path, a->a_final_path);
+    if(r) {
+      TRACE(TRACE_ERROR, "Upgrade", "Rename of %s -> %s failed -- %s (%d)",
+            a->a_temp_path, a->a_final_path, strerror(errno), errno);
+    }
   }
-#endif
-  const char *fname = gconf.upgrade_path ?: gconf.binary;
 
-  int overwrite = 1;
-#ifdef STOS
-  overwrite = 0;
+#if STOS
+  TRACE(TRACE_DEBUG, "Upgrade", "Syncing filesystems");
+  sync();
+  TRACE(TRACE_DEBUG, "Upgrade", "Syncing filesystems done");
+#endif
+}
+
+
+/**
+ *
+ */
+static void
+delete_unused_files(struct artifact_queue *aq)
+{
+  artifact_t *a;
+
+  TAILQ_FOREACH(a, aq, a_link) {
+
+    if(a->a_url != NULL)
+      continue;
+
+
+    if(unlink(a->a_final_path) == -1) {
+      if(errno != ENOENT)
+        TRACE(TRACE_INFO, "Upgrade", "Unable to delete %s -- %s",
+              a->a_final_path, strerror(errno));
+    } else {
+      TRACE(TRACE_DEBUG, "Upgrade", "Deleted %s", a->a_final_path);
+    }
+  }
+}
+
+
+/**
+ *
+ */
+static void
+print_summary(const struct artifact_queue *aq)
+{
+  const artifact_t *a;
+  TRACE(TRACE_DEBUG, "Upgrade", "Summary of what will be done");
+  TAILQ_FOREACH(a, aq, a_link) {
+    if(a->a_url == NULL)
+      TRACE(TRACE_DEBUG, "Upgrade", "File %s will be deleted",
+            a->a_final_path);
+    else
+      TRACE(TRACE_DEBUG, "Upgrade", "File %s will be downloaded from %s (%s)",
+            a->a_final_path, a->a_url, a->a_name);
+  }
+}
+
+/**
+ *
+ */
+static void
+install_locked(struct artifact_queue *aq)
+{
+  if(app_download_url == NULL)
+    return;
+
+#if STOS
+  int rval;
+  // First, remount /boot as readwrite
+  if(mount("/dev/mmcblk0p1", "/boot", "vfat", MS_REMOUNT, NULL)) {
+    install_error("Unable to remount /boot to read-write", NULL);
+    return;
+  }
+
+  rval = mkdir("/boot/dl", 0770);
+  if(rval == -1 && errno != EEXIST) {
+    install_error("Unable to create temp directory /boot/dl", NULL);
+    return;
+  }
+
+  // Clean the temporary download directory
+  clean_dl_dir();
+
+  // Add STOS artifacts if we need to upgrade stos
+  if(stos_upgrade_needed && stos_artifacts != NULL)
+    stos_add_artifacts(aq);
+
 #endif
 
-  if(upgrade_file(fname,
-		  showtime_download_url,
-		  showtime_download_size,
-		  showtime_download_digest,
-		  APPNAMEUSER, 0, overwrite,
-                  accept_patch ? fname : NULL))
-    return 1;
+  app_add_artifact(aq);
+
+  print_summary(aq);
+
+  delete_unused_files(aq);
+
+  artifacts_compute_progressbar_scale(aq);
+
+  artifact_t *a;
+
+  prop_set_string(upgrade_status, "download");
+
+  TAILQ_FOREACH(a, aq, a_link) {
+
+#if CONFIG_BSPATCH
+    // Try to download patch
+    if(!download_file(a, 1))
+      continue; // OK
+    // Failed, try normal download
+#endif
+
+    if(download_file(a, 0))
+      return;
+  }
+
+  move_files_into_place(aq);
 
   TRACE(TRACE_INFO, "upgrade", "All done, restarting");
-  prop_set_string(upgrade_status, "countdown");
-  prop_t *cnt = prop_create(upgrade_root, "countdown");
-  int i;
-  for(i = 3; i > 0; i--) {
-    prop_set_int(cnt, i);
-    sleep(1);
-  }
+  sleep(1);
 
 #if STOS
   if(stos_upgrade_needed)
@@ -1001,27 +1144,21 @@ attempt_upgrade(int accept_patch)
   else
 #endif
     app_shutdown(APP_EXIT_RESTART);
-  return 0;
+  return;
 }
+
 
 
 
 static void *
 install_thread(void *aux)
 {
+  struct artifact_queue aq;
+  TAILQ_INIT(&aq);
+
   hts_mutex_lock(&upgrade_mutex);
-  if(showtime_download_url != NULL) {
-
-#if CONFIG_BSPATCH
-    int r = attempt_upgrade(1);
-    if(r != -1) {
-      hts_mutex_unlock(&upgrade_mutex);
-      return NULL;
-    }
-#endif
-
-    attempt_upgrade(0);
-  }
+  install_locked(&aq);
+  artifacts_free(&aq);
   hts_mutex_unlock(&upgrade_mutex);
   return NULL;
 }
@@ -1050,9 +1187,9 @@ upgrade_cb(void *opaque, prop_event_t event, ...)
     e = va_arg(ap, event_t *);
     if(event_is_type(e, EVENT_DYNAMIC_ACTION)) {
       const event_payload_t *ep = (const event_payload_t *)e;
-      if(!strcmp(ep->payload, "checkUpdates")) 
+      if(!strcmp(ep->payload, "checkUpdates"))
 	check_upgrade(0);
-      if(!strcmp(ep->payload, "install")) 
+      if(!strcmp(ep->payload, "install"))
 	install();
     }
     break;
@@ -1091,7 +1228,7 @@ stos_get_current_version(void)
     if(x)
       *x = 0;
     stos_current_version = parse_version_int(buf);
-    TRACE(TRACE_DEBUG, "STOS", "Current version: %s (%d)", buf, 
+    TRACE(TRACE_DEBUG, "STOS", "Current version: %s (%d)", buf,
 	  stos_current_version);
   }
   fclose(fp);

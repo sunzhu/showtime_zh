@@ -452,7 +452,7 @@ glw_video_overlay_pointer_event(video_decoder_t *vd, int width, int height,
 
   pci = &vd->vd_pci;
   if(!pci->hli.hl_gi.hli_ss)
-    return 1;
+    return 0;
   
   x = (0.5 +  0.5 * gpe->x) * (float)width;
   y = (0.5 + -0.5 * gpe->y) * (float)height;
@@ -502,8 +502,10 @@ glw_video_overlay_pointer_event(video_decoder_t *vd, int width, int height,
   ep->payload[0] = best;
   mp_enqueue_event(mp, &ep->h);
   event_release(&ep->h);
-#endif
   return 1;
+#else
+  return 0;
+#endif
 }
 
 
@@ -796,7 +798,7 @@ gvo_create_from_vo_text(glw_video_t *gv, video_overlay_t *vo)
   gvo->gvo_y              = vo->vo_y;
   gvo->gvo_abspos         = vo->vo_abspos;
 
-  glw_t *w = glw_create(gv->w.glw_root, gc, NULL, NULL, NULL);
+  glw_t *w = glw_create(gv->w.glw_root, gc, NULL, NULL, NULL, NULL, 0);
 
   gvo->gvo_widget = w;
 

@@ -37,6 +37,15 @@
 #include "settings.h"
 #include "misc/minmax.h"
 
+#ifdef DEBUG
+#define GLW_TRACE(x, ...) do {                                     \
+    if(gconf.debug_glw)                                            \
+      TRACE(TRACE_DEBUG, "GLW", x, ##__VA_ARGS__);                 \
+  } while(0)
+#else
+#define GLW_TRACE(x, ...)
+#endif
+
 // #define GLW_TRACK_REFRESH
 
 // Beware: If you bump these over 16 remember to fix bitmasks too
@@ -228,7 +237,7 @@ typedef struct glw_rect {
  */
 #define GLW_VIDEO_PRIMARY       0x1
 #define GLW_VIDEO_NO_AUDIO      0x2
-#define GLW_VIDEO_DPAD_SEEK     0x4
+
 
 typedef enum {
   GLW_POINTER_LEFT_PRESS,
@@ -238,14 +247,15 @@ typedef enum {
   GLW_POINTER_MOTION_UPDATE,  // Updated (mouse did really move)
   GLW_POINTER_MOTION_REFRESH, // GLW Internal refresh (every frame)
   GLW_POINTER_FOCUS_MOTION,
+  GLW_POINTER_FINE_SCROLL,
   GLW_POINTER_SCROLL,
   GLW_POINTER_GONE,
 } glw_pointer_event_type_t;
 
 typedef struct glw_pointer_event {
   float x, y;
+  float delta_x;
   float delta_y;
-  float vel_x, vel_y;
   glw_pointer_event_type_t type;
   int flags;
 } glw_pointer_event_t;
@@ -677,7 +687,7 @@ typedef struct glw_class {
   /**
    *
    */
-  const char *(*gc_get_identity)(struct glw *w);
+  const char *(*gc_get_identity)(struct glw *w, char *tmp, size_t tmpsize);
 
   /**
    * Registration link
@@ -712,6 +722,7 @@ typedef struct glw_root {
 
   pool_t *gr_token_pool;
   pool_t *gr_clone_pool;
+  pool_t *gr_style_binding_pool;
 
   int gr_frames;
 
@@ -1002,11 +1013,30 @@ typedef struct glw_signal_handler {
 LIST_HEAD(glw_signal_handler_list, glw_signal_handler);
 
 
-typedef struct glw_style_set {
+/**
+ *
+ */
+typedef struct glw_styleset {
   unsigned int gss_refcount;
   int gss_numstyles;
   struct glw_style *gss_styles[0];
-} glw_style_set_t;
+} glw_styleset_t;
+
+
+/**
+ *
+ */
+
+LIST_HEAD(glw_style_binding_list, glw_style_binding);
+
+typedef struct glw_style_binding {
+  LIST_ENTRY(glw_style_binding) gsb_style_link;
+  LIST_ENTRY(glw_style_binding) gsb_widget_link;
+  struct glw *gsb_widget;
+  struct glw_style *gsb_style;
+  int gsb_mark;
+} glw_style_binding_t;
+
 
 /**
  * GL widget
@@ -1045,11 +1075,8 @@ typedef struct glw {
   /**
    * Styling
    */
-
-  glw_style_set_t *glw_styles; // List of available styles
-  LIST_ENTRY(glw) glw_style_link;
-  struct glw_style *glw_style; // Current style
-
+  glw_styleset_t *glw_styles; // List of available styles
+  struct glw_style_binding_list glw_style_bindings; // Bound styles
 
   int glw_refcnt;
 
@@ -1121,14 +1148,8 @@ typedef struct glw {
 #define GLW2_NAV_WRAP               0x200000
 #define GLW2_AUTO_FOCUS_LIMIT       0x400000
 #define GLW2_CURSOR                 0x800000
-
 #define GLW2_POSITIONAL_NAVIGATION  0x1000000
-
-#define GLW2_LEFT_EDGE              0x10000000
-#define GLW2_TOP_EDGE               0x20000000
-#define GLW2_RIGHT_EDGE             0x40000000
-#define GLW2_BOTTOM_EDGE            0x80000000
-
+#define GLW2_CLICKABLE              0x2000000 // Widget is clickable
 
   float glw_alpha;                   /* Alpha set by user */
   float glw_sharpness;               /* 1-Blur set by user */
@@ -1141,6 +1162,10 @@ typedef struct glw {
 
   uint8_t glw_dynamic_eval;   // GLW_VIEW_EVAL_ -flags
 
+#ifdef DEBUG
+  rstr_t *glw_file;
+  int glw_line;
+#endif
 } glw_t;
 
 
@@ -1220,6 +1245,9 @@ void glw_set_divider(glw_t *w, int v);
  */
 #define glw_is_focusable(w) ((w)->glw_focus_weight > 0)
 
+#define glw_is_focusable_or_clickable(w) \
+  (((w)->glw_focus_weight > 0) || (w)->glw_flags2 & GLW2_CLICKABLE)
+
 #define glw_is_focused(w) (!!((w)->glw_flags & GLW_IN_FOCUS_PATH))
 
 #define glw_is_hovered(w) (!!((w)->glw_flags & GLW_IN_HOVER_PATH))
@@ -1233,7 +1261,8 @@ void glw_store_matrix(glw_t *w, const glw_rctx_t *rc);
 #define GLW_FOCUS_SET_INTERACTIVE  2
 #define GLW_FOCUS_SET_SUGGESTED    3
 
-void glw_focus_set(glw_root_t *gr, glw_t *w, int how);
+void glw_focus_set(glw_root_t *gr, glw_t *w, int how,
+                   const char *whom);
 
 void glw_focus_open_path(glw_t *w);
 
@@ -1292,7 +1321,8 @@ void glw_lp(float *v, glw_root_t *gr, float t, float alpha);
  */
 glw_t *glw_view_create(glw_root_t *gr, rstr_t *url, rstr_t *alturl,
                        glw_t *parent, prop_t *prop, prop_t *prop_parent,
-                       prop_t *args, prop_t *prop_clone);
+                       prop_t *args, prop_t *prop_clone,
+                       rstr_t *file, int line);
 
 void glw_view_eval_signal(glw_t *w, glw_signal_t sig);
 
@@ -1325,7 +1355,8 @@ int glw_widget_unproject(Mtx m, float *xp, float *yp,
 			 const Vec3 p, const Vec3 dir);
 
 glw_t *glw_create(glw_root_t *gr, const glw_class_t *class,
-		  glw_t *parent, glw_t *before, prop_t *originator);
+                  glw_t *parent, glw_t *before, prop_t *originator,
+                  rstr_t *file, int line);
 
 #define glw_lock_assert() glw_lock_check(__FILE__, __LINE__)
 

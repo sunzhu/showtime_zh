@@ -87,7 +87,7 @@ render_focus_widget(glw_t *w, glw_cursor_t *gc, Mtx saved,
       gc->gc_initialized = 1;
     } else {
       for(int i = 0; i < 16; i++) {
-        glw_lp(&gc->gc_mtx[i], gr, x[i], 0.5);
+        glw_lp(&gc->gc_mtx[i], gr, x[i], 0.75);
         /* printf("%2.3f%c", gc->gc_mtx[i], (i+1) & 3 ? '\t' : '\n'); */
       }
     }
@@ -206,9 +206,11 @@ glw_cursor_render(glw_t *w, const glw_rctx_t *rc)
   if(c != NULL) {
     render_focus_widget(c, gc, saved, &rc0, rc, &zmax);
 
-    c = TAILQ_NEXT(c, glw_parent_link);
-    if(c != NULL) {
-      render_hover_widget(c, gc, &rc0, rc, &zmax);
+    if(!gr->gr_keyboard_mode) {
+      c = TAILQ_NEXT(c, glw_parent_link);
+      if(c != NULL) {
+        render_hover_widget(c, gc, &rc0, rc, &zmax);
+      }
     }
   }
 
