@@ -713,6 +713,10 @@ eval_eq(glw_view_eval_context_t *ec, struct token *self, int neq)
   if((aa = token_as_string(a)) != NULL &&
      (bb = token_as_string(b)) != NULL) {
     rr = !strcmp(aa, bb);
+  } else if(a->type == TOKEN_INT && b->type == TOKEN_FLOAT) {
+    rr = a->t_int == b->t_float;
+  } else if(a->type == TOKEN_FLOAT && b->type == TOKEN_INT) {
+    rr = a->t_float == b->t_int;
   } else if(a->type != b->type) {
     rr = 0;
   } else {
@@ -1341,7 +1345,9 @@ cloner_add_child0(sub_cloner_t *sc, prop_t *p, prop_t *before,
 
   c->c_clone_root = prop_create_root("clone");
 
-  c->c_w = glw_create(gr, sc->sc_cloner_class, parent, b, p);
+  c->c_w = glw_create(gr, sc->sc_cloner_class, parent, b, p,
+                      sc->sc_cloner_body->file,
+                      sc->sc_cloner_body->line);
   c->c_w->glw_clone = c;
 
   if(c->c_w->glw_class->gc_set_roots != NULL) {
@@ -2449,9 +2455,47 @@ make_vector(glw_view_eval_context_t *ec, token_t *t)
 {
   token_t *a, *r;
   int i;
+  token_t *v = ec->stack;
+
+  int numerics = 0;
+  int strings = 0;
+
+  for(i = 0; i < t->t_num_args; i++) {
+    switch(v->type) {
+    case TOKEN_INT:
+    case TOKEN_EM:
+    case TOKEN_FLOAT:
+      numerics++;
+      break;
+    case TOKEN_RSTRING:
+    case TOKEN_URI:
+      strings++;
+      break;
+    default:
+      break;
+    }
+    v = v->tmp;
+  }
+
+  if(strings > numerics) {
+    r = eval_alloc(t, ec, TOKEN_VECTOR);
+    r->t_elements = t->t_num_args;
+
+    token_t **tp = &r->child;
+
+    for(i = 0; i < t->t_num_args; i++) {
+      if((a = token_resolve(ec, eval_pop(ec))) == NULL)
+        return -1;
+      a = glw_view_token_copy(ec->w->glw_root, a);
+      *tp = a;
+      tp = &a->next;
+    }
+    eval_push(ec, r);
+    return 0;
+  }
 
   if(t->t_num_args < 1 || t->t_num_args > 4)
-    return glw_view_seterr(ec->ei, t, "Invalid vector length (%d)",
+    return glw_view_seterr(ec->ei, t, "Invalid numeric vector length (%d)",
 			   t->t_num_args);
 
   r = eval_alloc(t, ec, TOKEN_VECTOR_FLOAT);
@@ -2643,7 +2687,7 @@ glw_view_eval_block(token_t *t, glw_view_eval_context_t *ec, token_t **nonpure)
       if(glw_view_eval_rpn(t, ec, &copy))
 	return -1;
 
-      if(!copy)
+      if(!copy || ec->passive_subscriptions)
 	break;
 
       *p = t->next;
@@ -2712,7 +2756,7 @@ glwf_widget(glw_view_eval_context_t *ec, struct token *self,
   n.ei = ec->ei;
   n.gr = ec->gr;
   n.rc = ec->rc;
-  n.w = glw_create(ec->gr, c, ec->w, NULL, NULL);
+  n.w = glw_create(ec->gr, c, ec->w, NULL, NULL, self->file, self->line);
 
   if(c->gc_freeze != NULL)
     c->gc_freeze(n.w);
@@ -2813,7 +2857,8 @@ glwf_cloner(glw_view_eval_context_t *ec, struct token *self,
     if(dummy == NULL)
       dummy = glw_class_find_by_name("dummy");
 
-    self->t_extra = glw_create(ec->gr, dummy, parent, NULL, NULL);
+    self->t_extra = glw_create(ec->gr, dummy, parent, NULL, NULL,
+                               self->file, self->line);
 
     glw_hide(self->t_extra);
   }
@@ -2897,8 +2942,8 @@ glwf_style0(glw_view_eval_context_t *ec, struct token *self,
 
   if(!r) {
     // Attach new style to our parent
-    glw_style_set_t *gss = glw_style_set_add(ec->w->glw_styles, gs);
-    glw_style_set_release(ec->w->glw_styles);
+    glw_styleset_t *gss = glw_styleset_add(ec->w->glw_styles, gs);
+    glw_styleset_release(ec->w->glw_styles);
     ec->w->glw_styles = gss;
   }
 
@@ -2949,7 +2994,8 @@ glwf_space(glw_view_eval_context_t *ec, struct token *self,
   if(dummy == NULL)
     dummy = glw_class_find_by_name("dummy");
 
-  glw_t *w = glw_create(ec->gr, dummy, ec->w, NULL, NULL);
+  glw_t *w = glw_create(ec->gr, dummy, ec->w, NULL, NULL,
+                        self->file, self->line);
   glw_conf_constraints(w, 0, 0, token2float(ec, a), GLW_CONSTRAINT_CONF_W);
   return 0;
 }
@@ -6468,11 +6514,30 @@ glwf_focus(glw_view_eval_context_t *ec, struct token *self,
   if(a->type == TOKEN_RSTRING) {
     glw_t *w = glw_find_neighbour(ec->w, rstr_get(a->t_rstring));
     if(w != NULL) {
-      glw_focus_set(w->glw_root, w, GLW_FOCUS_SET_INTERACTIVE);
+      glw_focus_set(w->glw_root, w, GLW_FOCUS_SET_INTERACTIVE,
+                    "FocusMethod");
     }
   }
   return 0;
 }
+
+
+#ifndef NDEBUG
+/**
+ *
+ */
+static int
+glwf_dumpdynamicstatements(glw_view_eval_context_t *ec, struct token *self,
+                           token_t **argv, unsigned int argc)
+{
+  printf("Dynamic statements for widget %s at %s:%d\n",
+         ec->w->glw_class->gc_name,
+         rstr_get(ec->w->glw_file),
+         ec->w->glw_line);
+  glw_view_print_tree(ec->w->glw_dynamic_expressions, 1);
+  return 0;
+}
+#endif
 
 
 /**
@@ -6555,6 +6620,10 @@ static const token_func_t funcvec[] = {
   {"propName", 1, glwf_propName},
   {"propSelect", 1, glwf_propSelect},
   {"focus", 1, glwf_focus},
+
+#ifndef NDEBUG
+  {"dumpDynamicStatements", 0, glwf_dumpdynamicstatements},
+#endif
 };
 
 

@@ -25,6 +25,7 @@
 #include "osx_c.h"
 #include "src/ui/glw/glw.h"
 
+#define AUTOHIDE_TIMEOUT 100 // In frames (Bad)
 
 @interface GLWView (hidden)
 
@@ -48,9 +49,9 @@ static const struct {
   int action2;
   int action3;
 } keysym2action[] = {
-  
+
   /* NSFunctionKeyMask is filtered out when matching mappings */
-  
+
   { NSLeftArrowFunctionKey,   0,                ACTION_LEFT },
   { NSRightArrowFunctionKey,  0,                ACTION_RIGHT },
   { NSUpArrowFunctionKey,     0,                ACTION_UP },
@@ -66,30 +67,30 @@ static const struct {
   { NSPageDownFunctionKey,    0,                ACTION_PAGE_DOWN, ACTION_PREV_CHANNEL },
   { NSHomeFunctionKey,        0,                ACTION_TOP },
   { NSEndFunctionKey,         0,                ACTION_BOTTOM },
-  
+
   { _NSShiftTabKey,           NSShiftKeyMask,   ACTION_FOCUS_PREV },
-  
+
   { NSLeftArrowFunctionKey,   NSAlternateKeyMask, ACTION_NAV_BACK },
   { NSRightArrowFunctionKey,  NSAlternateKeyMask, ACTION_NAV_FWD },
-  
-  { NSLeftArrowFunctionKey,   NSCommandKeyMask, ACTION_SEEK_BACKWARD }, 
-  { NSRightArrowFunctionKey,  NSCommandKeyMask, ACTION_SEEK_FORWARD }, 
-  
-  { NSLeftArrowFunctionKey,   NSShiftKeyMask|NSCommandKeyMask, ACTION_SKIP_BACKWARD }, 
-  { NSRightArrowFunctionKey,  NSShiftKeyMask|NSCommandKeyMask, ACTION_SKIP_FORWARD }, 
-  
+
+  { NSLeftArrowFunctionKey,   NSCommandKeyMask, ACTION_SEEK_BACKWARD },
+  { NSRightArrowFunctionKey,  NSCommandKeyMask, ACTION_SEEK_FORWARD },
+
+  { NSLeftArrowFunctionKey,   NSShiftKeyMask|NSCommandKeyMask, ACTION_SKIP_BACKWARD },
+  { NSRightArrowFunctionKey,  NSShiftKeyMask|NSCommandKeyMask, ACTION_SKIP_FORWARD },
+
   /* only used for fullscreen, in windowed mode we dont get events with
    * NSCommandKeyMask set */
   { '0',                      NSCommandKeyMask, ACTION_ZOOM_UI_RESET },
   { '+',                      NSCommandKeyMask, ACTION_ZOOM_UI_INCR },
   { '-',                      NSCommandKeyMask, ACTION_ZOOM_UI_DECR },
   { 'f',                      NSCommandKeyMask, ACTION_FULLSCREEN_TOGGLE },
-  
+
   { _NSBackspaceKey,          0,                ACTION_BS, ACTION_NAV_BACK },
   { _NSEnterKey,              0,                ACTION_ENTER, ACTION_ACTIVATE},
   { _NSEnterKey,              NSShiftKeyMask,   ACTION_ITEMMENU },
-  { _NSEscapeKey,             0,                ACTION_CANCEL },
-  { _NSTabKey,                0,                ACTION_FOCUS_NEXT },
+  { _NSEscapeKey,             0,                ACTION_CANCEL,ACTION_NAV_BACK },
+  { _NSTabKey,                0,                ACTION_FOCUS_NEXT},
 };
 
 
@@ -112,43 +113,115 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
 /**
  *
  */
+static void
+glw_in_fullwindow(void *opaque, int val)
+{
+  GLWView *view = (GLWView *)opaque;
+  view->in_full_window = val;
+}
+
+
+/**
+ *
+ */
+- (void)hideCursor
+{
+  glw_pointer_event_t gpe = {0};
+
+  if(!is_key_window)
+    return;
+
+  if(cursor_hidden)
+    return;
+
+  cursor_hidden = YES;
+  [NSCursor hide];
+
+  gpe.type = GLW_POINTER_GONE;
+  glw_pointer_event(gr, &gpe);
+}
+
+
+/**
+ *
+ */
+- (void)showCursor
+{
+  if(!cursor_hidden)
+    return;
+
+  autohide_counter = AUTOHIDE_TIMEOUT;
+
+  cursor_hidden = NO;
+  [NSCursor unhide];
+}
+
+
+/**
+ *
+ */
+- (void)autoHideCursor
+{
+  if(cursor_hidden)
+    return;
+
+  if(autohide_counter == 0)
+    [self hideCursor];
+  else if(gr->gr_pointer_grab == NULL)
+    autohide_counter--;
+}
+
+
+/**
+ *
+ */
 - (CVReturn)getFrameForTime:(const CVTimeStamp *)ot
 {
-  gr->gr_framerate = ot->rateScalar * ot->videoTimeScale / 
+  gr->gr_framerate = ot->rateScalar * ot->videoTimeScale /
     ot->videoRefreshPeriod;
-  
-  gr->gr_frameduration = 1000000.0 * ot->videoRefreshPeriod / 
+
+  gr->gr_frameduration = 1000000.0 * ot->videoRefreshPeriod /
     (ot->rateScalar * ot->videoTimeScale);
 
   prop_set_float(prop_create(gr->gr_prop_ui, "framerate"), gr->gr_framerate);
 
   [self drawFrame];
-  
+
   return kCVReturnSuccess;
 }
 
-- (void)glwMouseEvent:(int)type event:(NSEvent*)event {  
+- (void)glwMouseEvent:(int)type event:(NSEvent*)event {
   NSPoint loc = [self convertPointToBacking:[event locationInWindow]];
   glw_pointer_event_t gpe;
-
-#if 0
-  if(gcocoa.is_cursor_hidden) 
-    [self glwUnHideCursor];
-#endif
 
   gpe.x = (2.0 * loc.x / gr->gr_width) - 1;
   gpe.y = (2.0 * loc.y / gr->gr_height) - 1;
   gpe.type = type;
-  if(type == GLW_POINTER_SCROLL)
+
+  if(type == GLW_POINTER_SCROLL) {
+    gpe.delta_x = -[event deltaX];
     gpe.delta_y = -[event deltaY];
-  
+  }
+
+  if(type == GLW_POINTER_FINE_SCROLL) {
+    NSPoint p = {[event deltaX], [event deltaY]};
+    NSPoint p2 = [self convertPointToBacking:p];
+    gpe.delta_x = p2.x * 4;
+    gpe.delta_y = p2.y * -4;
+  }
+
   glw_lock(gr);
   glw_pointer_event(gr, &gpe);
   glw_unlock(gr);
 }
 
-- (void)scrollWheel:(NSEvent *)event {
-  [self glwMouseEvent:GLW_POINTER_SCROLL event:event];
+- (void)scrollWheel:(NSEvent *)event
+{
+  if([event hasPreciseScrollingDeltas]) {
+    [self glwMouseEvent:GLW_POINTER_FINE_SCROLL event:event];
+  } else {
+    [self glwMouseEvent:GLW_POINTER_SCROLL event:event];
+  }
 }
 
 
@@ -162,18 +235,18 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
     {NSRightMouseDown, GLW_POINTER_RIGHT_PRESS},
     {NSRightMouseUp, GLW_POINTER_RIGHT_RELEASE}
   };
-  
+
   int i;
   for(i = 0; i < sizeof(events)/sizeof(events[0]); i++) {
     if(events[i].nsevent != [event type])
       continue;
-    
+
     if([event type] == NSLeftMouseDown ||
        [event type] == NSRightMouseDown)
       mouse_down++;
     else
       mouse_down--;
-    
+
     [self glwMouseEvent:events[i].glw_event event:event];
     return;
   }
@@ -191,6 +264,7 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
 }
 
 - (void)mouseMoved:(NSEvent *)event {
+  [self showCursor];
   [self glwMouseEvent:GLW_POINTER_MOTION_UPDATE event:event];
 }
 
@@ -240,7 +314,7 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
   if(compositeKey || [chars length] == 0  || [charsim length] == 0) {
     if(!eventArray)
       eventArray = [[NSMutableArray alloc] initWithCapacity:1];
-    
+
     compositeKey = YES;
     [eventArray addObject:event];
     /* uses NSTextInput protocol and results in calls to insertText: */
@@ -253,7 +327,7 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
   unichar c = [chars characterAtIndex:0];
   unichar cim = [[event charactersIgnoringModifiers] characterAtIndex:0];
   /* only care for some modifier keys */
-  int mod = [event modifierFlags] & 
+  int mod = [event modifierFlags] &
   (NSShiftKeyMask | NSCommandKeyMask |
    NSFunctionKeyMask | NSAlternateKeyMask);
   event_t *e = NULL;
@@ -266,7 +340,7 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
       av[0] = keysym2action[i].action1;
       av[1] = keysym2action[i].action2;
       av[2] = keysym2action[i].action3;
-      
+
       if(keysym2action[i].action3 != ACTION_NONE)
 	e = event_create_action_multi(av, 3);
       if(keysym2action[i].action2 != ACTION_NONE)
@@ -281,8 +355,12 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
     e = event_from_Fkey(cim - NSF1FunctionKey + 1,
 			mod & NSShiftKeyMask ? 1 : 0);
 
-  if(e == NULL) 
+  if(e == NULL)
     e = event_create_int(EVENT_UNICODE, c);
+
+  e->e_flags |= EVENT_KEYPRESS;
+
+  [self hideCursor];
 
   prop_send_ext_event(eventSink, e);
   event_release(e);
@@ -320,7 +398,7 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
 
   NSOpenGLContext *cc = [self openGLContext];
   [cc makeCurrentContext];
-  
+
   CGLLockContext((CGLContextObj)[cc CGLContextObj]);
   [[self openGLContext] update];
   CGLUnlockContext((CGLContextObj)[cc CGLContextObj]);
@@ -348,6 +426,9 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
   CGLLockContext((CGLContextObj)[currentContext CGLContextObj]);
 
   glw_lock(gr);
+
+  if(in_full_window)
+    [self autoHideCursor];
 
   glw_prepare_frame(gr, GLW_NO_FRAMERATE_UPDATE);
 
@@ -391,11 +472,13 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
 {
   stopped = YES;
 
+  [self showCursor];
+
   CVDisplayLinkStop(m_displayLink);
 
   NSOpenGLContext *currentContext = [self openGLContext];
   [currentContext makeCurrentContext];
-  
+
   CGLLockContext((CGLContextObj)[currentContext CGLContextObj]);
 
   glw_lock(gr);
@@ -412,6 +495,8 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
 - (void)dealloc
 {
   CVDisplayLinkRelease(m_displayLink);
+  [self showCursor];
+  prop_unsubscribe(fullWindow);
   [super dealloc];
 }
 
@@ -420,9 +505,14 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
  *
  */
 - (void)becomeKeyWindow {
+  is_key_window = YES;
   [[self window] setAcceptsMouseMovedEvents:YES];
 }
 
+- (void) resignKeyWindow {
+  is_key_window = NO;
+  [self showCursor];
+}
 
 /**
  *
@@ -441,7 +531,7 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
   NSOpenGLPixelFormatAttribute attribs_fs[] = {
     NSOpenGLPFADoubleBuffer,
     0 };
-  
+
   wpf = [[NSOpenGLPixelFormat alloc]
 	  initWithAttributes: fs ? attribs_fs : attribs_windowed];
 
@@ -458,14 +548,22 @@ newframe(CVDisplayLinkRef displayLink, const CVTimeStamp *now,
   [self setWantsBestResolutionOpenGLSurface:YES];
 
   [wpf release];
-  
+
   gr = root;
   minimized = NO;
   eventSink = prop_create(gr->gr_prop_ui, "eventSink");
 
+  fullWindow =
+    prop_subscribe(0,
+		   PROP_TAG_NAME("ui", "fullwindow"),
+		   PROP_TAG_COURIER, gr->gr_courier,
+		   PROP_TAG_CALLBACK_INT, glw_in_fullwindow, self,
+		   PROP_TAG_ROOT, gr->gr_prop_ui,
+		   NULL);
+
   GLint one = 1;
   [[self openGLContext] setValues:&one forParameter:NSOpenGLCPSwapInterval];
-  
+
   CVDisplayLinkCreateWithActiveCGDisplays(&m_displayLink);
   CVDisplayLinkSetOutputCallback(m_displayLink, newframe, self);
   m_cgl_context = (CGLContextObj)[[self openGLContext] CGLContextObj];

@@ -35,7 +35,8 @@ typedef struct {
   int16_t knob_size_px;
   int16_t slider_size_px;
   char fixed_knob_size;
-
+  char interpolate;
+  char keystep;
   prop_sub_t *sub;
   prop_t *p;
   float grab_delta;
@@ -59,10 +60,12 @@ static glw_class_t glw_slider_x, glw_slider_y;
 static void
 update_value_delta(glw_slider_t *s, float d)
 {
-  if(s->p != NULL)
+  if(s->p != NULL) {
+    s->interpolate = 2;
     prop_add_float(s->p, d * (s->max - s->min));
-  else {
+  } else {
     s->value = GLW_MAX(s->min, GLW_MIN(s->max, s->value + d));
+    s->interpolate = 1;
     if(s->bound_widget != NULL) {
       glw_scroll_t gs;
       gs.value = s->value;
@@ -84,6 +87,7 @@ update_value(glw_slider_t *s, float v, int how)
     prop_set_float_ex(s->p, NULL, v * (s->max - s->min) + s->min, how);
   else {
     s->value = v;
+    s->interpolate = 0;
     if(s->bound_widget != NULL) {
       glw_scroll_t gs;
       gs.value = s->value;
@@ -142,8 +146,11 @@ glw_slider_layout(glw_t *w, const glw_rctx_t *rc)
     s->slider_size_px = rc->rc_height;
   }
 
-  glw_lp(&s->knob_pos_px, w->glw_root, p, 0.25);
-
+  if(s->interpolate)
+    glw_lp(&s->knob_pos_px, w->glw_root, p, 0.25);
+  else
+    s->knob_pos_px = p;
+  
   glw_layout0(c, &rc0);
 }
 
@@ -158,7 +165,7 @@ glw_slider_render_x(glw_t *w, const glw_rctx_t *rc)
   glw_t *c;
   glw_rctx_t rc0;
 
-  if(glw_is_focusable(w))
+  if(glw_is_focusable_or_clickable(w))
     glw_store_matrix(w, rc);
 
   if((c = TAILQ_FIRST(&w->glw_childs)) == NULL)
@@ -187,7 +194,7 @@ glw_slider_render_y(glw_t *w, const glw_rctx_t *rc)
   glw_t *c;
   glw_rctx_t rc0;
 
-  if(glw_is_focusable(w))
+  if(glw_is_focusable_or_clickable(w))
     glw_store_matrix(w, rc);
 
   if((c = TAILQ_FIRST(&w->glw_childs)) == NULL)
@@ -215,6 +222,9 @@ glw_slider_event_y(glw_t *w, event_t *e)
   glw_slider_t *s = (glw_slider_t *)w;
   float d;
 
+  if(!s->keystep)
+    return 0;
+
   if(event_is_action(e, ACTION_UP)) {
     d = -s->step;
   } else if(event_is_action(e, ACTION_DOWN)) {
@@ -236,6 +246,9 @@ glw_slider_event_x(glw_t *w, event_t *e)
 {
   glw_slider_t *s = (glw_slider_t *)w;
   float d;
+
+  if(!s->keystep)
+    return 0;
 
   if(event_is_action(e, ACTION_LEFT)) {
     d = -s->step_i;
@@ -331,6 +344,7 @@ slider_bound_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
   case GLW_SIGNAL_SLIDER_METRICS:
     s->fixed_knob_size = 1;
     s->value = m->position;
+    s->interpolate = 0;
     s->knob_size_fixed = m->knob_size;
 
     if((s->knob_size_fixed != 1.0) == !(s->w.glw_flags & GLW_CAN_SCROLL)) {
@@ -465,6 +479,8 @@ prop_callback(void *opaque, prop_event_t event, ...)
 
   v = GLW_RESCALE(v, sl->min, sl->max);
   sl->value = GLW_MAX(0, GLW_MIN(1.0, v));
+  if(sl->interpolate)
+    sl->interpolate--;
 }
 
 /**
@@ -494,6 +510,7 @@ glw_slider_ctor(glw_t *w)
   s->max = 1.0;
   s->step_i = 0.1;
   s->step = 0.1;
+  s->keystep = 1;
 }
 
 
@@ -576,6 +593,20 @@ glw_slider_bind_id(glw_t *w, const char *id)
   return 1;
 }
 
+/**
+ *
+ */
+static int
+glw_slider_set_int_unresolved(glw_t *w, const char *a, int value)
+{
+  glw_slider_t *s = (glw_slider_t *)w;
+
+  if(!strcmp(a, "keyStep")) {
+    s->keystep = value;
+    return GLW_SET_NO_CHANGE;
+  }
+  return GLW_SET_NOT_RESPONDING;
+}
 
 
 
@@ -591,6 +622,7 @@ static glw_class_t glw_slider_x = {
   .gc_bind_to_property = bind_to_property,
   .gc_send_event = glw_slider_event_x,
   .gc_pointer_event = pointer_event,
+  .gc_set_int_unresolved = glw_slider_set_int_unresolved,
 };
 
 static glw_class_t glw_slider_y = {
@@ -605,6 +637,7 @@ static glw_class_t glw_slider_y = {
   .gc_bind_to_property = bind_to_property,
   .gc_send_event = glw_slider_event_y,
   .gc_pointer_event = pointer_event,
+  .gc_set_int_unresolved = glw_slider_set_int_unresolved,
 };
 
 GLW_REGISTER_CLASS(glw_slider_x);

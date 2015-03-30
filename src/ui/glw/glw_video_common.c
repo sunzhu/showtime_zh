@@ -68,7 +68,7 @@ glw_video_rctx_adjust(glw_rctx_t *rc, const glw_video_t *gv)
 		   -gr->gr_underscan_v);
   }
 
-  float t_aspect = (float)gv->gv_dar_num / gv->gv_dar_den; 
+  float t_aspect = (float)gv->gv_dar_num / gv->gv_dar_den;
 
   if(gv->gv_fstretch)
     return;
@@ -115,7 +115,8 @@ glw_video_widget_event(glw_t *w, event_t *e)
 {
   glw_video_t *gv = (glw_video_t *)w;
   media_pipe_t *mp = gv->gv_mp;
-  event_int_t *eu = (event_int_t *)e;
+
+  // Intercept media events
 
   if(event_is_action(e, ACTION_PLAYPAUSE) ||
      event_is_action(e, ACTION_PLAY) ||
@@ -127,57 +128,19 @@ glw_video_widget_event(glw_t *w, event_t *e)
     return 1;
   }
 
-  if((event_is_type(e, EVENT_UNICODE) && eu->val == 32) ||
-     ((event_is_action(e, ACTION_ACTIVATE) && !gv->gv_spu_in_menu &&
-       gv->gv_flags & GLW_VIDEO_DPAD_SEEK))) {
-    // Convert event into playpause
-    e = event_create_action(ACTION_PLAYPAUSE);
-    mp_enqueue_event(mp, e);
-    event_release(e);
-    return 1;
-  }
+  // If we are in DVD menu, intercept those events as well
 
-  if(event_is_action(e, ACTION_UP) ||
-     event_is_action(e, ACTION_DOWN) ||
-     event_is_action(e, ACTION_LEFT) ||
-     event_is_action(e, ACTION_RIGHT) ||
-     event_is_action(e, ACTION_ACTIVATE)) {
-    if(gv->gv_spu_in_menu) {
+  if(gv->gv_spu_in_menu) {
+    if(event_is_action(e, ACTION_UP) ||
+       event_is_action(e, ACTION_DOWN) ||
+       event_is_action(e, ACTION_LEFT) ||
+       event_is_action(e, ACTION_RIGHT) ||
+       event_is_action(e, ACTION_ACTIVATE)) {
       mp_enqueue_event(mp, e);
-      return 1;
-    }
-
-    if(!(gv->gv_flags & GLW_VIDEO_DPAD_SEEK))
-      return 0;
-
-    if(event_is_action(e, ACTION_LEFT)) {
-      e = event_create_action(ACTION_SEEK_BACKWARD);
-      mp_enqueue_event(mp, e);
-      event_release(e);
-      return 1;
-    }
-
-    if(event_is_action(e, ACTION_RIGHT)) {
-      e = event_create_action(ACTION_SEEK_FORWARD);
-      mp_enqueue_event(mp, e);
-      event_release(e);
-      return 1;
-    }
-
-    if(event_is_action(e, ACTION_UP)) {
-      e = event_create_action(ACTION_VOLUME_UP);
-      mp_enqueue_event(mp, e);
-      event_release(e);
-      return 1;
-    }
-
-    if(event_is_action(e, ACTION_DOWN)) {
-      e = event_create_action(ACTION_VOLUME_DOWN);
-      mp_enqueue_event(mp, e);
-      event_release(e);
       return 1;
     }
   }
+
   return 0;
 }
 
@@ -227,7 +190,7 @@ const char *statustab[] = {
  *
  */
 static int
-glw_video_compute_avdiff(glw_root_t *gr, media_pipe_t *mp, 
+glw_video_compute_avdiff(glw_root_t *gr, media_pipe_t *mp,
 			 int64_t pts, int epoch, glw_video_t *gv)
 {
   int code;
@@ -250,14 +213,14 @@ glw_video_compute_avdiff(glw_root_t *gr, media_pipe_t *mp,
 
     if(abs(gv->gv_avdiff) < 30000000) {
 
-      gv->gv_avdiff_x = kalman_update(&gv->gv_avfilter, 
+      gv->gv_avdiff_x = kalman_update(&gv->gv_avfilter,
 				      (double)gv->gv_avdiff / 1000000);
       gv->gv_avdiff_x = MAX(MIN(gv->gv_avdiff_x, 30.0f), -30.0f);
       code = AVDIFF_LOCKED;
 
-      if(gv->gv_avdiff_x > 0.1f) 
+      if(gv->gv_avdiff_x > 0.1f)
 	code = AVDIFF_CATCH_UP;
-      if(gv->gv_avdiff_x < -0.1f) 
+      if(gv->gv_avdiff_x < -0.1f)
 	code = AVDIFF_HOLD;
 
     } else {
@@ -282,7 +245,7 @@ glw_video_compute_avdiff(glw_root_t *gr, media_pipe_t *mp,
   if(gconf.enable_detailed_avdiff) {
     static int64_t lastpts, lastaclock, lastclock;
 
-    TRACE(TRACE_DEBUG, "AVDIFF", "VE:%d AE:%d %10f %10d %15"PRId64":a:%-8"PRId64" %15"PRId64":v:%-8"PRId64" %15"PRId64" %15"PRId64" %s %lld", 
+    TRACE(TRACE_DEBUG, "AVDIFF", "VE:%d AE:%d %10f %10d %15"PRId64":a:%-8"PRId64" %15"PRId64":v:%-8"PRId64" %15"PRId64" %15"PRId64" %s %lld",
 	  epoch,
 	  mp->mp_audio_clock_epoch,
 	  gv->gv_avdiff_x,
@@ -468,7 +431,7 @@ static void
 glw_video_play(glw_video_t *gv)
 {
   event_t *e;
-  
+
   if(gv->gv_freezed)
     return;
 
@@ -495,7 +458,7 @@ glw_video_play(glw_video_t *gv)
 
 /**
  * We are going away, flush out all surfaces
- * and destroy zombie video decoder 
+ * and destroy zombie video decoder
  */
 static void
 glw_video_dtor(glw_t *w)
@@ -527,11 +490,11 @@ glw_video_dtor(glw_t *w)
   rstr_release(gv->gv_parent_url_x);
 
   glw_video_overlay_deinit(gv);
-  
+
   LIST_REMOVE(gv, gv_global_link);
 
   hts_mutex_lock(&gv->gv_surface_mutex);  /* Not strictly necessary
-					     but keep asserts happy 
+					     but keep asserts happy
 					  */
   glw_video_surfaces_cleanup(gv);
   hts_mutex_unlock(&gv->gv_surface_mutex);
@@ -612,8 +575,8 @@ glw_video_pointer_event(glw_t *w, const glw_pointer_event_t *gpe)
 /**
  *
  */
-static int 
-glw_video_widget_callback(glw_t *w, void *opaque, glw_signal_t signal, 
+static int
+glw_video_widget_callback(glw_t *w, void *opaque, glw_signal_t signal,
 			  void *extra)
 {
   glw_video_t *gv = (glw_video_t *)w;
@@ -644,8 +607,6 @@ glw_video_ctor(glw_t *w)
 {
   glw_video_t *gv = (glw_video_t *)w;
   glw_root_t *gr = w->glw_root;
-
-  gv->gv_flags |= GLW_VIDEO_DPAD_SEEK;
 
   kalman_init(&gv->gv_avfilter);
 
@@ -767,7 +728,7 @@ glw_video_ctor(glw_t *w)
 /**
  *
  */
-static void 
+static void
 mod_video_flags(glw_t *w, int set, int clr)
 {
   glw_video_t *gv = (glw_video_t *)w;
@@ -785,7 +746,7 @@ set_how(glw_t *w, const char *how)
 
   if(how == NULL)
     return;
-  
+
   mystrset(&gv->gv_how, how);
   glw_video_play(gv);
 }
@@ -802,7 +763,7 @@ set_source(glw_t *w, rstr_t *url, glw_style_t *origin)
 
   if(url == NULL)
     return;
-  
+
   mystrset(&gv->gv_pending_url, rstr_get(url));
   glw_video_play(gv);
 }
@@ -959,7 +920,7 @@ glw_video_set_rstr(glw_t *w, glw_attribute_t attrib, rstr_t *rstr,
 /**
  *
  */
-void 
+void
 glw_video_render(glw_t *w, const glw_rctx_t *rc)
 {
   const glw_root_t *gr = w->glw_root;
@@ -973,7 +934,7 @@ glw_video_render(glw_t *w, const glw_rctx_t *rc)
   gv->gv_rwidth  = rc0.rc_width;
   gv->gv_rheight = rc0.rc_height;
 
-  if(glw_is_focusable(w))
+  if(glw_is_focusable_or_clickable(w))
     glw_store_matrix(w, &rc0);
 
   glw_rctx_t rc1 = rc0;
@@ -1051,7 +1012,7 @@ glw_video_configure(glw_video_t *gv, const glw_video_engine_t *engine)
 
     if(gv->gv_engine != NULL)
       gv->gv_engine->gve_reset(gv);
-    
+
     TAILQ_INIT(&gv->gv_avail_queue);
     TAILQ_INIT(&gv->gv_parked_queue);
     TAILQ_INIT(&gv->gv_displaying_queue);
@@ -1108,7 +1069,7 @@ glw_video_get_surface(glw_video_t *gv, const int *w, const int *h)
 
     if((gvs = TAILQ_FIRST(&gv->gv_avail_queue)) != NULL) {
       TAILQ_REMOVE(&gv->gv_avail_queue, gvs, gvs_link);
-      
+
       if(w == NULL)
 	return gvs;
 
@@ -1126,7 +1087,7 @@ glw_video_get_surface(glw_video_t *gv, const int *w, const int *h)
       gvs->gvs_height[0] = h[0];
       gvs->gvs_height[1] = h[1];
       gvs->gvs_height[2] = h[2];
-      
+
       if(gv->gv_engine != NULL && gv->gv_engine->gve_surface_init != NULL) {
 	gv->gv_engine->gve_surface_init(gv, gvs);
 	return gvs;
@@ -1252,7 +1213,7 @@ glw_video_surfaces_cleanup(glw_video_t *gv)
 {
   if(gv->gv_engine != NULL)
     gv->gv_engine->gve_reset(gv);
-  
+
   glw_video_reap(gv);
   TAILQ_INIT(&gv->gv_avail_queue);
   TAILQ_INIT(&gv->gv_parked_queue);
@@ -1307,7 +1268,7 @@ video_deliver_lavc(const frame_info_t *fi, glw_video_t *gv,
   case PIX_FMT_YUVJ440P:
     av_pix_fmt_get_chroma_sub_sample(nfi.fi_pix_fmt, &nfi.fi_hshift,
                                      &nfi.fi_vshift);
-    
+
     nfi.fi_type = 'YUVP';
     break;
 

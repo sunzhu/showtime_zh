@@ -128,10 +128,9 @@ static void
 glw_array_layout(glw_t *w, const glw_rctx_t *rc)
 {
   glw_array_t *a = (glw_array_t *)w;
-  glw_t *c, *prev = NULL;
+  glw_t *c;
   glw_rctx_t rc0 = *rc;
   int column = 0;
-  int topedge = 1;
   float xspacing = 0, yspacing = 0;
   int height, width, rows;
   int xpos = 0, ypos = 0;
@@ -242,7 +241,6 @@ glw_array_layout(glw_t *w, const glw_rctx_t *rc)
       if(column != 0) {
 	ypos += rc0.rc_height + yspacing;
 	column = 0;
-	topedge = 0;
       }
 
       rc0.rc_width  = width;
@@ -290,61 +288,22 @@ glw_array_layout(glw_t *w, const glw_rctx_t *rc)
       }
     }
 
-    if(column == 0) {
-      c->glw_flags2 |= GLW2_LEFT_EDGE;
-    } else {
-      c->glw_flags2 &= ~GLW2_LEFT_EDGE;
-
-      if(prev != NULL) {
-	prev->glw_flags2 |= GLW2_RIGHT_EDGE;
-      } else {
-	prev->glw_flags2 &= ~GLW2_RIGHT_EDGE;
-      }
-    }
-
-    if(topedge) {
-      c->glw_flags2 |= GLW2_TOP_EDGE;
-    } else {
-      c->glw_flags2 &= ~GLW2_TOP_EDGE;
-    }
-
-    c->glw_flags2 &= ~GLW2_BOTTOM_EDGE; // Will be set later
-
     if(c->glw_flags & GLW_CONSTRAINT_D) {
       ypos += rc0.rc_height + yspacing;
       column = 0;
-      topedge = 0;
-      
     } else {
       column++;
       if(column == a->xentries) {
 	ypos += a->child_height_px + yspacing;
 	column = 0;
-	topedge = 0;
       }
     }
-    prev = c;
   }
 
   if(column != 0)
     ypos += a->child_height_px;
 
-
-  glw_t *last = TAILQ_LAST(&w->glw_childs, glw_queue);
-  if(last != NULL) {
-    last->glw_flags2 |= GLW2_BOTTOM_EDGE | GLW2_RIGHT_EDGE;
-    c = last;
-    while((c = TAILQ_PREV(c, glw_queue, glw_parent_link)) != NULL) {
-      glw_array_item_t *cd = glw_parent_data(c, glw_array_item_t);
-      glw_array_item_t *cdl = glw_parent_data(last, glw_array_item_t);
-      if(cd->pos_y == cdl->pos_y)
-	c->glw_flags2 |= GLW2_BOTTOM_EDGE;
-      else
-	break;
-    }
-  }
-
- if(a->total_size != ypos) {
+  if(a->total_size != ypos) {
     a->total_size = ypos;
     a->w.glw_flags |= GLW_UPDATE_METRICS;
   }
@@ -569,11 +528,22 @@ glw_array_pointer_event(glw_t *w, const glw_pointer_event_t *gpe)
 {
   glw_array_t *a = (glw_array_t *)w;
 
-  if(gpe->type == GLW_POINTER_SCROLL) {
+  switch(gpe->type) {
+
+  case GLW_POINTER_SCROLL:
     a->current_pos += a->page_size * gpe->delta_y;
     a->w.glw_flags |= GLW_UPDATE_METRICS;
-    glw_schedule_refresh(a->w.glw_root, 0);
+    glw_schedule_refresh(w->glw_root, 0);
     return 1;
+
+  case GLW_POINTER_FINE_SCROLL:
+    a->current_pos += gpe->delta_y;
+    a->w.glw_flags |= GLW_UPDATE_METRICS;
+    glw_schedule_refresh(w->glw_root, 0);
+    return 1;
+
+  default:
+    return 0;
   }
   return 0;
 }
@@ -673,6 +643,7 @@ glw_array_set_float(glw_t *w, glw_attribute_t attrib, float value,
     if(a->blur_falloff == value)
       return 0;
 
+    a->blur_falloff = value;
     a->noclip = 1;
     break;
 
@@ -709,9 +680,12 @@ static glw_t *
 glw_array_get_next_row(glw_t *c, int reverse)
 {
   int current_col = glw_parent_data(c, glw_array_item_t)->col;
+  if(current_col == -1)
+    current_col = 0;
   if(reverse) {
     while((c = glw_get_prev_n(c, 1)) != NULL) {
-      if(glw_parent_data(c, glw_array_item_t)->col == current_col &&
+      if((glw_parent_data(c, glw_array_item_t)->col == current_col ||
+          c->glw_flags & GLW_CONSTRAINT_D) &&
          glw_get_focusable_child(c))
 	return c;
     }

@@ -33,6 +33,30 @@
 /**
  *
  */
+static void
+respond_error(glw_t *w, const token_t *t, const char *name)
+{
+    const glw_class_t *gc = w->glw_class;
+    TRACE(TRACE_DEBUG, "GLW",
+          "Widget %s "
+#ifdef DEBUG
+          "(%s:%d) "
+#endif
+          "assignment at %s:%d does not respond "
+          "to attribute %s",
+          gc->gc_name,
+#ifdef DEBUG
+          rstr_get(w->glw_file), w->glw_line,
+#endif
+          rstr_get(t->file), t->line, name);
+}
+
+
+
+
+/**
+ *
+ */
 static int
 set_rstring(glw_view_eval_context_t *ec, const token_attrib_t *a,
             struct token *t)
@@ -365,9 +389,7 @@ set_number_int(glw_t *w, const token_attrib_t *a, const token_t *t, int v)
     r = gc->gc_set_float ? gc->gc_set_float(w, a->attrib, v, NULL) : -1;
 
   if(r == -1) {
-    TRACE(TRACE_DEBUG, "GLW",
-          "Widget %s at %s:%d does not respond to attribute %s",
-          gc->gc_name, rstr_get(t->file), t->line, a->name);
+    respond_error(w, t, a->name);
     return;
   }
 
@@ -391,9 +413,7 @@ set_number_float(glw_t *w, const token_attrib_t *a, const token_t *t, float v)
     r = gc->gc_set_int ? gc->gc_set_int(w, a->attrib, v, NULL) : -1;
 
   if(r == -1) {
-    TRACE(TRACE_DEBUG, "GLW",
-          "Widget %s at %s:%d does not respond to attribute %s",
-          gc->gc_name, rstr_get(t->file), t->line, a->name);
+    respond_error(w, t, a->name);
     return;
   }
 
@@ -429,9 +449,7 @@ set_number_em(glw_t *w, const token_attrib_t *a, const token_t *t,
   }
 
   if(r == -1) {
-    TRACE(TRACE_DEBUG, "GLW",
-          "Widget %s at %s:%d does not respond to attribute %s",
-          gc->gc_name, rstr_get(t->file), t->line, a->name);
+    respond_error(w, t, a->name);
     return;
   }
 
@@ -683,9 +701,7 @@ set_float3(glw_view_eval_context_t *ec, const token_attrib_t *a,
   int r = gc->gc_set_float3 ? gc->gc_set_float3(w, a->attrib, vec3, NULL) : -1;
 
   if(r == -1) {
-    TRACE(TRACE_DEBUG, "GLW",
-          "Widget %s at %s:%d does not respond to attribute %s",
-          gc->gc_name, rstr_get(t->file), t->line, a->name);
+    respond_error(w, t, a->name);
     return 0;
   }
   if(r)
@@ -755,9 +771,7 @@ set_float4(glw_view_eval_context_t *ec, const token_attrib_t *a,
   int r = gc->gc_set_float4 ? gc->gc_set_float4(w, a->attrib, vec4) : -1;
 
   if(r == -1) {
-    TRACE(TRACE_DEBUG, "GLW",
-          "Widget %s at %s:%d does not respond to attribute %s",
-          gc->gc_name, rstr_get(t->file), t->line, a->name);
+    respond_error(w, t, a->name);
     return 0;
   }
   if(r)
@@ -831,9 +845,7 @@ set_int16_4(glw_view_eval_context_t *ec, const token_attrib_t *a,
   int r = gc->gc_set_int16_4 ? gc->gc_set_int16_4(w, a->attrib, v, NULL) : -1;
 
   if(r == -1) {
-    TRACE(TRACE_DEBUG, "GLW",
-          "Widget %s at %s:%d does not respond to attribute %s",
-          gc->gc_name, rstr_get(t->file), t->line, a->name);
+    respond_error(w, t, a->name);
     return 0;
   }
   if(r)
@@ -1222,24 +1234,27 @@ static int
 set_style(glw_view_eval_context_t *ec, const token_attrib_t *a,
           struct token *t)
 {
-  const char *str;
+  int r;
 
   switch(t->type) {
   default:
-    str = NULL;
+    r = glw_styleset_for_widget(ec->w, NULL, ec);
     break;
 
   case TOKEN_CSTRING:
-    str = t->t_cstring;
+    r = glw_styleset_for_widget(ec->w, t->t_cstring, ec);
     break;
 
   case TOKEN_RSTRING:
   case TOKEN_URI:
-    str = rstr_get(t->t_rstring);
+    r = glw_styleset_for_widget(ec->w, rstr_get(t->t_rstring), ec);
+    break;
+
+  case TOKEN_VECTOR:
+    r = glw_styleset_for_widget_multiple(ec->w, t->child, ec);
     break;
   }
 
-  int r = glw_style_set_for_widget(ec->w, str, ec);
   if(r)
     attr_need_refresh(ec->w->glw_root, t, a->name, r);
   return 0;
@@ -1285,6 +1300,7 @@ static const token_attrib_t attribtab[] = {
   {"autoFocusLimit",        mod_flag, GLW2_AUTO_FOCUS_LIMIT,       mod_flags2},
   {"cursor",                mod_flag, GLW2_CURSOR,                 mod_flags2},
   {"navPositional",         mod_flag, GLW2_POSITIONAL_NAVIGATION,  mod_flags2},
+  {"clickable",             mod_flag, GLW2_CLICKABLE,              mod_flags2},
 
   {"fixedSize",       mod_flag, GLW_IMAGE_FIXED_SIZE,   mod_img_flags},
   {"bevelLeft",       mod_flag, GLW_IMAGE_BEVEL_LEFT,   mod_img_flags},
@@ -1313,7 +1329,6 @@ static const token_attrib_t attribtab[] = {
   
   {"primary",         mod_flag, GLW_VIDEO_PRIMARY, mod_video_flags},
   {"noAudio",         mod_flag, GLW_VIDEO_NO_AUDIO, mod_video_flags},
-  {"dpadSeek",        mod_flag, GLW_VIDEO_DPAD_SEEK, mod_video_flags},
 
   {"alpha",           set_float,  0, glw_set_alpha},
   {"blur",            set_float,  0, glw_set_blur},
@@ -1409,9 +1424,7 @@ unresolved_set_float(glw_t *w, const char *attrib, const token_t *t,
       gc->gc_set_int_unresolved(w, attrib, val) : -1;
 
   if(r == -1) {
-    TRACE(TRACE_DEBUG, "GLW",
-          "Widget %s at %s:%d does not respond to %s=%f assignment",
-          gc->gc_name, rstr_get(t->file), t->line, attrib, val);
+    respond_error(w, t, attrib);
     return;
   }
 
@@ -1438,9 +1451,7 @@ unresolved_set_int(glw_t *w, const char *attrib, const token_t *t,
       gc->gc_set_float_unresolved(w, attrib, val) : -1;
 
   if(r == -1) {
-    TRACE(TRACE_DEBUG, "GLW",
-          "Widget %s at %s:%d does not respond to %s=%d assignment",
-          gc->gc_name, rstr_get(t->file), t->line, attrib, val);
+    respond_error(w, t, attrib);
     return;
   }
 
@@ -1463,9 +1474,7 @@ unresolved_set_str(glw_t *w, const char *attrib, const token_t *t,
     gc->gc_set_str_unresolved(w, attrib, val) : -1;
 
   if(r == -1) {
-    TRACE(TRACE_DEBUG, "GLW",
-          "Widget %s at %s:%d does not respond to %s=\"%s\" assignment",
-          gc->gc_name, rstr_get(t->file), t->line, attrib, val);
+    respond_error(w, t, attrib);
     return;
   }
 

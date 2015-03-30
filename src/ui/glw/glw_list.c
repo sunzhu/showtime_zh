@@ -576,7 +576,7 @@ glw_list_scroll(glw_list_t *l, glw_scroll_t *gs)
     return;
 
   if(glw_is_focused(&l->w)) {
-    glw_focus_set(c->glw_root, c, GLW_FOCUS_SET_SUGGESTED);
+    glw_focus_set(c->glw_root, c, GLW_FOCUS_SET_SUGGESTED, "ListScroll");
   } else {
     focus_child_when_list_not_focused(l, c);
   }
@@ -595,6 +595,12 @@ handle_pointer_event(glw_t *w, const glw_pointer_event_t *gpe)
   case GLW_POINTER_SCROLL:
     l->current_pos += l->page_size * gpe->delta_y;
     l->w.glw_flags |= GLW_UPDATE_METRICS;
+    glw_schedule_refresh(w->glw_root, 0);
+    return 1;
+  case GLW_POINTER_FINE_SCROLL:
+    l->current_pos += gpe->delta_y;
+    l->w.glw_flags |= GLW_UPDATE_METRICS;
+    glw_schedule_refresh(w->glw_root, 0);
     return 1;
   default:
     return 0;
@@ -807,7 +813,8 @@ glw_list_suggest_focus(glw_t *w, glw_t *c)
   if(l->suggested == w->glw_focused || l->suggest_cnt > 0) {
     c = glw_focus_by_path(c);
     if(c != NULL)
-      glw_focus_set(c->glw_root, c, GLW_FOCUS_SET_SUGGESTED);
+      glw_focus_set(c->glw_root, c, GLW_FOCUS_SET_SUGGESTED,
+                    "ListSuggest");
     l->suggest_cnt = 1;
   }
   l->suggested = c;

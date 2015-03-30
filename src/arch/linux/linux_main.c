@@ -168,7 +168,7 @@ main(int argc, char **argv)
   glibcourier = glib_courier_create(g_main_context_default());
 
   prop_subscribe(0,
-		 PROP_TAG_NAME("global", "eventsink"),
+		 PROP_TAG_NAME("global", "eventSink"),
 		 PROP_TAG_CALLBACK_EVENT, linux_global_eventsink, NULL,
 		 PROP_TAG_COURIER, glibcourier, 
 		 NULL);
@@ -214,7 +214,7 @@ add_xdg_path(const char *class, const char *type)
     snprintf(id, sizeof(id), "xdg-user-dir-%s", class);
 
     service_create_managed(id, title, path, type, NULL, 0, 1,
-			   SVC_ORIGIN_SYSTEM, 1, "Desktop folder");
+			   SVC_ORIGIN_SYSTEM, "Desktop folder");
   }
   fclose(fp);
 }

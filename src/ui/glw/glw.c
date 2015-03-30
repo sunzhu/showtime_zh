@@ -42,7 +42,7 @@ static void glw_focus_leave(glw_t *w);
 static void glw_root_set_hover(glw_root_t *gr, glw_t *w);
 static void glw_eventsink(void *opaque, prop_event_t event, ...);
 static void glw_update_em(glw_root_t *gr);
-static void glw_set_keyboard_mode(glw_root_t *gr, int on);
+static int  glw_set_keyboard_mode(glw_root_t *gr, int on);
 
 glw_settings_t glw_settings;
 
@@ -81,7 +81,7 @@ glw_update_sizes(glw_root_t *gr)
   int base_size = MIN(bs1, bs2);
 
   val = GLW_CLAMP(base_size + glw_settings.gs_size, 8, 40);
-  
+
   if(gr->gr_current_size != val) {
     gr->gr_current_size = val;
     prop_set(gr->gr_prop_ui, "size", PROP_SET_INT, val);
@@ -162,6 +162,8 @@ glw_init3(glw_root_t *gr,
   gr->gr_token_pool = pool_create("glwtokens", sizeof(token_t), POOL_ZERO_MEM);
   gr->gr_clone_pool = pool_create("glwclone", sizeof(glw_clone_t),
 				  POOL_ZERO_MEM);
+  gr->gr_style_binding_pool = pool_create("glwstylebindings",
+                                          sizeof(glw_style_binding_t), 0);
 
   gr->gr_skin = strdup(skin);
 
@@ -293,7 +295,7 @@ glw_load_universe(glw_root_t *gr)
 
   gr->gr_universe = glw_view_create(gr,
 				    universe, NULL, NULL, page,
-				    NULL, NULL, NULL);
+				    NULL, NULL, NULL, NULL, 0);
 
   rstr_release(universe);
 }
@@ -360,10 +362,11 @@ glw_render_zoffset(glw_t *w, const glw_rctx_t *rc)
  */
 glw_t *
 glw_create(glw_root_t *gr, const glw_class_t *class,
-	   glw_t *parent, glw_t *before, prop_t *originator)
+           glw_t *parent, glw_t *before, prop_t *originator,
+           rstr_t *file, int line)
 {
-  glw_t *w; 
- 
+  glw_t *w;
+
    /* Common initializers */
   w = calloc(1, class->gc_instance_size +
              (parent ? parent->glw_class->gc_parent_data_size : 0));
@@ -374,9 +377,12 @@ glw_create(glw_root_t *gr, const glw_class_t *class,
   w->glw_refcnt = 1;
   w->glw_alignment = class->gc_default_alignment;
   w->glw_flags2 = GLW2_ENABLED | GLW2_NAV_FOCUSABLE | GLW2_CURSOR;
-
+#ifdef DEBUG
+  w->glw_file = rstr_dup(file);
+  w->glw_line = line;
+#endif
   if(likely(parent != NULL))
-    w->glw_styles = glw_style_set_retain(parent->glw_styles);
+    w->glw_styles = glw_styleset_retain(parent->glw_styles);
 
   LIST_INSERT_HEAD(&gr->gr_active_dummy_list, w, glw_active_link);
 
@@ -390,7 +396,7 @@ glw_create(glw_root_t *gr, const glw_class_t *class,
   w->glw_parent = parent;
   if(parent != NULL) {
     update_in_path(w);
-    
+
     if(before != NULL)
       TAILQ_INSERT_BEFORE(before, w, glw_parent_link);
     else
@@ -598,7 +604,7 @@ glw_remove_from_parent(glw_t *w, glw_t *p)
 
   if(p->glw_selected == w)
     p->glw_selected = TAILQ_NEXT(w, glw_parent_link);
-  
+
   TAILQ_REMOVE(&p->glw_childs, w, glw_parent_link);
   w->glw_parent = NULL;
 }
@@ -654,7 +660,7 @@ glw_destroy(glw_t *w)
 
   free(w->glw_matrix);
   w->glw_matrix = NULL;
-  
+
   if(w->glw_class->gc_newframe != NULL)
     LIST_REMOVE(w, glw_every_frame_link);
 
@@ -674,8 +680,9 @@ glw_destroy(glw_t *w)
     glw_remove_from_parent(w, p);
   }
 
-  glw_style_bind(w, NULL, NULL);
-  glw_style_set_release(w->glw_styles);
+  glw_style_unbind_all(w);
+
+  glw_styleset_release(w->glw_styles);
 
   rstr_release(w->glw_id_rstr);
 
@@ -709,7 +716,7 @@ glw_signal_handler_register(glw_t *w, glw_callback_t *func, void *opaque)
     if(gsh->gsh_func == func && gsh->gsh_opaque == opaque)
       return;
 
-  } 
+  }
 
   gsh = malloc(sizeof(glw_signal_handler_t));
   gsh->gsh_func   = func;
@@ -730,7 +737,7 @@ glw_signal_handler_unregister(glw_t *w, glw_callback_t *func, void *opaque)
   LIST_FOREACH(gsh, &w->glw_signal_handlers, gsh_link)
     if(gsh->gsh_func == func && gsh->gsh_opaque == opaque)
       break;
-  
+
   if(gsh != NULL) {
     if(gsh->gsh_defer_remove) {
       gsh->gsh_func = NULL;
@@ -766,7 +773,7 @@ glw_signal0(glw_t *w, glw_signal_t sig, void *extra)
 
       if(gsh->gsh_func == NULL) {
 	/* Was inteded to be removed during call */
-	
+
 	x = gsh;
 	gsh = LIST_NEXT(gsh, gsh_link);
 
@@ -905,12 +912,12 @@ glw_move(glw_t *w, glw_t *b)
       glw_t *w2 = TAILQ_NEXT(w, glw_parent_link);
       if(w2 != NULL && p->glw_focused == w2) {
 	glw_t *c = glw_focus_by_path(w);
-	glw_focus_set(c->glw_root, c, GLW_FOCUS_SET_AUTOMATIC_FF);
+	glw_focus_set(c->glw_root, c, GLW_FOCUS_SET_AUTOMATIC_FF, "Move");
       }
     } else if(was_first) {
       glw_t *w2 = TAILQ_FIRST(&p->glw_childs);
       glw_t *c = glw_focus_by_path(w2);
-      glw_focus_set(c->glw_root, c, GLW_FOCUS_SET_AUTOMATIC_FF);
+      glw_focus_set(c->glw_root, c, GLW_FOCUS_SET_AUTOMATIC_FF, "Move");
     }
   }
   glw_signal0(p, GLW_SIGNAL_CHILD_MOVED, w);
@@ -997,6 +1004,8 @@ glw_root_set_hover(glw_root_t *gr, glw_t *w)
   gr->gr_pointer_hover = w;
   if(w != NULL)
     glw_path_modify(w, GLW_IN_HOVER_PATH, 0, com);
+
+  glw_need_refresh(gr, 0);
 }
 
 
@@ -1041,7 +1050,7 @@ glw_t *
 glw_focus_by_path(glw_t *w)
 {
   while(w->glw_focused != NULL) {
-    if(w->glw_focused->glw_flags & 
+    if(w->glw_focused->glw_flags &
        (GLW_FOCUS_BLOCKED | GLW_DESTROYING | GLW_HIDDEN))
       return NULL;
     w = w->glw_focused;
@@ -1105,7 +1114,7 @@ check_autofocus_limit(glw_t *n, glw_t *o)
  *
  */
 void
-glw_focus_set(glw_root_t *gr, glw_t *w, int how)
+glw_focus_set(glw_root_t *gr, glw_t *w, int how, const char *whom)
 {
   glw_t *x, *y, *com;
   glw_signal_t sig;
@@ -1136,7 +1145,7 @@ glw_focus_set(glw_root_t *gr, glw_t *w, int how)
     for(x = w; x->glw_parent != NULL; x = x->glw_parent) {
 
       if(sig != GLW_SIGNAL_FOCUS_CHILD_INTERACTIVE &&
-	 (x->glw_flags & GLW_FOCUS_BLOCKED || 
+	 (x->glw_flags & GLW_FOCUS_BLOCKED ||
 	  x->glw_flags & GLW_HIDDEN)) {
 	gr->gr_focus_work = 0;
 	return;
@@ -1146,26 +1155,26 @@ glw_focus_set(glw_root_t *gr, glw_t *w, int how)
 	/* Path switches */
 	glw_t *p = x->glw_parent;
 	y = glw_focus_by_path(p);
-      
+
 	/* Handle floating focus
 	 *
 	 * Floating focus is when the first widget of a child currently
 	 * has focus and we insert an entry with equal focus weight before
-	 * it. 
+	 * it.
 	 *
 	 * This allows the focus to "stay" at the first entry even if we
 	 * insert entries in random order
 	 */
-	int ff = p->glw_flags & GLW_FLOATING_FOCUS && 
+	int ff = p->glw_flags & GLW_FLOATING_FOCUS &&
 	  (x == TAILQ_FIRST(&p->glw_childs) ||
            how == GLW_FOCUS_SET_AUTOMATIC_FF);
 
 	if(y == NULL || how == GLW_FOCUS_SET_INTERACTIVE ||
-	   weight > y->glw_focus_weight || 
+	   weight > y->glw_focus_weight ||
 	   (ff && weight == y->glw_focus_weight)) {
 	  x->glw_parent->glw_focused = x;
 #if 0
-          printf("Signal %s child %p focused %d %f %f %d\n", 
+          printf("Signal %s child %p focused %d %f %f %d\n",
                  x->glw_parent->glw_class->gc_name,
                  x, how, weight, w->glw_focus_weight, ff);
 #endif
@@ -1208,22 +1217,27 @@ glw_focus_set(glw_root_t *gr, glw_t *w, int how)
 #endif
 
   if(w != NULL) {
+    GLW_TRACE("Focus set to %s:%d bt %s",
+              rstr_get(w->glw_file), w->glw_line, whom);
+
     gr->gr_last_focus = w;
 
     glw_path_modify(w, GLW_IN_FOCUS_PATH, 0, com);
 
-  
+
     if(how) {
       prop_t *p = get_originating_prop(w);
 
       if(p != NULL) {
-    
+
 	if(gr->gr_last_focused_interactive != NULL)
 	  prop_ref_dec(gr->gr_last_focused_interactive);
 
 	gr->gr_last_focused_interactive = prop_ref_inc(p);
       }
     }
+  } else {
+    GLW_TRACE("Focus set to none by %s", whom);
   }
   gr->gr_focus_work = 0;
 }
@@ -1260,7 +1274,7 @@ glw_focus_init_widget(glw_t *w, float weight)
 {
   w->glw_focus_weight = weight;
   int v = w->glw_flags2 & GLW2_AUTOREFOCUSABLE && was_interactive(w);
-  glw_focus_set(w->glw_root, w, v);
+  glw_focus_set(w->glw_root, w, v, "Init");
 }
 
 
@@ -1268,7 +1282,7 @@ glw_focus_init_widget(glw_t *w, float weight)
  *
  */
 static glw_t *
-glw_focus_leave0(glw_t *w, glw_t *cur)
+glw_focus_find_focusable(glw_t *w, glw_t *cur)
 {
   glw_t *c, *r;
 
@@ -1288,7 +1302,7 @@ glw_focus_leave0(glw_t *w, glw_t *cur)
     if(glw_is_focusable(c))
       return c;
     if(TAILQ_FIRST(&c->glw_childs)) {
-      if((r = glw_focus_leave0(c, NULL)) != NULL)
+      if((r = glw_focus_find_focusable(c, NULL)) != NULL)
 	return r;
     }
   }
@@ -1311,13 +1325,13 @@ glw_focus_leave(glw_t *w)
     assert(w->glw_parent->glw_focused == w);
 
     if(!(w->glw_parent->glw_flags & GLW_DESTROYING)) {
-      r = glw_focus_leave0(w->glw_parent, w);
+      r = glw_focus_find_focusable(w->glw_parent, w);
       if(r != NULL)
 	break;
     }
     w = w->glw_parent;
   }
-  glw_focus_set(w->glw_root, r, GLW_FOCUS_SET_INTERACTIVE);
+  glw_focus_set(w->glw_root, r, GLW_FOCUS_SET_INTERACTIVE, "FocusLeave");
 }
 
 
@@ -1332,13 +1346,12 @@ glw_focus_crawl0(glw_t *w, glw_t *cur, int forward)
   if(forward) {
     c = cur ? TAILQ_NEXT(cur, glw_parent_link) : TAILQ_FIRST(&w->glw_childs);
   } else {
-    c = cur ? TAILQ_PREV(cur, glw_queue, glw_parent_link) : 
+    c = cur ? TAILQ_PREV(cur, glw_queue, glw_parent_link) :
       TAILQ_LAST(&w->glw_childs, glw_queue);
   }
 
-  for(; c != NULL; c = forward ? TAILQ_NEXT(c, glw_parent_link) : 
+  for(; c != NULL; c = forward ? TAILQ_NEXT(c, glw_parent_link) :
 	TAILQ_PREV(c, glw_queue, glw_parent_link)) {
-
     if(c->glw_flags & (GLW_FOCUS_BLOCKED | GLW_HIDDEN))
       continue;
     if(glw_is_focusable(c))
@@ -1359,10 +1372,10 @@ glw_focus_crawl1(glw_t *w, int forward)
 {
   glw_t *c, *r;
 
-  c = forward ? TAILQ_FIRST(&w->glw_childs) : 
+  c = forward ? TAILQ_FIRST(&w->glw_childs) :
     TAILQ_LAST(&w->glw_childs, glw_queue);
 
-  for(; c != NULL; c = forward ? TAILQ_NEXT(c, glw_parent_link) : 
+  for(; c != NULL; c = forward ? TAILQ_NEXT(c, glw_parent_link) :
 	TAILQ_PREV(c, glw_queue, glw_parent_link)) {
 
     if(!(c->glw_flags & (GLW_FOCUS_BLOCKED | GLW_HIDDEN))) {
@@ -1396,8 +1409,8 @@ glw_focus_crawl(glw_t *w, int forward, int interactive)
 
   if(r != NULL)
     glw_focus_set(w->glw_root, r,
-		  interactive ? GLW_FOCUS_SET_INTERACTIVE : 
-		  GLW_FOCUS_SET_AUTOMATIC);
+		  interactive ? GLW_FOCUS_SET_INTERACTIVE :
+		  GLW_FOCUS_SET_AUTOMATIC, "FocusCrawl");
 }
 
 
@@ -1424,18 +1437,30 @@ glw_focus_open_path_close_all_other(glw_t *w)
   c = glw_focus_by_path(w);
 
   if(c != NULL) {
-    glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_AUTOMATIC);
+    glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_AUTOMATIC,
+                  "OpenCloseFound");
     return;
   } else if(p->glw_parent->glw_focused == p && do_clear) {
     glw_t *r = glw_focus_crawl1(w, 1);
     if(r != NULL) {
-      glw_focus_set(w->glw_root, r, GLW_FOCUS_SET_AUTOMATIC);
+      glw_focus_set(w->glw_root, r, GLW_FOCUS_SET_AUTOMATIC,
+                    "OpenCloseCrawlDown");
       return;
+    }
+
+    while(w->glw_parent != NULL) {
+      if((r = glw_focus_find_focusable(w->glw_parent, w)) != NULL) {
+        glw_focus_set(w->glw_root, r, GLW_FOCUS_SET_AUTOMATIC,
+                      "OpenCloseCrawlUp");
+        return;
+      }
+      w = w->glw_parent;
     }
   }
 
   if(do_clear)
-    glw_focus_set(w->glw_root, NULL, GLW_FOCUS_SET_AUTOMATIC);
+    glw_focus_set(w->glw_root, NULL, GLW_FOCUS_SET_AUTOMATIC,
+                  "OpenCloseNone");
 
 }
 
@@ -1456,7 +1481,8 @@ glw_focus_open_path(glw_t *w)
 
   c = glw_focus_by_path(w);
   if(c != NULL)
-    glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_AUTOMATIC);
+    glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_AUTOMATIC,
+                  "OpenPath");
 }
 
 
@@ -1468,7 +1494,7 @@ glw_focus_close_path(glw_t *w)
 {
   if(w->glw_flags & GLW_FOCUS_BLOCKED)
     return;
-  
+
   w->glw_flags |= GLW_FOCUS_BLOCKED;
 
   if(w->glw_parent->glw_focused != w)
@@ -1567,7 +1593,7 @@ glw_focus_child(glw_t *w)
   if(c == NULL)
     return 0;
 
-  glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_INTERACTIVE);
+  glw_focus_set(w->glw_root, c, GLW_FOCUS_SET_INTERACTIVE, "FocusChild");
   return 1;
 }
 
@@ -1591,7 +1617,7 @@ glw_root_event_handler(glw_root_t *gr, event_t *e)
 	    event_is_action(e, ACTION_RELOAD_DATA) ||
 	    event_is_type(e, EVENT_OPENURL)) {
 
-    prop_t *p = prop_get_by_name(PNVEC("nav", "eventsink"), 0,
+    prop_t *p = prop_get_by_name(PNVEC("nav", "eventSink"), 0,
                                  PROP_TAG_ROOT, gr->gr_prop_nav,
                                  NULL);
     prop_send_ext_event(p, e);
@@ -1676,7 +1702,7 @@ glw_event(glw_root_t *gr, event_t *e)
  *
  */
 int
-glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe, 
+glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
 		   glw_t **hp, Vec3 p, Vec3 dir)
 {
   glw_t *c;
@@ -1696,16 +1722,17 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
       gpe0.y = y;
       gpe0.delta_y = gpe->delta_y;
 
-      if(glw_is_focusable(w) && *hp == NULL)
+      if(glw_is_focusable_or_clickable(w) && *hp == NULL)
 	*hp = w;
 
       if(glw_send_pointer_event(w, &gpe0))
 	return 1;
 
-      if(glw_is_focusable(w)) {
+      if(glw_is_focusable_or_clickable(w)) {
 	switch(gpe->type) {
 
 	case GLW_POINTER_RIGHT_PRESS:
+          glw_focus_set(gr, w, GLW_FOCUS_SET_INTERACTIVE, "RightPress");
           e = event_create_action(ACTION_ITEMMENU);
           glw_event_to_widget(w, e);
           event_release(e);
@@ -1719,7 +1746,8 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
 	case GLW_POINTER_LEFT_RELEASE:
 	  if(gr->gr_pointer_press == w) {
 	    if(w->glw_flags2 & GLW2_FOCUS_ON_CLICK)
-	      glw_focus_set(gr, w, GLW_FOCUS_SET_INTERACTIVE); 
+	      glw_focus_set(gr, w, GLW_FOCUS_SET_INTERACTIVE,
+                            "LeftPress");
 
 	    glw_path_modify(w, 0, GLW_IN_PRESSED_PATH, NULL);
 	    e = event_create_action(ACTION_ACTIVATE);
@@ -1742,7 +1770,7 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
   if(w->glw_class->gc_gpe_iterator != NULL ) {
     return w->glw_class->gc_gpe_iterator(gr, w, gpe, hp, p, dir);
   } else {
-    TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link)
+    TAILQ_FOREACH_REVERSE(c, &w->glw_childs, glw_queue, glw_parent_link)
       if(glw_pointer_event0(gr, c, gpe, hp, p, dir))
 	return 1;
     return 0;
@@ -1785,9 +1813,9 @@ glw_pointer_event(glw_root_t *gr, glw_pointer_event_t *gpe)
     gr->gr_mouse_y = gpe->y;
     gr->gr_mouse_valid = 1;
 
-    if(gpe->type == GLW_POINTER_MOTION_UPDATE ||
+     if(gpe->type == GLW_POINTER_MOTION_UPDATE ||
        gpe->type == GLW_POINTER_MOTION_REFRESH) {
-    
+
       prop_set_int(gr->gr_pointer_visible, 1);
 
       if((w = gr->gr_pointer_grab) != NULL && w->glw_matrix != NULL) {
@@ -1795,14 +1823,14 @@ glw_pointer_event(glw_root_t *gr, glw_pointer_event_t *gpe)
 	gpe0.type = GLW_POINTER_FOCUS_MOTION;
 	gpe0.x = x;
 	gpe0.y = y;
-      
+
 	glw_send_pointer_event(w, &gpe0);
       }
 
       if((w = gr->gr_pointer_press) != NULL && w->glw_matrix != NULL) {
 	if(!glw_widget_unproject(*w->glw_matrix, &x, &y, p, dir) ||
 	   x < -1 || y < -1 || x > 1 || y > 1) {
-	  // Moved outside button, release 
+	  // Moved outside button, release
 
 	  glw_path_modify(w, 0, GLW_IN_PRESSED_PATH, NULL);
 	  gr->gr_pointer_press = NULL;
@@ -1885,7 +1913,7 @@ glw_reposition(glw_rctx_t *rc, int left, int top, int right, int bottom)
   float tx = -1.0f + (right + left) / (float)rc->rc_width;
   float sy =         (top - bottom) / (float)rc->rc_height;
   float ty = -1.0f + (top + bottom) / (float)rc->rc_height;
-  
+
   glw_Translatef(rc, tx, ty, 0);
   glw_Scalef(rc, sx, sy, GLW_MIN(sx, sy));
 
@@ -1905,7 +1933,7 @@ glw_repositionf(glw_rctx_t *rc, float left, float top,
   float tx = -1.0f + (right + left) / (float)rc->rc_width;
   float sy =         (top - bottom) / (float)rc->rc_height;
   float ty = -1.0f + (top + bottom) / (float)rc->rc_height;
-  
+
   glw_Translatef(rc, tx, ty, 0);
   glw_Scalef(rc, sx, sy, GLW_MIN(sx, sy));
 
@@ -1940,10 +1968,10 @@ glw_dispatch_event(glw_root_t *gr, event_t *e)
     glw_text_flush(gr);
     return;
   }
-    
+
   if(e->e_type_x == EVENT_KEYDESC) {
     event_t *e2;
-    
+
     if(glw_event(gr, e))
       return; // Was consumed
 
@@ -1975,14 +2003,26 @@ glw_dispatch_event(glw_root_t *gr, event_t *e)
        event_is_action(e, ACTION_POWER_OFF) ||
        event_is_action(e, ACTION_STANDBY) ||
        event_is_type(e, EVENT_SELECT_AUDIO_TRACK) ||
-       event_is_type(e, EVENT_SELECT_SUBTITLE_TRACK)
+       event_is_type(e, EVENT_SELECT_SUBTITLE_TRACK))) {
 
-     )) {
+    if(e->e_flags & EVENT_KEYPRESS) {
+      if(glw_set_keyboard_mode(gr, 1)) {
+        /*
+         * Ok, we switched form mouse to keyboard mode.
+         * For some events we don't want to actually execute on the
+         * action but rather "use" the event to do the switch
+         */
 
-    glw_set_keyboard_mode(gr, 1);
-
+        if(event_is_action(e, ACTION_UP) ||
+           event_is_action(e, ACTION_DOWN) ||
+           event_is_action(e, ACTION_LEFT) ||
+           event_is_action(e, ACTION_RIGHT))
+          return;
+      }
+    }
     if(glw_kill_screensaver(gr)) {
-      return;
+      if(e->e_flags & EVENT_KEYPRESS)
+        return;
     }
   }
 
@@ -2047,14 +2087,14 @@ glw_inject_event(glw_root_t *gr, event_t *e)
 {
   prop_t *p;
 
-  if(gr->gr_current_focus == NULL && 
+  if(gr->gr_current_focus == NULL &&
      (event_is_action(e, ACTION_NAV_BACK) ||
       event_is_action(e, ACTION_NAV_FWD) ||
       event_is_action(e, ACTION_HOME) ||
       event_is_action(e, ACTION_PLAYQUEUE) ||
       event_is_action(e, ACTION_RELOAD_DATA) ||
       event_is_type(e, EVENT_OPENURL))) {
-    p = prop_get_by_name(PNVEC("nav", "eventsink"), 0,
+    p = prop_get_by_name(PNVEC("nav", "eventSink"), 0,
 			 PROP_TAG_ROOT, gr->gr_prop_nav,
 			 NULL);
   } else {
@@ -2068,7 +2108,7 @@ glw_inject_event(glw_root_t *gr, event_t *e)
 }
 
 
-const glw_vertex_t align_vertices[] = 
+const glw_vertex_t align_vertices[] =
   {
     [0] = {  0.0,  0.0, 0.0 },
     [LAYOUT_ALIGN_CENTER] = {  0.0,  0.0, 0.0 },
@@ -2087,9 +2127,9 @@ void
 glw_align_1(glw_rctx_t *rc, int a)
 {
   if(a && a != LAYOUT_ALIGN_CENTER)
-    glw_Translatef(rc, 
-		   align_vertices[a].x, 
-		   align_vertices[a].y, 
+    glw_Translatef(rc,
+		   align_vertices[a].x,
+		   align_vertices[a].y,
 		   align_vertices[a].z);
 }
 
@@ -2097,9 +2137,9 @@ void
 glw_align_2(glw_rctx_t *rc, int a)
 {
   if(a && a != LAYOUT_ALIGN_CENTER)
-    glw_Translatef(rc, 
-		   -align_vertices[a].x, 
-		   -align_vertices[a].y, 
+    glw_Translatef(rc,
+		   -align_vertices[a].x,
+		   -align_vertices[a].y,
 		   -align_vertices[a].z);
 }
 
@@ -2150,7 +2190,7 @@ glw_set_constraints(glw_t *w, int x, int y, float weight, int flags)
   if(!(w->glw_flags & GLW_CONSTRAINT_CONF_X)) {
     if(fc & GLW_CONSTRAINT_X) {
       ch = 1;
-      w->glw_flags = 
+      w->glw_flags =
 	(w->glw_flags & ~GLW_CONSTRAINT_X) | (flags & GLW_CONSTRAINT_X);
     }
     if(w->glw_flags & GLW_CONSTRAINT_X && w->glw_req_size_x != x) {
@@ -2158,11 +2198,11 @@ glw_set_constraints(glw_t *w, int x, int y, float weight, int flags)
       ch = 1;
     }
   }
-    
+
   if(!(w->glw_flags & GLW_CONSTRAINT_CONF_Y)) {
     if(fc & GLW_CONSTRAINT_Y) {
       ch = 1;
-      w->glw_flags = 
+      w->glw_flags =
 	(w->glw_flags & ~GLW_CONSTRAINT_Y) | (flags & GLW_CONSTRAINT_Y);
     }
     if(w->glw_flags & GLW_CONSTRAINT_Y && w->glw_req_size_y != y) {
@@ -2174,7 +2214,7 @@ glw_set_constraints(glw_t *w, int x, int y, float weight, int flags)
   if(!(w->glw_flags & GLW_CONSTRAINT_CONF_W)) {
     if(fc & GLW_CONSTRAINT_W) {
       ch = 1;
-      w->glw_flags = 
+      w->glw_flags =
 	(w->glw_flags & ~GLW_CONSTRAINT_W) | (flags & GLW_CONSTRAINT_W);
     }
     if(w->glw_flags & GLW_CONSTRAINT_W && w->glw_req_weight != weight) {
@@ -2182,11 +2222,11 @@ glw_set_constraints(glw_t *w, int x, int y, float weight, int flags)
       ch = 1;
     }
   }
-    
+
   if(!(w->glw_flags & GLW_CONSTRAINT_CONF_D)) {
     if(fc & GLW_CONSTRAINT_D) {
       ch = 1;
-      w->glw_flags = 
+      w->glw_flags =
 	(w->glw_flags & ~GLW_CONSTRAINT_D) | (flags & GLW_CONSTRAINT_D);
     }
   }
@@ -2249,7 +2289,7 @@ glw_clear_constraints(glw_t *w)
 void
 glw_copy_constraints(glw_t *w, glw_t *src)
 {
-  glw_set_constraints(w, 
+  glw_set_constraints(w,
 		      src->glw_req_size_x,
 		      src->glw_req_size_y,
 		      src->glw_req_weight,
@@ -2293,7 +2333,7 @@ glw_get_a_name_r(glw_t *w, char *buf)
 {
   glw_t *c;
   const char *r = NULL;
-
+  char tmp[32];
   if(w->glw_class->gc_get_text != NULL)
     r = w->glw_class->gc_get_text(w);
 
@@ -2303,7 +2343,7 @@ glw_get_a_name_r(glw_t *w, char *buf)
 
   r = NULL;
   if(w->glw_class->gc_get_identity != NULL)
-    r = w->glw_class->gc_get_identity(w);
+    r = w->glw_class->gc_get_identity(w, tmp, sizeof(tmp));
 
   if(r != NULL)
     snprintf(buf + strlen(buf), GET_A_NAME_BUF - strlen(buf),
@@ -2341,10 +2381,11 @@ glw_get_a_name(glw_t *w)
 static void
 glw_get_path_r(char *buf, size_t buflen, glw_t *w)
 {
+  char tmp[32];
   if(w->glw_parent)
     glw_get_path_r(buf, buflen, w->glw_parent);
-  const char *ident = w->glw_class->gc_get_identity ? 
-    w->glw_class->gc_get_identity(w) : NULL;
+  const char *ident = w->glw_class->gc_get_identity ?
+    w->glw_class->gc_get_identity(w, tmp, sizeof(tmp)) : NULL;
 
   if(ident == NULL)
     ident = rstr_get(w->glw_id_rstr);
@@ -2393,14 +2434,14 @@ glw_print_tree0(glw_t *w, int indent)
 {
   glw_t *c;
 
-  fprintf(stderr, "%*.s%p %s: %s [%08x] %s\n", 
+  fprintf(stderr, "%*.s%p %s: %s [%08x] %s\n",
 	  indent, "",
 	  w,
 	  w->glw_class->gc_name,
 	  w->glw_class->gc_get_text ? w->glw_class->gc_get_text(w) : "",
 	  w->glw_flags,
 	  w->glw_flags & GLW_HIDDEN ? " <hidden>" : "");
-  
+
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
     glw_print_tree0(c, indent + 2);
   }
@@ -2572,7 +2613,7 @@ glw_widget_unproject(Mtx m, float *xp, float *yp, const Vec3 p, const Vec3 dir)
   glw_vec3_sub(u, T1, T0);
   glw_vec3_sub(v, T2, T0);
   glw_vec3_cross(n, u, v);
-  
+
   glw_vec3_sub(w0, p, T0);
   b = glw_vec3_dot(n, dir);
   if(fabs(b) < 0.000001)
@@ -2639,14 +2680,14 @@ glw_osk_done(glw_root_t *gr, int submit)
 /**
  *
  */
-static void 
+static void
 glw_osk_event(void *opaque, prop_event_t event, ...)
 {
   va_list ap;
-  
+
   if(event != PROP_EXT_EVENT)
     return;
-  
+
   va_start(ap, event);
   event_t *e = va_arg(ap, event_t *);
   va_end(ap);
@@ -2674,7 +2715,7 @@ glw_osk_open(glw_root_t *gr, const char *title, const char *input,
     prop_unsubscribe(gr->gr_osk_text_sub);
     prop_unsubscribe(gr->gr_osk_ev_sub);
   }
-  
+
   prop_set(osk, "title", PROP_SET_STRING, title);
   prop_set(osk, "text",  PROP_SET_STRING, input);
   prop_set(osk, "password", PROP_SET_INT, password);
@@ -2881,15 +2922,18 @@ glw_update_em(glw_root_t *gr)
 }
 
 
-static void
+static int
 glw_set_keyboard_mode(glw_root_t *gr, int on)
 {
   if(gr->gr_keyboard_mode == on)
-    return;
+    return 0;
 
   gr->gr_keyboard_mode = on;
   prop_set(gr->gr_prop_ui, "keyboard", PROP_SET_INT, on);
 
   if(gr->gr_universe != NULL)
     glw_update_dynamics_r(gr->gr_universe, GLW_VIEW_EVAL_FHP_CHANGE);
+
+  glw_need_refresh(gr, 0);
+  return 1;
 }

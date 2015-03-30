@@ -240,7 +240,7 @@ set_source(glw_t *w, rstr_t *url, glw_style_t *origin)
     glw_view_create(w->glw_root, url, alt_url, w,
                     a->prop_self_override ?: a->prop,
                     a->prop_parent_override ?: a->prop_parent, a->args,
-                    a->prop_clone);
+                    a->prop_clone, NULL, 0);
     return;
   }
 
@@ -356,7 +356,7 @@ glw_view_loader_set_prop(glw_t *w, glw_attribute_t attrib, prop_t *p)
  *
  */
 static const char *
-get_identity(glw_t *w)
+get_identity(glw_t *w, char *tmp, size_t tmpsize)
 {
   glw_view_loader_t *l = (glw_view_loader_t *)w;
   return rstr_get(l->url) ?: "NULL";
