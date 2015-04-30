@@ -30,6 +30,21 @@ static int es_num_contexts;
 static struct es_context_list es_contexts;
 static HTS_MUTEX_DECL(es_context_mutex);
 
+
+static LIST_HEAD(, ecmascript_module) modules;
+
+ES_NATIVE_CLASS(resource, &es_resource_release);
+
+/**
+ *
+ */
+void
+ecmascript_register_module(ecmascript_module_t *m)
+{
+  LIST_INSERT_HEAD(&modules, m, link);
+}
+
+
 /**
  *
  */
@@ -199,7 +214,7 @@ void
 es_resource_push(duk_context *ctx, es_resource_t *er)
 {
   es_resource_retain(er);
-  es_push_native_obj(ctx, ES_NATIVE_RESOURCE, er);
+  es_push_native_obj(ctx, &es_native_resource, er);
 }
 
 
@@ -211,7 +226,7 @@ es_resource_get(duk_context *ctx, int obj_idx,
                 const es_resource_class_t *erc)
 {
 
-  es_resource_t *er = es_get_native_obj(ctx, obj_idx, ES_NATIVE_RESOURCE);
+  es_resource_t *er = es_get_native_obj(ctx, obj_idx, &es_native_resource);
   if(er->er_class != erc)
     duk_error(ctx, DUK_ERR_ERROR, "Invalid resource class %s expected %s",
               er->er_class->erc_name, erc->erc_name);
@@ -225,7 +240,7 @@ es_resource_get(duk_context *ctx, int obj_idx,
 static int
 es_resource_destroy_duk(duk_context *ctx)
 {
-  es_resource_t *er = es_get_native_obj(ctx, 0, ES_NATIVE_RESOURCE);
+  es_resource_t *er = es_get_native_obj(ctx, 0, &es_native_resource);
   es_resource_destroy(er);
   return 0;
 }
@@ -237,7 +252,7 @@ es_resource_destroy_duk(duk_context *ctx)
 static int
 es_compile(duk_context *ctx)
 {
-  const char *path = duk_get_string(ctx, 0);
+  const char *path = duk_require_string(ctx, 0);
   char errbuf[256];
   buf_t *buf = fa_load(path,
                        FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
@@ -265,11 +280,20 @@ es_sleep(duk_context *ctx)
 }
 
 
+static int
+es_timestamp(duk_context *ctx)
+{
+  duk_push_number(ctx, (double)arch_get_ts());
+  return 1;
+}
 
-static const duk_function_list_entry fnlist_Showtime[] = {
+
+
+static const duk_function_list_entry fnlist_core[] = {
   { "compile",                 es_compile,              1 },
   { "resourceDestroy",         es_resource_destroy_duk, 1 },
   { "sleep",                   es_sleep,                1 },
+  { "timestamp",               es_timestamp,            0 },
   { NULL, NULL, 0}
 };
 
@@ -304,6 +328,22 @@ es_modsearch(duk_context *ctx)
 
   es_context_t *ec = es_get(ctx);
   const char *id = duk_require_string(ctx, 0);
+
+  const char *nativemod = mystrbegins(id, "native/");
+  if(nativemod != NULL) {
+    ecmascript_module_t *m;
+    LIST_FOREACH(m, &modules, link) {
+      if(!strcmp(m->name, nativemod))
+        break;
+    }
+
+    if(m == NULL)
+      duk_error(ctx, DUK_ERR_ERROR, "Can't find native module %s", id);
+
+    duk_put_function_list(ctx, 2, m->functions);
+    return 0;
+  }
+
 
   if(ec->ec_path != NULL) {
     snprintf(path, sizeof(path), "%s/%s.js", ec->ec_path, id);
@@ -361,34 +401,8 @@ es_create_env(es_context_t *ec, const char *loaddir, const char *storage)
     duk_put_prop_string(ctx, obj_idx, "storagePath");
   }
 
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_service);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_route);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_hook);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_prop);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_io);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_string);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_htsmsg);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_misc);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_crypto);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_kvstore);
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_subtitles);
-#if ENABLE_METADATA
-  duk_put_function_list(ctx, obj_idx, fnlist_Showtime_metadata);
-#endif
-
-  duk_push_object(ctx);
-  duk_put_function_list(ctx, -1, fnlist_Showtime_fs);
-  duk_put_prop_string(ctx, obj_idx, "fs");
-
-#if ENABLE_SQLITE
-  duk_push_object(ctx);
-  duk_put_function_list(ctx, -1, fnlist_Showtime_sqlite);
-  duk_put_prop_string(ctx, obj_idx, "sqlite");
-#endif
-
-  duk_put_prop_string(ctx, -2, "Showtime");
-
+  duk_put_function_list(ctx, obj_idx, fnlist_core);
+  duk_put_prop_string(ctx, -2, "Core");
 
   // Initialize modSearch helper
 
@@ -397,10 +411,10 @@ es_create_env(es_context_t *ec, const char *loaddir, const char *storage)
   duk_put_prop_string(ctx, -2, "modSearch");
   duk_pop(ctx);
 
-  duk_put_function_list(ctx, -1, fnlist_Global_timer);
+  duk_put_function_list(ctx, -1, es_fnlist_timer);
 
   duk_push_object(ctx);
-  duk_put_function_list(ctx, -1, fnlist_Showtime_console);
+  duk_put_function_list(ctx, -1, es_fnlist_console);
   duk_put_prop_string(ctx, -2, "console");
 
   // Pop global object
@@ -470,6 +484,12 @@ es_context_create(const char *id, int flags, const char *url,
                   const char *storage)
 {
   es_context_t *ec = calloc(1, sizeof(es_context_t));
+
+  char normalize[PATH_MAX];
+
+  if(!fa_normalize(url, normalize, sizeof(normalize)))
+    url = normalize;
+
   char path[PATH_MAX];
 
   fa_stat_t st;
@@ -479,13 +499,6 @@ es_context_create(const char *id, int flags, const char *url,
     ec->ec_path = strdup(path);
   }
 
-  if(ec->ec_path == NULL) {
-    char normalize[PATH_MAX];
-    if(!fa_normalize(url, normalize, sizeof(normalize)) &&
-       !fa_parent(path, sizeof(path), normalize)) {
-      ec->ec_path = strdup(path);
-    }
-  }
 
   if(ec->ec_path == NULL)
     TRACE(TRACE_ERROR, id,

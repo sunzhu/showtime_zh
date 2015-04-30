@@ -142,7 +142,7 @@ glw_navigate_move(glw_t *w, int steps)
 int
 glw_navigate_may_wrap(glw_t *w)
 {
-  if(!(w->glw_flags2 & GLW2_NAV_WRAP)) {
+  if(!(w->glw_parent->glw_flags2 & GLW2_NAV_WRAP)) {
     return 0;
   }
   if(!glw_settings.gs_wrap) {
@@ -166,7 +166,7 @@ glw_navigate_vertical(struct glw *w, struct event *e)
   if(c == NULL)
     return 0;
 
-  const int may_wrap = glw_navigate_may_wrap(w);
+  const int may_wrap = glw_navigate_may_wrap(c);
 
   if(event_is_action(e, ACTION_DOWN)) {
     return glw_navigate_step(c, 1, may_wrap);
@@ -205,10 +205,10 @@ glw_navigate_horizontal(struct glw *w, struct event *e)
 {
   glw_t *c = w->glw_focused;
 
-  const int may_wrap = glw_navigate_may_wrap(w);
-
   if(c == NULL)
     return 0;
+
+  const int may_wrap = glw_navigate_may_wrap(c);
 
   if(event_is_action(e, ACTION_LEFT)) {
     return glw_navigate_step(c, -1, may_wrap);

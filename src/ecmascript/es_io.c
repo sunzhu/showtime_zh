@@ -33,6 +33,8 @@
 #include "backend/backend.h"
 #include "api/xmlrpc.h"
 
+extern ecmascript_native_class_t es_native_htsmsg;
+
 /**
  *
  */
@@ -732,17 +734,16 @@ es_xmlrpc(duk_context *ctx)
     duk_error(ctx, DUK_ERR_ERROR, "XMLRPC request %s to %s failed -- %s",
               method, url, errbuf);
 
-  es_push_native_obj(ctx, ES_NATIVE_HTSMSG, reply);
+  es_push_native_obj(ctx, &es_native_htsmsg, reply);
   return 1;
 }
 
-/**
- * Showtime object exposed functions
- */
-const duk_function_list_entry fnlist_Showtime_io[] = {
+static const duk_function_list_entry fnlist_io[] = {
   { "httpReq",              es_http_req,              3 },
   { "httpInspectorCreate",  es_http_inspector_create, 2 },
   { "probe",                es_probe,                 1 },
   { "xmlrpc",               es_xmlrpc,                DUK_VARARGS },
   { NULL, NULL, 0}
 };
+
+ES_MODULE("io", fnlist_io);

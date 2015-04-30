@@ -95,7 +95,6 @@ enable libxv
 enable openssl
 enable locatedb
 enable vdpau
-enable spidermonkey
 enable libxxf86vm
 enable httpserver
 enable timegm
@@ -601,6 +600,7 @@ LIBAV_ARCH_FLAGS="--disable-shared --enable-static"
 libav_setup
 rtmpdump_setup
 xmp_setup
+gumbo_setup
 
 #
 # Finalize

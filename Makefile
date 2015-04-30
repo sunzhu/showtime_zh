@@ -78,6 +78,7 @@ SRCS += src/showtime.c \
 	src/prop/prop_concat.c \
 	src/prop/prop_reorder.c \
 	src/prop/prop_linkselected.c \
+	src/prop/prop_window.c \
 	src/metadata/playinfo.c \
 	src/db/kvstore.c \
 
@@ -559,64 +560,6 @@ ${BUILDDIR}/ext/dvd/dvdnav/%.o : CFLAGS = ${OPTFLAGS} \
  -DVERSION=\"showtime\" -DDVDNAV_COMPILE -Wno-strict-aliasing -Iext/dvd \
  -Iext/dvd/dvdnav
 
-##############################################################
-# Spidermonkey
-##############################################################
-SRCS-$(CONFIG_SPIDERMONKEY) += ext/spidermonkey/jsapi.c	\
-			ext/spidermonkey/jsarena.c	\
-			ext/spidermonkey/jsarray.c	\
-			ext/spidermonkey/jsatom.c	\
-			ext/spidermonkey/jsbool.c	\
-			ext/spidermonkey/jscntxt.c	\
-			ext/spidermonkey/jsdate.c	\
-			ext/spidermonkey/jsdbgapi.c	\
-			ext/spidermonkey/jsdhash.c	\
-			ext/spidermonkey/jsdtoa.c	\
-			ext/spidermonkey/jsemit.c	\
-			ext/spidermonkey/jsexn.c	\
-			ext/spidermonkey/jsfun.c	\
-			ext/spidermonkey/jsgc.c		\
-			ext/spidermonkey/jshash.c	\
-			ext/spidermonkey/jsinterp.c	\
-			ext/spidermonkey/jsinvoke.c	\
-			ext/spidermonkey/jsiter.c	\
-			ext/spidermonkey/jslock.c	\
-			ext/spidermonkey/jslog2.c	\
-			ext/spidermonkey/jslong.c	\
-			ext/spidermonkey/jsmath.c	\
-			ext/spidermonkey/jsnum.c	\
-			ext/spidermonkey/jsobj.c	\
-			ext/spidermonkey/jsopcode.c     \
-			ext/spidermonkey/jsparse.c	\
-			ext/spidermonkey/jsprf.c	\
-			ext/spidermonkey/jsregexp.c	\
-			ext/spidermonkey/jsscan.c	\
-			ext/spidermonkey/jsscope.c	\
-			ext/spidermonkey/jsscript.c	\
-			ext/spidermonkey/jsstr.c	\
-			ext/spidermonkey/jsutil.c       \
-			ext/spidermonkey/jsxdrapi.c	\
-			ext/spidermonkey/jsxml.c	\
-			ext/spidermonkey/prmjtime.c	\
-                        src/arch/nspr/nspr.c            \
-                        src/js/js.c                     \
-                        src/js/js_htsmsg.c              \
-                        src/js/js_page.c                \
-                        src/js/js_io.c                  \
-                        src/js/js_service.c             \
-                        src/js/js_settings.c            \
-                        src/js/js_prop.c                \
-                        src/js/js_json.c                \
-                        src/js/js_event.c               \
-                        src/js/js_metaprovider.c        \
-                        src/js/js_hook.c                \
-                        src/js/js_db.c                  \
-                        src/js/js_faprovider.c          \
-
-${BUILDDIR}/ext/spidermonkey/%.o : CFLAGS = \
-	-Iext/spidermonkey -Isrc/arch/nspr
-
-CFLAGS_com += -DXP_UNIX -DJS_HAS_XML_SUPPORT -DJS_THREADSAFE
 
 ##############################################################
 # polarssl
@@ -745,11 +688,32 @@ SRCS-$(CONFIG_SQLITE) += src/ecmascript/es_sqlite.c
 ${BUILDDIR}/ext/duktape/%.o : CFLAGS = -Wall ${OPTFLAGS} \
  -fstrict-aliasing -std=c99 #-DDUK_OPT_ASSERTIONS #-DDUK_OPT_DEBUG -DDUK_OPT_DPRINT -DDUK_OPT_DDPRINT -DDUK_OPT_DDDPRINT
 
-include src/arch/${OS}/${OS}.mk
+
+##############################################################
+# Gumbo
+##############################################################
+
+SRCS-$(CONFIG_GUMBO) += \
+	ext/gumbo-parser/src/attribute.c \
+	ext/gumbo-parser/src/char_ref.c \
+	ext/gumbo-parser/src/error.c \
+	ext/gumbo-parser/src/parser.c \
+	ext/gumbo-parser/src/string_buffer.c \
+	ext/gumbo-parser/src/string_piece.c \
+	ext/gumbo-parser/src/tag.c \
+	ext/gumbo-parser/src/tokenizer.c \
+	ext/gumbo-parser/src/utf8.c \
+	ext/gumbo-parser/src/util.c \
+	ext/gumbo-parser/src/vector.c \
+	src/ecmascript/es_gumbo.c \
+
+${BUILDDIR}/ext/gumbo-parser/%.o : CFLAGS = -Wall ${OPTFLAGS} -fstrict-aliasing -std=c99 -Wno-unused-variable
 
 ##############################################################
 ##############################################################
 ##############################################################
+
+include src/arch/${OS}/${OS}.mk
 
 
 # Various transformations

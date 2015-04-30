@@ -44,21 +44,6 @@
 #include "misc/average.h"
 #include "misc/minmax.h"
 
-#if ENABLE_SPIDERMONKEY
-#include "js/js.h"
-#endif
-
-#if ENABLE_OPENSSL
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/hmac.h>
-#endif
-
-#if ENABLE_POLARSSL
-#include "polarssl/net.h"
-#include "polarssl/havege.h"
-#endif
-
 #include "usage.h"
 
 LIST_HEAD(http_request_inspector_list, http_request_inspector);
@@ -93,8 +78,10 @@ static int http_tokenize(char *buf, char **vec, int vecsize, int delimiter);
 
 #define HF_TRACE(hf, x, ...) do {                               \
     if((hf)->hf_debug)                                          \
-      TRACE(TRACE_DEBUG, "HTTP", x, ##__VA_ARGS__);		\
+      hf_trace0(hf, x, ##__VA_ARGS__);                           \
   } while(0)
+
+
 
 /**
  * Connection parking
@@ -105,6 +92,7 @@ static struct http_connection_queue http_connections;
 static int http_parked_connections;
 static hts_mutex_t http_connections_mutex;
 static atomic_t http_connection_tally;
+static atomic_t http_file_tally;
 
 typedef struct http_connection {
   char hc_hostname[HOSTNAME_MAX];
@@ -185,6 +173,8 @@ typedef struct http_file {
 
   char hf_req_compression;
 
+  char *hf_original_url;
+
   // Set if the filesize is known to never change
   char hf_filesize_is_final;
 
@@ -208,6 +198,8 @@ typedef struct http_file {
 
   average_t hf_download_rate;
 
+  int hf_id;
+
   char hf_line[4096];
 
 } http_file_t;
@@ -217,9 +209,42 @@ typedef struct http_file {
  *
  */
 static void
+hf_trace0(http_file_t *hf, const char *fmt, ...)
+{
+  va_list ap;
+  char subsys[64];
+  snprintf(subsys, sizeof(subsys), "HTTP-%d", hf->hf_id);
+  va_start(ap, fmt);
+  tracev(0, TRACE_DEBUG, subsys, fmt, ap);
+  va_end(ap);
+}
+
+
+/**
+ *
+ */
+static void
+trace_request(htsbuf_queue_t *hq, http_file_t *hf)
+{
+  char subsys[64];
+  snprintf(subsys, sizeof(subsys), "HTTP-%d", hf->hf_id);
+
+  char *r = malloc(hq->hq_size + 1);
+  htsbuf_peek(hq, r, hq->hq_size);
+  r[hq->hq_size] = 0;
+  LINEPARSE(s, r)
+    TRACE(TRACE_DEBUG, subsys, "> %s", s);
+  free(r);
+}
+
+
+/**
+ *
+ */
+static void
 http_connection_destroy(http_connection_t *hc, int dbg, const char *reason)
 {
-  HTTP_TRACE(dbg, "Disconnected from %s:%d (id=%d) %s",
+  HTTP_TRACE(dbg, "Disconnected from %s:%d (cid=%d) %s",
 	     hc->hc_hostname, hc->hc_port, hc->hc_id, reason);
   tcp_close(hc->hc_tc);
   free(hc);
@@ -261,7 +286,7 @@ http_connection_get(const char *hostname, int port, int ssl,
         TAILQ_REMOVE(&http_connections, hc, hc_link);
         http_parked_connections--;
         hts_mutex_unlock(&http_connections_mutex);
-        HTTP_TRACE(dbg, "Reusing connection to %s:%d (id=%d)",
+        HTTP_TRACE(dbg, "Reusing connection to %s:%d (cid=%d)",
                    hc->hc_hostname, hc->hc_port, hc->hc_id);
         hc->hc_reused = 1;
         tcp_set_cancellable(hc->hc_tc, c);
@@ -293,7 +318,7 @@ http_connection_get(const char *hostname, int port, int ssl,
                cancellable_is_cancelled(c) ? ", Cancelled by user" : "");
     return NULL;
   }
-  HTTP_TRACE(dbg, "Connected to %s:%d (id=%d)", hostname, port, id);
+  HTTP_TRACE(dbg, "Connected to %s:%d (cid=%d)", hostname, port, id);
 
   hc = malloc(sizeof(http_connection_t));
   snprintf(hc->hc_hostname, sizeof(hc->hc_hostname), "%s", hostname);
@@ -310,7 +335,7 @@ http_connection_get(const char *hostname, int port, int ssl,
  *
  */
 static void
-http_connection_park(http_connection_t *hc, int dbg, int max_age)
+http_connection_park(http_connection_t *hc, int dbg, int max_age, const char *reason)
 {
   time_t now;
   http_connection_t *next;
@@ -319,8 +344,8 @@ http_connection_park(http_connection_t *hc, int dbg, int max_age)
 
   tcp_set_cancellable(hc->hc_tc, NULL);
 
-  HTTP_TRACE(dbg, "Parking connection to %s:%d (id=%d)",
-	     hc->hc_hostname, hc->hc_port, hc->hc_id);
+  HTTP_TRACE(dbg, "Parking connection to %s:%d (cid=%d) -- %s",
+	     hc->hc_hostname, hc->hc_port, hc->hc_id, reason);
 
   hc->hc_reuse_before = now + max_age;
 
@@ -743,21 +768,6 @@ http_auth_cache_set(http_file_t *hf)
   hts_mutex_unlock(&http_auth_caches_mutex);
 }
 
-/**
- *
- */
-static int
-kvcomp(const void *A, const void *B)
-{
-  const char **a = (const char **)A;
-  const char **b = (const char **)B;
-
-  int r;
-  if((r = strcmp(a[0], b[0])) != 0)
-    return r;
-  return strcmp(a[1], b[1]);
-}
-
 
 /**
  *
@@ -767,162 +777,6 @@ http_request_inspector_register(http_request_inspector_t *hri)
 {
   LIST_INSERT_HEAD(&http_request_inspectors, hri, link);
 }
-
-/**
- *
- */
-int
-http_client_oauth(http_request_inspection_t *hri,
-		  const char *consumer_key,
-		  const char *consumer_secret,
-		  const char *token,
-		  const char *token_secret)
-{
-  char key[512];
-  char str[2048];
-  char sig[128];
-  const http_file_t *hf = hri->hri_hf;
-  const http_connection_t *hc = hf->hf_connection;
-  int len = 0, i = 0;
-  const char **params;
-
-  if(hri->hri_parameters != NULL)
-    while(hri->hri_parameters[len])
-      len++;
-
-  if(len&1)
-    return -1;
-
-  len /= 2;
-  len += 6;
-
-  params = alloca(sizeof(char *) * len * 2);
-
-  url_escape(str, sizeof(str), consumer_key, URL_ESCAPE_PARAM);
-  const char *oauth_consumer_key = mystrdupa(str);
-
-  url_escape(str, sizeof(str), consumer_secret, URL_ESCAPE_PARAM);
-  const char *oauth_consumer_secret = mystrdupa(str);
-
-  url_escape(str, sizeof(str), token, URL_ESCAPE_PARAM);
-  const char *oauth_token = mystrdupa(str);
-
-  url_escape(str, sizeof(str), token_secret, URL_ESCAPE_PARAM);
-  const char *oauth_token_secret = mystrdupa(str);
-
-  snprintf(str, sizeof(str), "%lu", (long)time(NULL));
-  const char *oauth_timestamp = mystrdupa(str);
-
-  sha1_decl(shactx);
-  sha1_init(shactx);
-  sha1_update(shactx, nonce, sizeof(nonce));
-  sha1_final(shactx, nonce);
-
-  snprintf(str, sizeof(str),
-	   "%02x%02x%02x%02x%02x%02x%02x%02x"
-	   "%02x%02x%02x%02x%02x%02x%02x%02x"
-	   "%02x%02x%02x%02x",
-	   nonce[0], nonce[1], nonce[2], nonce[3], nonce[4],
-	   nonce[5], nonce[6], nonce[7], nonce[8], nonce[9],
-	   nonce[10], nonce[11], nonce[12], nonce[13], nonce[14],
-	   nonce[15], nonce[16], nonce[17], nonce[18], nonce[19]);
-  
-  const char *oauth_nonce = mystrdupa(str);
-
-  params[0] = "oauth_consumer_key";
-  params[1] = oauth_consumer_key;  
-
-  params[2] = "oauth_timestamp";
-  params[3] = oauth_timestamp;
-
-  params[4] = "oauth_nonce";
-  params[5] = oauth_nonce;
-
-  params[6] = "oauth_version";
-  params[7] = "1.0";
-
-  params[8] = "oauth_signature_method";
-  params[9] = "HMAC-SHA1";
-
-  params[10] = "oauth_token";
-  params[11] = oauth_token;
-  int j = 12;
-  if(hri->hri_parameters != NULL) {
-    i = 0;
-    while(hri->hri_parameters[i])
-      params[j++] = hri->hri_parameters[i++];
-  }
-
-  qsort(params, len, sizeof(char *) * 2, kvcomp);
-
-  snprintf(str, sizeof(str), "%s&", hri->hri_method);
-
-  if(!hc->hc_ssl && hc->hc_port == 80)
-    snprintf(str + strlen(str), sizeof(str) - strlen(str),
-	     "http%%3A%%2F%%2F%s", hc->hc_hostname);
-  else if(hc->hc_ssl && hc->hc_port == 443)
-    snprintf(str + strlen(str), sizeof(str) - strlen(str),
-	     "https%%3A%%2F%%2F%s", hc->hc_hostname);
-  else
-    snprintf(str + strlen(str), sizeof(str) - strlen(str),
-	     "%s%%3A%%2F%%2F%s%%3A%d", hc->hc_ssl ? "https" : "http",
-	     hc->hc_hostname, hc->hc_port);
-
-  url_escape(str + strlen(str), sizeof(str) - strlen(str), hf->hf_path,
-	     URL_ESCAPE_PARAM);
-
-  const char *div = "&";
-  for(i = 0; i < len; i++) {
-    snprintf(str + strlen(str), sizeof(str) - strlen(str),
-	     "%s%s%%3D%s", div, params[i*2],params[1+i*2]);
-    div = "%26";
-  }
-
-  snprintf(key, sizeof(key), "%s&%s",
-	   oauth_consumer_secret, oauth_token_secret);
-
-  unsigned char md[20];
-#if ENABLE_OPENSSL
-  HMAC(EVP_sha1(), key, strlen(key), (const unsigned char *)str, strlen(str),
-       md, NULL);
-#elif ENABLE_POLARSSL
-
-  sha1_context ctx;
-  sha1_hmac_starts(&ctx, (const unsigned char *)key, strlen(key));
-  sha1_hmac_update(&ctx, (const unsigned char *)str, strlen(str));
-  sha1_hmac_finish(&ctx, md);
-#else
-#error Need HMAC plz
-#endif
-
-
-  snprintf(str, sizeof(str), "OAuth realm=\"\", "
-		 "oauth_consumer_key=\"%s\", "
-		 "oauth_timestamp=\"%s\", "
-		 "oauth_nonce=\"%s\", "
-		 "oauth_version=\"1.0\", "
-		 "oauth_token=\"%s\", "
-		 "oauth_signature_method=\"HMAC-SHA1\", "
-		 "oauth_signature=\"",
-		 oauth_consumer_key,
-		 oauth_timestamp,
-		 oauth_nonce,
-		 oauth_token);
-
-#if ENABLE_LIBAV
-  av_base64_encode(sig, sizeof(sig), md, 20);
-#else
-  abort();
-#endif
-  url_escape(str + strlen(str), sizeof(str) - strlen(str), sig,
-	     URL_ESCAPE_PARAM);
-  snprintf(str + strlen(str), sizeof(str) - strlen(str), "\"");
-
-  http_header_add(hri->hri_headers, "Authorization", str, 0);
-
-  return 0;
-}
-
 
 /**
  *
@@ -1096,20 +950,6 @@ http_request_inspect(struct http_header_list *headers,
   return 0;
 }
 
-/**
- *
- */
-static void
-trace_request(htsbuf_queue_t *hq)
-{
-  char *r = malloc(hq->hq_size + 1);
-  htsbuf_peek(hq, r, hq->hq_size);
-  r[hq->hq_size] = 0;
-  LINEPARSE(s, r)
-    TRACE(TRACE_DEBUG, "HTTP", "> %s", s);
-  free(r);
-}
-
 
 /**
  *
@@ -1188,8 +1028,11 @@ http_drain_content(http_file_t *hf)
   if((buf = http_read_content(hf)) == NULL)
     return -1;
 
-  if(hf->hf_debug)
-    hexdump("drain", buf_cstr(buf), buf_size(buf));
+  if(hf->hf_debug) {
+    char subsys[64];
+    snprintf(subsys, sizeof(subsys), "HTTP-%d", hf->hf_id);
+    hexdump(subsys, buf_cstr(buf), buf_size(buf));
+  }
 
   buf_release(buf);
 
@@ -1312,11 +1155,16 @@ http_read_response(http_file_t *hf, struct http_header_list *headers)
   hf->hf_content_type = NULL;
   hf->hf_max_age = 30;
 
-  HF_TRACE(hf, "%s: Response:", hf->hf_url);
+  int first_line = 1;
 
   for(li = 0; ;li++) {
     if(tcp_read_line(hc->hc_tc, hf->hf_line, sizeof(hf->hf_line)) < 0)
       return -1;
+
+    if(first_line) {
+      HF_TRACE(hf, "%s: Response:", hf->hf_url);
+      first_line = 0;
+    }
 
     HF_TRACE(hf, "< %s", hf->hf_line);
 
@@ -1456,7 +1304,7 @@ http_detach(http_file_t *hf, int reusable, const char *reason)
     return;
 
   if(reusable && !gconf.disable_http_reuse && hf->hf_read_timeout == 0) {
-    http_connection_park(hf->hf_connection, hf->hf_debug, hf->hf_max_age);
+    http_connection_park(hf->hf_connection, hf->hf_debug, hf->hf_max_age, reason);
   } else {
     http_connection_destroy(hf->hf_connection, hf->hf_debug, reason);
   }
@@ -1493,9 +1341,15 @@ redirect(http_file_t *hf, int *redircount, char *errbuf, size_t errlen,
 			 hc->hc_hostname, hc->hc_port,
 			 hf->hf_path, hf->hf_location);
 
-  if(code == 301)
+  if(code == 301) {
     add_premanent_redirect(hf->hf_url, newurl);
+  } else {
 
+    if(hf->hf_original_url == NULL) {
+      hf->hf_original_url = hf->hf_url;
+      hf->hf_url = NULL;
+    }
+  }
   free(hf->hf_url);
   hf->hf_url = newurl;
 
@@ -1699,11 +1553,14 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
 		     &cookies);
   http_headers_free(&cookies);
 
+  HF_TRACE(hf, "Sending open request for %s (cid=%d)",
+           hf->hf_url, hf->hf_connection->hc_id);
+
   http_headers_send(&q, &headers, hf->hf_user_request_headers);
 
 
   if(hf->hf_debug)
-    trace_request(&q);
+    trace_request(&q, hf);
 
   tcp_write_queue(hf->hf_connection->hc_tc, &q);
 
@@ -1780,6 +1637,7 @@ http_destroy(http_file_t *hf)
 	      hf->hf_connection_mode == CONNECTION_MODE_PERSISTENT,
 	      "Request destroyed");
   free(hf->hf_url);
+  free(hf->hf_original_url);
   free(hf->hf_auth);
   free(hf->hf_auth_realm);
   free(hf->hf_location);
@@ -1797,6 +1655,7 @@ http_open_ex(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
              int *non_interactive, int flags, struct fa_open_extra *foe)
 {
   http_file_t *hf = calloc(1, sizeof(http_file_t));
+  hf->hf_id = atomic_add_and_fetch(&http_file_tally, 1);
   hf->hf_version = 1;
   hf->hf_url = strdup(url);
   hf->hf_debug = !!(flags & FA_DEBUG) || gconf.enable_http_debug;
@@ -1844,6 +1703,21 @@ http_close(fa_handle_t *handle)
 
 
 /**
+ * If we followed a redirect and it was temporary we need to
+ * reset the URL to the original URL. We might be reading on
+ * a temporary generated URL (see issue #2591)
+ */
+static void
+http_reset_url(http_file_t *hf)
+{
+  if(hf->hf_original_url != NULL) {
+    mystrset(&hf->hf_url, hf->hf_original_url);
+    HF_TRACE(hf, "read() reverting to original URL %s", hf->hf_url);
+  }
+}
+
+
+/**
  * Read from file
  */
 static int
@@ -1857,6 +1731,9 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
   size_t read_size;   // Amount of bytes to read in one round
   struct http_header_list headers, cookies;
   char errbuf[512];
+
+  int redircount = 0;
+
   if(size == 0)
     return 0;
 
@@ -1886,7 +1763,7 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
 
     } else {
 
-      HF_TRACE(hf, "read() needs to send a new GET request on connection %d",
+      HF_TRACE(hf, "read() needs to send a new GET request (cid=%d)",
                hc->hc_id);
       read_size = size - totsize;
 
@@ -1930,15 +1807,18 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
 
       http_cookie_append(hc->hc_hostname, hf->hf_path, &headers, &cookies);
       http_headers_free(&cookies);
+      HF_TRACE(hf, "Read issuing new request for %s (cid=%d)",
+               hf->hf_url, hf->hf_connection->hc_id);
       http_headers_send(&q, &headers, hf->hf_user_request_headers);
       if(hf->hf_debug)
-        trace_request(&q);
+        trace_request(&q, hf);
 
       tcp_write_queue(hc->hc_tc, &q);
 
       code = http_read_response(hf, hf->hf_user_response_headers);
       if(code == -1 && hf->hf_connection->hc_reused) {
 	http_detach(hf, 0, "Read error on reused connection, retrying");
+        http_reset_url(hf);
 	goto retry;
       }
 
@@ -1946,6 +1826,18 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
       case 206:
 	// Range transfer OK
 	break;
+
+      case 301:
+      case 302:
+      case 303:
+      case 307:
+        if(redirect(hf, &redircount, NULL, 0, code, 1))
+          return -1;
+
+        if(hf->hf_connection_mode == CONNECTION_MODE_CLOSE)
+          http_detach(hf, 0, "Redirect");
+
+        continue;
 
       case 200:
 	if(range[0])
@@ -1972,13 +1864,15 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
       case 416:
 	hf->hf_no_ranges = 1;
 	http_detach(hf, 0, "Requested Range Not Satisfiable");
+        http_reset_url(hf);
 	continue;
 
       default:
 	HF_TRACE(hf, "Read error (%d) [%s] filesize %lld -- retrying", code,
                  range, hf->hf_filesize);
 	http_detach(hf, 0, "Read error");
-	continue;
+        http_reset_url(hf);
+        continue;
       }
 
       if(hf->hf_rsize < read_size)
@@ -2019,6 +1913,7 @@ http_read_i(http_file_t *hf, void *buf, const size_t size)
       if(tcp_read_data(hc->hc_tc, buf + totsize, read_size, NULL, NULL)) {
         // Fail, so disconnect
         http_detach(hf, 0, "Read error during fa_read()");
+        http_reset_url(hf);
         // But we can retry a couple of times
         continue;
       }
@@ -2595,6 +2490,8 @@ dav_propfind(http_file_t *hf, fa_dir_t *fd, char *errbuf, size_t errlen,
 		       &cookies);
     http_headers_free(&cookies);
 
+    HF_TRACE(hf, "Webdav sending request for %s (cid=%d)",
+             hf->hf_url, hf->hf_connection->hc_id);
     http_headers_send(&q, &headers, hf->hf_user_request_headers);
 
     tcp_write_queue(hf->hf_connection->hc_tc, &q);
@@ -2664,6 +2561,7 @@ dav_stat(fa_protocol_t *fap, const char *url, struct fa_stat *fs,
 {
   http_file_t *hf = calloc(1, sizeof(http_file_t));
   int statcode = -1;
+  hf->hf_id = atomic_add_and_fetch(&http_file_tally, 1);
   hf->hf_version = 1;
   hf->hf_url = strdup(url);
 
@@ -2695,6 +2593,7 @@ dav_scandir(fa_protocol_t *fap, fa_dir_t *fd, const char *url,
 {
   int retval;
   http_file_t *hf = calloc(1, sizeof(http_file_t));
+  hf->hf_id = atomic_add_and_fetch(&http_file_tally, 1);
   hf->hf_version = 1;
   hf->hf_url = strdup(url);
   
@@ -3083,10 +2982,12 @@ http_req_do(http_req_aux_t *hra)
   http_cookie_append(hc->hc_hostname, hf->hf_path, &headers, &cookies);
   http_headers_free(&cookies);
 
+  HF_TRACE(hf, "Sending request for %s (cid=%d)",
+           hf->hf_url, hf->hf_connection->hc_id);
   http_headers_send(&q, &headers, &hra->headers_in);
 
   if(hf->hf_debug)
-    trace_request(&q);
+    trace_request(&q, hf);
 
   tcp_write_queue(hf->hf_connection->hc_tc, &q);
 
@@ -3160,7 +3061,7 @@ http_req_do(http_req_aux_t *hra)
 
   default:
 
-    if(hra->flags & FA_CONTENT_ON_ERROR && hf->hf_rsize) {
+    if(hra->flags & FA_CONTENT_ON_ERROR && hf->hf_rsize && code > 0) {
       HF_TRACE(hf, "%s failed with %d but content is available",
                hf->hf_url, code);
       break;
@@ -3295,6 +3196,8 @@ http_reqv(const char *url, va_list ap,
   htsbuf_queue_t *hq;
   int i32;
   int64_t i64;
+
+  hf->hf_id = atomic_add_and_fetch(&http_file_tally, 1);
 
   atomic_set(&hra->refcount, 1);
 

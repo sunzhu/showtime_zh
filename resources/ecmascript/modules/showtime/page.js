@@ -20,13 +20,14 @@ function Item(page) {
 
 Item.prototype.bindVideoMetadata = function(obj) {
   if(this.mlv)
-    Showtime.resourceDestroy(this.mlv);
-  this.mlv = Showtime.videoMetadataBind(this.root, this.root.url, obj);
+    Core.resourceDestroy(this.mlv);
+  this.mlv = require('native/metadata').videoMetadataBind(this.root,
+                                                          this.root.url, obj);
 }
 
 Item.prototype.unbindVideoMetadata = function(obj) {
   if(this.mlv) {
-    Showtime.resourceDestroy(this.mlv);
+    Core.resourceDestroy(this.mlv);
     delete this.mlv
   }
 }
@@ -162,7 +163,13 @@ function Page(root, sync, flat) {
     source: {
       get: function()  { return root.source; },
       set: function(v) { root.source = v; }
+    },
+
+    entries: {
+      get: function()  { return root.entries; },
+      set: function(v) { root.entries = v; }
     }
+
   });
 
   if(!flat) {
@@ -194,7 +201,7 @@ function Page(root, sync, flat) {
             }
           }
         }
-        Showtime.propHaveMore(nodes, have_more);
+        prop.haveMore(nodes, have_more);
       }
 
       if(op == 'reqmove' && typeof this.reorderer == 'function') {
@@ -209,7 +216,7 @@ function Page(root, sync, flat) {
 
 
 Page.prototype.haveMore = function(v) {
-  Showtime.propHaveMore(this.model.nodes, v);
+  prop.haveMore(this.model.nodes, v);
 }
 
 Page.prototype.findItemByProp = function(v) {
@@ -233,7 +240,6 @@ Page.prototype.getItems = function() {
 
 
 Page.prototype.appendItem = function(url, type, metadata) {
-  this.root.entries++;
 
   var item = new Item(this);
   this.items.push(item);
@@ -262,10 +268,10 @@ Page.prototype.appendItem = function(url, type, metadata) {
       } catch(e) {
       }
     }
-    Showtime.bindPlayInfo(root, metabind_url);
+    require('native/metadata').bindPlayInfo(root, metabind_url);
   }
 
-  Showtime.propSetParent(root, this.model.nodes);
+  prop.setParent(root, this.model.nodes);
   return item;
 }
 
@@ -277,12 +283,11 @@ Page.prototype.appendAction = function(type, data, enabled, metadata) {
   root.type = type;
   root.data = data;
   root.metadata = metadata;
-  Showtime.propSetParent(root, this.model.actions);
+  prop.setParent(root, this.model.actions);
   return item;
 }
 
 Page.prototype.appendPassiveItem = function(type, data, metadata) {
-  this.root.entries++;
 
   var item = new Item(this);
   this.items.push(item);
@@ -291,12 +296,12 @@ Page.prototype.appendPassiveItem = function(type, data, metadata) {
   root.type = type;
   root.data = data;
   root.metadata = metadata;
-  Showtime.propSetParent(root, this.model.nodes);
+  prop.setParent(root, this.model.nodes);
   return item;
 }
 
 Page.prototype.dump = function() {
-  Showtime.propPrint(this.root);
+  prop.print(this.root);
 }
 
 Page.prototype.flush = function() {
@@ -305,10 +310,10 @@ Page.prototype.flush = function() {
 
 Page.prototype.redirect = function(url) {
 
-  Showtime.resourceDestroy(this.nodesub);
+  Core.resourceDestroy(this.nodesub);
 
   if(this.sync) {
-    Showtime.backendOpen(this.root, url, true);
+    require('native/route').backendOpen(this.root, url, true);
   } else {
     prop.sendEvent(this.root.eventSink, "redirect", url);
   }
@@ -348,7 +353,7 @@ Page.prototype.onEvent = function(type, callback) {
 
 exports.Route = function(re, callback) {
 
-  this.route = Showtime.routeCreate(re, function(pageprop, sync, args) {
+  this.route = require('native/route').create(re, function(pageprop, sync, args) {
 
     try {
 
@@ -371,13 +376,13 @@ exports.Route = function(re, callback) {
 }
 
 exports.Route.prototype.destroy = function() {
-  Showtime.resourceDestroy(this.route);
+  Core.resourceDestroy(this.route);
 }
 
 
 exports.Searcher = function(title, icon, callback) {
 
-  this.searcher = Showtime.hookRegister('searcher', function(model, query, loading) {
+  this.searcher = require('native/hook').register('searcher', function(model, query, loading) {
 
     try {
 
@@ -393,7 +398,7 @@ exports.Searcher = function(title, icon, callback) {
 
       var page = new Page(root, false, true);
       page.type = 'directory';
-      root.url = Showtime.propMakeUrl(page.root);
+      root.url = prop.makeUrl(page.root);
       prop.atomicAdd(loading, 1);
       try {
         callback(page, query);
@@ -414,5 +419,5 @@ exports.Searcher = function(title, icon, callback) {
 
 
 exports.Searcher.prototype.destroy = function() {
-  Showtime.resourceDestroy(this.searcher);
+  Core.resourceDestroy(this.searcher);
 }

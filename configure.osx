@@ -44,7 +44,6 @@ enable glw_backend_opengl
 enable coreaudio
 enable bonjour
 enable spotlight
-enable spidermonkey
 enable stdin
 enable httpserver
 enable timegm
@@ -156,7 +155,7 @@ LIBAV_ARCH_FLAGS="--disable-shared --enable-static"
 libav_setup
 rtmpdump_setup
 xmp_setup
-
+gumbo_setup
 
 #
 # Some compatibility defines
