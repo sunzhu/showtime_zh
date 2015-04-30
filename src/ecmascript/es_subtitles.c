@@ -148,13 +148,15 @@ esp_query(subtitle_provider_t *SP, sub_scanner_t *ss, int score,
   duk_context *ctx = ec->ec_duk;
   if(ctx != NULL) {
 
+    extern ecmascript_native_class_t es_native_prop;
+    
     usage_inc_plugin_counter(ec->ec_id, "subsearch", 1);
 
     sub_scanner_retain(ss);
 
     es_push_root(ctx, esp);
 
-    es_push_native_obj(ctx, ES_NATIVE_PROP, prop_ref_inc(ss->ss_proproot));
+    es_push_native_obj(ctx, &es_native_prop, prop_ref_inc(ss->ss_proproot));
 
     duk_push_object(ctx);
 
@@ -274,9 +276,11 @@ es_getsubtitlelanguages(duk_context *ctx)
 /**
  * Showtime object exposed functions
  */
-const duk_function_list_entry fnlist_Showtime_subtitles[] = {
-  { "subtitleAddProvider",     es_subtitleprovideradd,       3 },
-  { "subtitleAddItem",         es_subtitleadditem,           8 },
-  { "getSubtitleLanguages",    es_getsubtitlelanguages,      0 },
+static const duk_function_list_entry fnlist_subtitle[] = {
+  { "addProvider",     es_subtitleprovideradd,       3 },
+  { "addItem",         es_subtitleadditem,           8 },
+  { "getLanguages",    es_getsubtitlelanguages,      0 },
   { NULL, NULL, 0}
 };
+
+ES_MODULE("subtitle", fnlist_subtitle);

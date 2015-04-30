@@ -58,7 +58,6 @@ CONFIG_LIST="
  locatedb
  spotlight
  vdpau
- spidermonkey
  libxxf86vm
  libxrandr
  httpserver
@@ -104,6 +103,7 @@ CONFIG_LIST="
  media_settings
  glw_settings
  netlog
+ gumbo
 "
 
 
@@ -406,6 +406,18 @@ xmp_setup() {
 #
 #
 #
+gumbo_setup() {
+    if disabled gumbo; then
+        return
+    fi
+
+    update_ext_submodule gumbo-parser
+}
+
+
+#
+#
+#
 libyuv_setup() {
     echo >>${CONFIG_MAK} "LDFLAGS_cfg += -lyuv"
     add_stamp libyuv
@@ -624,3 +636,4 @@ enable htsp
 enable media_settings
 enable glw_settings
 enable netlog
+enable gumbo

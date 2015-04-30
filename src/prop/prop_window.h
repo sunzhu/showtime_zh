@@ -17,30 +17,16 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-#include <assert.h>
+#pragma once
 
-#include "main.h"
-#include "ecmascript.h"
+#include "prop.h"
 
+#define PROP_WINDOW_TAKE_DST_OWNERSHIP 0x1
 
-/**
- *
- */
-static int
-es_console_log(duk_context *ctx)
-{
-  es_context_t *ec = es_get(ctx);
+typedef struct prop_window prop_window_t;
 
-  const char *msg = duk_to_string(ctx, 0);
-  TRACE(TRACE_DEBUG, ec->ec_id, "%s", msg);
-  return 0;
-}
+prop_window_t *prop_window_create(prop_t *dst, prop_t *src,
+				  unsigned int start, unsigned int length,
+				  int flags);
 
-
-/**
- * Showtime object exposed functions
- */
-const duk_function_list_entry es_fnlist_console[] = {
-  { "log",                      es_console_log,           1 },
-  { NULL, NULL, 0}
-};
+void prop_window_destroy(prop_window_t *pw);
