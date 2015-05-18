@@ -124,6 +124,7 @@ typedef struct http_file {
   char *hf_location;
   char *hf_auth_realm;
 
+  char **hf_ret_location; // Return final location to caller
 
   char hf_authurl[128];
   char hf_path[URL_MAX];
@@ -192,7 +193,7 @@ typedef struct http_file {
   const struct http_header_list *hf_user_request_headers;
   struct http_header_list *hf_user_response_headers;
 
-  cancellable_t *hf_c;
+  cancellable_t *hf_cancellable;
 
   uint64_t hf_bytes_downloaded;
 
@@ -1498,8 +1499,8 @@ http_connect(http_file_t *hf, char *errbuf, int errlen, int allow_reuse)
   const int timeout = hf->hf_connect_timeout ?: 30000;
 
   hf->hf_connection = http_connection_get(hostname, port, ssl, errbuf, errlen,
-					  hf->hf_debug, timeout, hf->hf_c,
-                                          allow_reuse);
+					  hf->hf_debug, timeout,
+                                          hf->hf_cancellable, allow_reuse);
 
   if(hf->hf_read_timeout != 0 && hf->hf_connection != NULL)
     tcp_set_read_timeout(hf->hf_connection->hc_tc, hf->hf_read_timeout);
@@ -1632,7 +1633,7 @@ http_open0(http_file_t *hf, int probe, char *errbuf, int errlen,
 static void
 http_destroy(http_file_t *hf)
 {
-  http_detach(hf, 
+  http_detach(hf,
 	      hf->hf_rsize == 0 &&
 	      hf->hf_connection_mode == CONNECTION_MODE_PERSISTENT,
 	      "Request destroyed");
@@ -1643,6 +1644,7 @@ http_destroy(http_file_t *hf)
   free(hf->hf_location);
   free(hf->hf_content_type);
   prop_ref_dec(hf->hf_stats_speed);
+  cancellable_release(hf->hf_cancellable);
   free(hf);
 }
 
@@ -1668,7 +1670,7 @@ http_open_ex(fa_protocol_t *fap, const char *url, char *errbuf, size_t errlen,
     }
     hf->hf_user_request_headers  = foe->foe_request_headers;
     hf->hf_user_response_headers = foe->foe_response_headers;
-    hf->hf_c = foe->foe_c;
+    hf->hf_cancellable = cancellable_retain(foe->foe_cancellable);
     hf->hf_connect_timeout = foe->foe_open_timeout;
   }
 
@@ -2094,7 +2096,8 @@ http_load(struct fa_protocol *fap, const char *url,
 	  int flags, fa_load_cb_t *cb, void *opaque,
           cancellable_t *c,
           struct http_header_list *request_headers,
-          struct http_header_list *response_headers)
+          struct http_header_list *response_headers,
+          char **location)
 {
   buf_t *b;
   int err;
@@ -2129,6 +2132,7 @@ http_load(struct fa_protocol *fap, const char *url,
                  HTTP_REQUEST_HEADERS(request_headers),
                  HTTP_PROGRESS_CALLBACK(cb, opaque),
                  HTTP_CANCELLABLE(c),
+                 HTTP_LOCATION(location),
                  NULL);
 
   if(err == -1) {
@@ -2956,7 +2960,6 @@ http_req_do(http_req_aux_t *hra)
     prefix = '&';
   }
 
-
   htsbuf_qprintf(&q, " HTTP/1.%d\r\n", hf->hf_version);
 
   http_headers_init(&headers, hf);
@@ -2996,6 +2999,11 @@ http_req_do(http_req_aux_t *hra)
       htsbuf_hexdump(&hra->postdata, "HTTP-POSTDATA");
 
     tcp_write_queue_dontfree(hf->hf_connection->hc_tc, &hra->postdata);
+  }
+
+  if(hf->hf_ret_location != NULL) {
+    free(*hf->hf_ret_location);
+    *hf->hf_ret_location = strdup(hf->hf_url);
   }
 
   code = http_read_response(hf, hra->headers_out);
@@ -3344,7 +3352,7 @@ http_reqv(const char *url, va_list ap,
       break;
 
     case HTTP_TAG_CANCELLABLE:
-      hf->hf_c = va_arg(ap, cancellable_t *);
+      hf->hf_cancellable = cancellable_retain(va_arg(ap, cancellable_t *));
       break;
 
     case HTTP_TAG_CONNECT_TIMEOUT:
@@ -3353,6 +3361,12 @@ http_reqv(const char *url, va_list ap,
 
     case HTTP_TAG_READ_TIMEOUT:
       hf->hf_read_timeout = va_arg(ap, int);
+      break;
+
+    case HTTP_TAG_LOCATION:
+      hf->hf_ret_location = va_arg(ap, char **);
+      if(hf->hf_ret_location != NULL)
+        *hf->hf_ret_location = NULL;
       break;
 
       break;

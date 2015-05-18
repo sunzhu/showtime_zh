@@ -61,7 +61,7 @@ static fa_protocol_t *native_fap;
 /**
  *
  */
-static void
+void
 fap_release(fa_protocol_t *fap)
 {
   if(fap->fap_fini == NULL)
@@ -86,7 +86,7 @@ fap_retain(fa_protocol_t *fap)
 /**
  *
  */
-static char *
+char *
 fa_resolve_proto(const char *url, fa_protocol_t **p,
 		 const char **vpaths, char *errbuf, size_t errsize)
 {
@@ -237,10 +237,7 @@ fa_open_ex(const char *url, char *errbuf, size_t errsize, int flags,
 
   if(!(flags & FA_WRITE)) {
     // Only do caching if we are in read only mode
-#if ENABLE_READAHEAD_CACHE
-    if(flags & FA_CACHE)
-      return fa_cache_open(url, errbuf, errsize, flags & ~FA_CACHE, foe);
-#endif
+
     if(flags & (FA_BUFFERED_SMALL | FA_BUFFERED_BIG))
       return fa_buffered_open(url, errbuf, errsize, flags, foe);
   }
@@ -257,7 +254,7 @@ fa_open_ex(const char *url, char *errbuf, size_t errsize, int flags,
   fap_release(fap);
   free(filename);
 #ifdef FA_DUMP
-  if(flags & FA_DUMP) 
+  if(flags & FA_DUMP)
     fh->fh_dump_fd = open("dumpfile.bin", O_CREAT | O_TRUNC | O_WRONLY, 0666);
   else
     fh->fh_dump_fd = -1;
@@ -280,9 +277,6 @@ fa_open_vpaths(const char *url, const char **vpaths,
 
   if((filename = fa_resolve_proto(url, &fap, vpaths, errbuf, errsize)) == NULL)
     return NULL;
-  
-  if(flags & (FA_BUFFERED_SMALL | FA_BUFFERED_BIG))
-    return fa_buffered_open(url, errbuf, errsize, flags, foe);
 
   fh = fap->fap_open(fap, filename, errbuf, errsize, flags, foe);
 #ifdef FA_DUMP
@@ -290,7 +284,6 @@ fa_open_vpaths(const char *url, const char **vpaths,
 #endif
   fap_release(fap);
   free(filename);
-
   return fh;
 }
 
@@ -1433,10 +1426,6 @@ fileaccess_init(void)
     if(fap->fap_init != NULL)
       fap->fap_init();
 
-#if ENABLE_READAHEAD_CACHE
-  fa_cache_init();
-#endif
-
 #if ENABLE_METADATA
   fa_indexer_init();
 #endif
@@ -1517,6 +1506,8 @@ fa_load(const char *url, ...)
   buf_t *buf = NULL;
   int tag;
   loadarg_t *la;
+  char **locationptr = NULL;
+
   va_list ap;
   va_start(ap, url);
 
@@ -1587,6 +1578,10 @@ fa_load(const char *url, ...)
       LIST_INIT(response_headers);
       break;
 
+    case FA_LOAD_TAG_LOCATION:
+      locationptr = va_arg(ap, char **);
+      break;
+
     default:
       abort();
     }
@@ -1612,6 +1607,9 @@ fa_load(const char *url, ...)
     url = mystrdupa(newurl); // Copy it to stack to avoid all free()s
     free(newurl);
   }
+
+  if(locationptr != NULL)
+    *locationptr = strdup(url);
 
   if((filename = fa_resolve_proto(url, &fap, vpaths, errbuf, errlen)) == NULL)
     return NULL;
@@ -1654,7 +1652,7 @@ fa_load(const char *url, ...)
     
     data2 = fap->fap_load(fap, filename, errbuf, errlen,
 			  &etag, &mtime, &max_age, flags, cb, opaque, c,
-                          request_headers, response_headers);
+                          request_headers, response_headers, locationptr);
     
     fap_release(fap);
     free(filename);

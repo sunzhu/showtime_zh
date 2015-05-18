@@ -151,7 +151,7 @@ typedef struct fa_open_extra {
   const struct http_header_list *foe_request_headers;
   struct http_header_list *foe_response_headers;
   struct prop *foe_stats;
-  struct cancellable *foe_c;
+  struct cancellable *foe_cancellable;
   int foe_open_timeout; // In ms
   int foe_protocol_error; // Protocol error (HTTP can set 404 here, etc)
 } fa_open_extra_t;
@@ -294,7 +294,7 @@ enum {
   FA_LOAD_TAG_MIN_EXPIRE,
   FA_LOAD_TAG_REQUEST_HEADERS,
   FA_LOAD_TAG_RESPONSE_HEADERS,
-
+  FA_LOAD_TAG_LOCATION,
 };
 
 #define FA_LOAD_ERRBUF(a, b)            FA_LOAD_TAG_ERRBUF, a, b
@@ -308,6 +308,7 @@ enum {
 #define FA_LOAD_MIN_EXPIRE(a)           FA_LOAD_TAG_MIN_EXPIRE, a
 #define FA_LOAD_REQUEST_HEADERS(a)      FA_LOAD_TAG_REQUEST_HEADERS, a
 #define FA_LOAD_RESPONSE_HEADERS(a)     FA_LOAD_TAG_RESPONSE_HEADERS, a
+#define FA_LOAD_LOCATION(a)             FA_LOAD_TAG_LOCATION, a
 
 buf_t *fa_load(const char *url, ...) attribute_null_sentinel;
 

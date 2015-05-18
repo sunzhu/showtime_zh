@@ -255,9 +255,10 @@ hls_variant_update(hls_variant_t *hv, time_t now)
   hls_t *h = hv->hv_demuxer->hd_hls;
 
   buf_t *b = fa_load(hv->hv_url,
-                      FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
-                      FA_LOAD_FLAGS(FA_COMPRESSION),
-                      NULL);
+                     FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
+                     FA_LOAD_FLAGS(FA_COMPRESSION),
+                     FA_LOAD_CANCELLABLE(h->h_mp->mp_cancellable),
+                     NULL);
 
   if(b == NULL) {
     TRACE(TRACE_ERROR, "HLS", "Unable to open %s -- %s", hv->hv_url, errbuf);
@@ -480,7 +481,7 @@ hls_segment_open(hls_segment_t *hs)
   if(fast_fail)
     foe.foe_open_timeout = 2000;
 
-  foe.foe_c = &hd->hd_cancellable;
+  foe.foe_cancellable = hd->hd_cancellable;
 
   int flags = FA_BUFFERED_BIG | FA_STREAMING;
 
@@ -547,11 +548,13 @@ hls_variant_update_bw(hls_segment_t *hs)
   if(hs == NULL || !hs->hs_opened_at)
     return;
 
-  int ts = arch_get_ts() - hs->hs_opened_at;
+  int64_t ts = arch_get_ts() - hs->hs_opened_at;
+  if(ts < 10 || ts > INT32_MAX)
+    return;
   if(h->h_blocked != hs->hs_block_cnt)
     return;
 
-  int bw = 8000000LL * hs->hs_size / ts;
+  int bw = 8000000LL * hs->hs_size / (int)ts;
 
   if(hd->hd_bw == 0) {
     hd->hd_bw = bw;
@@ -925,8 +928,8 @@ hls_event_callback(media_pipe_t *mp, void *aux, event_t *e)
 
     event_ts_t *ets = (event_ts_t *)e;
 
-    cancellable_cancel(&h->h_primary.hd_cancellable);
-    cancellable_cancel(&h->h_audio.hd_cancellable);
+    cancellable_cancel(h->h_primary.hd_cancellable);
+    cancellable_cancel(h->h_audio.hd_cancellable);
 
     hts_mutex_lock(&h->h_mutex);
     h->h_pending_seek = ets->ts;
@@ -939,8 +942,8 @@ hls_event_callback(media_pipe_t *mp, void *aux, event_t *e)
             event_is_type(e, EVENT_EXIT) ||
             event_is_type(e, EVENT_PLAY_URL)) {
 
-    cancellable_cancel(&h->h_primary.hd_cancellable);
-    cancellable_cancel(&h->h_audio.hd_cancellable);
+    cancellable_cancel(h->h_primary.hd_cancellable);
+    cancellable_cancel(h->h_audio.hd_cancellable);
 
     hts_mutex_lock(&h->h_mutex);
 
@@ -1772,6 +1775,7 @@ hls_demuxer_init(hls_demuxer_t *hd, hls_t *h, const char *type)
   hd->hd_hls = h;
   hd->hd_type = type;
   hd->hd_seek_to_segment = PTS_UNSET;
+  hd->hd_cancellable = cancellable_create();
 }
 
 
@@ -1785,6 +1789,7 @@ hls_demuxer_close(media_pipe_t *mp, hls_demuxer_t *hd)
   if(hd->hd_audio_codec != NULL)
     media_codec_deref(hd->hd_audio_codec);
   hls_free_mbp(mp, &hd->hd_mb);
+  cancellable_release(hd->hd_cancellable);
 }
 
 /**
@@ -1877,19 +1882,25 @@ hls_playvideo(const char *url, media_pipe_t *mp,
   url += strlen("hls:");
   if(!strcmp(url, "test"))
     url = TESTURL;
+
+  char *baseurl = NULL;
+
   buf = fa_load(url,
-                 FA_LOAD_ERRBUF(errbuf, errlen),
-                 FA_LOAD_FLAGS(FA_COMPRESSION),
-                 NULL);
-
-  if(buf == NULL)
+                FA_LOAD_ERRBUF(errbuf, errlen),
+                FA_LOAD_FLAGS(FA_COMPRESSION),
+                FA_LOAD_CANCELLABLE(mp->mp_cancellable),
+                FA_LOAD_LOCATION(&baseurl),
+                NULL);
+  if(buf == NULL) {
+    free(baseurl);
     return NULL;
-
+  }
   buf = buf_make_writable(buf);
   char *s = buf_str(buf);
 
-  event_t *e = hls_play_extm3u(s, url, mp, errbuf, errlen, vq, vsl, va0);
+  event_t *e = hls_play_extm3u(s, baseurl, mp, errbuf, errlen, vq, vsl, va0);
   buf_release(buf);
+  free(baseurl);
   return e;
 }
 

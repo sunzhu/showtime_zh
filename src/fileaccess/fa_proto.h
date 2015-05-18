@@ -158,7 +158,8 @@ typedef struct fa_protocol {
                      int flags, fa_load_cb_t *cb, void *opaque,
                      cancellable_t *c,
                      struct http_header_list *request_headers,
-                     struct http_header_list *response_headers);
+                     struct http_header_list *response_headers,
+                     char **location);
 
   /**
    * Normalize the given URL.
@@ -237,6 +238,10 @@ typedef struct fa_protocol {
 
 
 
+char *fa_resolve_proto(const char *url, fa_protocol_t **p,
+                       const char **vpaths, char *errbuf, size_t errsize);
+
+void fap_release(fa_protocol_t *fap);
 
 void fileaccess_register_dynamic(fa_protocol_t *fap);
 
