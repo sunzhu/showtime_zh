@@ -29,10 +29,12 @@
 
 #include "compiler.h"
 
-#if __GNUC__ >= 4 && __GNUC_MINOR__ >=6
+#ifndef static_assert
+#if (__GNUC__ >= 4 && __GNUC_MINOR__ >=6) || (__GNUC__ >= 5)
 #define static_assert(x, y) _Static_assert(x, y)
 #else
 #define static_assert(x, y)
+#endif
 #endif
 
 void parse_opts(int argc, char **argv);
@@ -245,6 +247,7 @@ typedef struct gconf {
   int enable_thread_debug;
   int enable_metadata_debug;
   int enable_upnp_debug;
+  int enable_ecmascript_debug;
 
   int enable_torrent_debug;
   int enable_torrent_tracker_debug;
