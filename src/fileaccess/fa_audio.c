@@ -37,6 +37,7 @@
 #include "notifications.h"
 #include "metadata/playinfo.h"
 #include "misc/minmax.h"
+#include "usage.h"
 
 #if ENABLE_LIBGME
 #include <gme/gme.h>
@@ -188,6 +189,8 @@ be_file_playaudio(const char *url, media_pipe_t *mp,
     return NULL;
   }
 
+  usage_event("Play audio", 1, USAGE_SEG("format", fctx->iformat->name));
+
   TRACE(TRACE_DEBUG, "Audio", "Starting playback of %s", url);
 
   mp_configure(mp, MP_CAN_SEEK | MP_CAN_PAUSE,
@@ -275,8 +278,8 @@ be_file_playaudio(const char *url, media_pipe_t *mp,
       mb->mb_stream = pkt.stream_index;
 
       if(mb->mb_pts != AV_NOPTS_VALUE) {
-        if(fctx->start_time != AV_NOPTS_VALUE)
-          mb->mb_delta =  fctx->start_time;
+        const int64_t offset = fctx->start_time;
+        mb->mb_user_time = mb->mb_pts + (offset != PTS_UNSET ? offset : 0);
 	mb->mb_drive_clock = 1;
       }
 

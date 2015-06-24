@@ -28,8 +28,9 @@ event_t *hls_play_extm3u(char *s, const char *url, media_pipe_t *mp,
 #define HLS_QUEUE_MERGE         0x1
 #define HLS_QUEUE_KEYFRAME_SEEN 0x2
 
-#define HLS_EOF  ((void *)-1)
-#define HLS_NYA  ((void *)-2)
+#define HLS_EOF  ((void *)-1)  // End-of-file
+#define HLS_NYA  ((void *)-2)  // Not-yet available
+#define HLS_DIS  ((void *)-3)  // Discontinuity
 
 
 TAILQ_HEAD(hls_variant_queue, hls_variant);
@@ -38,6 +39,18 @@ LIST_HEAD(hls_audio_track_list, hls_audio_track);
 
 #define HLS_CRYPTO_NONE   0
 #define HLS_CRYPTO_AES128 1
+
+
+/**
+ *
+ */
+typedef struct hls_discontinuity_segment {
+  LIST_ENTRY(hls_discontinuity_segment) hds_link;
+  int hds_seq;
+  int hds_refcount;
+  int64_t hds_offset;
+} hls_discontinuity_segment_t;
+
 
 /**
  *
@@ -54,6 +67,7 @@ typedef struct hls_segment {
   int64_t hs_ts_offset;
 
   int hs_seq;
+  hls_discontinuity_segment_t *hs_discontinuity_segment;
 
   uint8_t hs_crypto;
   uint8_t hs_open_error;
@@ -63,14 +77,13 @@ typedef struct hls_segment {
 
   struct hls_variant *hs_variant;
 
-  int64_t hs_opened_at;
-  int hs_block_cnt;
-
-  char hs_unavailable;
-  char hs_discontinuity;
+  char hs_permanent_error;
   char hs_mark;
 
   fa_handle_t *hs_fh;
+
+  int64_t hs_open_time;
+  int hs_blocked_counter;
 
 } hls_segment_t;
 
@@ -79,10 +92,13 @@ typedef enum {
   HLS_ERROR_OK = 0,
   HLS_ERROR_SEGMENT_NOT_FOUND,
   HLS_ERROR_SEGMENT_BROKEN,
+  HLS_ERROR_SEGMENT_ACCESS_DENIED,
   HLS_ERROR_SEGMENT_BAD_KEY,
   HLS_ERROR_VARIANT_PROBE_ERROR,
   HLS_ERROR_VARIANT_NO_VIDEO,
   HLS_ERROR_VARIANT_UNKNOWN_AUDIO,
+  HLS_ERROR_VARIANT_EMPTY,
+  HLS_ERROR_VARIANT_NOT_FOUND,
 } hls_error_t;
 
 
@@ -106,9 +122,12 @@ typedef struct hls_variant {
   int hv_first_seq;
 
   struct hls_segment_queue hv_segments;
+  struct hls_segment *hv_segment_search;
 
   char hv_frozen;
   char hv_audio_only;
+  char hv_initial;
+
   int hv_h264_profile;
   int hv_h264_level;
   int hv_target_duration;
@@ -116,7 +135,6 @@ typedef struct hls_variant {
   time_t hv_loaded; /* last time it was loaded successfully
                      *  0 means not loaded
                      */
-
   int hv_program;
   int hv_bitrate;
 
@@ -124,10 +142,8 @@ typedef struct hls_variant {
   int hv_height;
 
   int hv_corrupt_counter;
-
-#define HV_CORRUPT_LIMIT 3 /* If corrupt_counter >= this, we never consider
-			    * this variant again
-			    */
+  int hv_corruptions_last_period;
+  int64_t hv_corrupt_timer; // When period above started
 
   char *hv_subs_group;
   char *hv_audio_group;
@@ -152,6 +168,8 @@ typedef struct hls_variant {
   char hv_name[32];
 
   int hv_audio_stream;
+  
+  int64_t hv_start_time_offset;
 
 } hls_variant_t;
 
@@ -167,16 +185,25 @@ typedef struct hls_demuxer {
   hls_variant_t *hd_req;
 
   int hd_bw;
+  int hd_bw_updated;
+  int64_t hd_download_counter_reset_at;
+  int64_t hd_download_counter;
+  int64_t hd_download_counter2;
+  int hd_download_blocked;
 
   int hd_current_stream;
+  int hd_pending_stream;
 
   media_codec_t *hd_audio_codec;
 
-  time_t hd_last_switch;
+  int64_t hd_last_switch;
 
   cancellable_t *hd_cancellable;
 
   struct hls *hd_hls;
+
+  // When set, nothing seems to be working, bail out
+  int hd_no_functional_streams;
 
   /** Used to find segment to seek to, will be reset to PTS_UNSET
    * once the segment has been found. After the correct segment has
@@ -187,9 +214,14 @@ typedef struct hls_demuxer {
 
   media_buf_t *hd_mb;
 
+  int hd_discontinuity;
+  int hd_discontinuity_seq;
+
+  int64_t hd_last_dts;
+
 } hls_demuxer_t;
 
-
+LIST_HEAD(hls_discontinuity_segment_list, hls_discontinuity_segment);
 
 /**
  *
@@ -215,15 +247,15 @@ typedef struct hls {
   char h_sub_scanning_done;
   char h_enqueued_something;
 
-  event_t *h_exit_event;
-  int64_t h_pending_seek;
-
-  hts_mutex_t h_mutex;
-  hts_cond_t h_cond;
-
   int64_t h_duration;  // Total duration (if known)
 
   struct hls_audio_track_list h_audio_tracks;
+
+  int h_last_enqueued_seq;
+
+  struct hls_discontinuity_segment_list h_discontinuity_segments;
+
+  hls_error_t h_last_error;
 
 } hls_t;
 
@@ -233,7 +265,8 @@ typedef struct hls_audio_track {
   LIST_ENTRY(hls_audio_track) hat_link;
   int hat_stream_id;
   int hat_pid;
-  char *hat_id;
+  char *hat_mux_id;
+  prop_t *hat_trackprop;
 } hls_audio_track_t;
 
 
@@ -241,7 +274,6 @@ typedef struct hls_audio_track {
     if((h)->h_debug)                                            \
       TRACE(TRACE_DEBUG, "HLS", x, ##__VA_ARGS__);		\
   } while(0)
-
 
 hls_error_t hls_segment_open(hls_segment_t *hs);
 
@@ -251,22 +283,20 @@ void hls_variant_open(hls_variant_t *hv);
 
 void hls_variant_close(hls_variant_t *hv);
 
-int hls_variant_update(hls_variant_t *hv, time_t now);
-
-hls_variant_t *hls_demuxer_select_variant(hls_demuxer_t *hd);
-
-int hls_check_bw_switch(hls_demuxer_t *hd, time_t now);
+void hls_check_bw_switch(hls_demuxer_t *hd);
 
 hls_variant_t *hls_select_default_variant(hls_demuxer_t *hd);
 
 
-hls_segment_t *hls_variant_select_next_segment(hls_variant_t *hv, time_t now);
+hls_segment_t *hls_variant_select_next_segment(hls_variant_t *hv);
 
 int hls_get_audio_track(hls_t *h, int pid, const char *name,
                         const char *language,
                         const char *fmt, int autosel);
 
-hls_segment_t *hv_find_segment_by_seq(const hls_variant_t *hv, int seq);
+hls_segment_t *hv_find_segment_by_seq(hls_variant_t *hv, int seq);
+
+void hls_bad_variant(hls_variant_t *hv, hls_error_t err);
 
 // TS demuxer
 

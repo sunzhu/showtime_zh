@@ -39,6 +39,7 @@
 #include "misc/str.h"
 #include "i18n.h"
 #include "metadata/playinfo.h"
+#include "usage.h"
 
 #if ENABLE_METADATA
 #include "fa_probe.h"
@@ -192,6 +193,8 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
     }
   }
 
+  const int64_t offset = fctx->start_time != PTS_UNSET ? fctx->start_time : 0;
+
   while(1) {
     /**
      * Need to fetch a new packet ?
@@ -280,9 +283,8 @@ video_player_loop(AVFormatContext *fctx, media_codec_t **cwvec,
       mb->mb_stream = pkt.stream_index;
 
       if(mb->mb_data_type == MB_VIDEO) {
-	mb->mb_drive_clock = 1;
-        if(fctx->start_time != AV_NOPTS_VALUE)
-          mb->mb_delta = fctx->start_time;
+	mb->mb_drive_clock = 2;
+        mb->mb_user_time = offset;
       }
 
       mb->mb_keyframe = !!(pkt.flags & AV_PKT_FLAG_KEY);
@@ -512,6 +514,11 @@ be_file_playvideo(const char *url, media_pipe_t *mp,
 
   prop_set(mp->mp_prop_root, "loading", PROP_SET_INT, 1);
 
+  if(!(va.flags & BACKEND_VIDEO_NO_AUDIO))
+    mp_become_primary(mp);
+
+  prop_set(mp->mp_prop_root, "type", PROP_SET_STRING, "video");
+
 #if ENABLE_DVD && ENABLE_METADATA
   if(va.mimetype == NULL) {
     struct fa_stat fs;
@@ -645,6 +652,7 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
     return NULL;
   }
 
+  usage_event("Play video", 1, USAGE_SEG("format", fctx->iformat->name));
 
   mp->mp_audio.mq_stream = -1;
   mp->mp_video.mq_stream = -1;
@@ -807,8 +815,6 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
     }
   }
 
-  mp->mp_start_time = fctx->start_time;
-
   int flags = MP_CAN_PAUSE;
 
   if(fctx->duration != PTS_UNSET)
@@ -816,9 +822,6 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
 
   // Start it
   mp_configure(mp, flags, MP_BUFFER_DEEP, fctx->duration, "video");
-
-  if(!(va.flags & BACKEND_VIDEO_NO_AUDIO))
-    mp_become_primary(mp);
 
   seek_index_t *si = build_index(mp, fctx, url);
   seek_index_t *ci = build_chapters(mp, fctx, url);
@@ -835,8 +838,6 @@ be_file_playvideo_fh(const char *url, media_pipe_t *mp,
   seek_index_destroy(ci);
 
   TRACE(TRACE_DEBUG, "Video", "Stopped playback of %s", url);
-
-  mp->mp_start_time = 0;
 
   mp_shutdown(mp);
 

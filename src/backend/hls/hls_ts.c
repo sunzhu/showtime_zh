@@ -91,6 +91,7 @@ typedef struct ts_es {
 
   char te_logged_ts;
   char te_logged_keyframe;
+  int te_logged_info;
 
   int64_t te_pts;
   int64_t te_dts;
@@ -106,6 +107,9 @@ typedef struct ts_es {
   int te_current_seq;
 
   int64_t te_ts_offset;
+
+  int te_last_seq;
+
 } ts_es_t;
 
 
@@ -115,9 +119,10 @@ typedef struct ts_es {
 static void
 td_flush_packets(ts_demuxer_t *td)
 {
-  media_buf_t *mb, *next;
-  for(mb = TAILQ_FIRST(&td->td_packets); mb != NULL; mb = next) {
-    next = TAILQ_NEXT(mb, mb_link);
+  media_buf_t *mb;
+
+  while((mb = TAILQ_FIRST(&td->td_packets)) != NULL) {
+    TAILQ_REMOVE(&td->td_packets, mb, mb_link);
     media_buf_free_unlocked(td->td_mp, mb);
   }
 }
@@ -127,7 +132,7 @@ td_flush_packets(ts_demuxer_t *td)
  *
  */
 static void
-te_destroy(ts_es_t *te, media_pipe_t *mp)
+te_destroy(ts_es_t *te)
 {
   LIST_REMOVE(te, te_link);
   free(te->te_buf);
@@ -161,7 +166,7 @@ ts_demuxer_destroy(ts_demuxer_t *td)
   td_flush_packets(td);
 
   while((te = LIST_FIRST(&td->td_elemtary_streams)) != NULL)
-    te_destroy(te, td->td_mp);
+    te_destroy(te);
 
   while((tss = LIST_FIRST(&td->td_services)) != NULL)
     tss_destroy(tss);
@@ -289,6 +294,8 @@ find_es(ts_demuxer_t *td, uint16_t pid, int create)
   if(create) {
     te = calloc(1, sizeof(ts_es_t));
     te->te_pid = pid;
+    te->te_pts = PTS_UNSET;
+    te->te_dts = PTS_UNSET;
     LIST_INSERT_HEAD(&td->td_elemtary_streams, te, te_link);
   }
   return te;
@@ -323,10 +330,11 @@ handle_pmt(void *opaque, const uint8_t *ptr, int len)
 {
   ts_service_t *tss = opaque;
   ts_demuxer_t *td = tss->tss_demuxer;
-  hls_t *h = td->td_hd->hd_hls;
+  hls_demuxer_t *hd = td->td_hd;
+  hls_t *h = hd->hd_hls;
   int pid;
   int dllen;
-  uint8_t dlen, estype;
+  uint8_t dlen, estype, dtag;
 
   if(len < 9) {
     return;
@@ -358,32 +366,68 @@ handle_pmt(void *opaque, const uint8_t *ptr, int len)
     ptr += 5;
     len -= 5;
 
+    char langbuf[4] = {0};
+    const char *lang = NULL;
+
     while(dllen > 1) {
-      //      dtag = ptr[0];
+      dtag = ptr[0];
       dlen = ptr[1];
 
       len -= 2; ptr += 2; dllen -= 2;
+
       if(dlen > len)
 	break;
+
+      switch(dtag) {
+      case 0xa:
+        if(dlen >= 3) {
+          memcpy(langbuf, ptr, 3);
+          lang = langbuf;
+          break;
+        }
+      }
       len -= dlen; ptr += dlen; dllen -= dlen;
     }
 
     ts_es_t *te = find_es(td, pid, 1);
-
+    const char *name = NULL;
     if(te->te_codec == NULL) {
 
+      const char *muxid;
+      int hat_pid;
+      if(hd == &h->h_primary) {
+        muxid = NULL;
+        hat_pid = pid;
+      } else {
+        muxid = hd->hd_current->hv_url;
+        hat_pid = 0;
+      }
       switch(estype) {
+      case 0x15:
+        name = "data";
+        break;
+
       case 0x1b:
         te->te_codec = media_codec_ref(td->td_hd->hd_hls->h_codec_h264);
         te->te_data_type = MB_VIDEO;
         te->te_stream = 0;
+        name = "h264";
         break;
 
       case 0x0f:
         te->te_codec = media_codec_create(AV_CODEC_ID_AAC, 1, NULL, NULL, NULL,
                                           td->td_mp);
         te->te_data_type = MB_AUDIO;
-        te->te_stream = hls_get_audio_track(h, pid, NULL, NULL, "AAC", 1);
+        te->te_stream = hls_get_audio_track(h, hat_pid, muxid, lang, "AAC", 1);
+        name = "AAC";
+        break;
+
+      case 0x81:
+        te->te_codec = media_codec_create(AV_CODEC_ID_AC3, 1, NULL, NULL, NULL,
+                                          td->td_mp);
+        te->te_data_type = MB_AUDIO;
+        te->te_stream = hls_get_audio_track(h, hat_pid, muxid, lang, "AC3", 1);
+        name = "AC3";
         break;
 
       case 0x03:
@@ -391,11 +435,25 @@ handle_pmt(void *opaque, const uint8_t *ptr, int len)
         te->te_codec = media_codec_create(AV_CODEC_ID_MP3, 1, NULL, NULL, NULL,
                                           td->td_mp);
         te->te_data_type = MB_AUDIO;
-        te->te_stream = hls_get_audio_track(h, pid, NULL, NULL, "MP3", 1);
+        te->te_stream = hls_get_audio_track(h, hat_pid, muxid, lang, "MP3", 1);
+        name = "MP3";
         break;
 
       default:
         break;
+      }
+    }
+
+    if(!te->te_logged_info) {
+      te->te_logged_info = 1;
+
+      if(name == NULL) {
+        TRACE(TRACE_ERROR, "HLS", "Unsupported estype 0x%x on pid %d in %s",
+              estype, pid, td->td_hd->hd_type);
+      } else {
+        HLS_TRACE(h, "New %s TS PID %d type %s (0x%x) stream=%d",
+                  td->td_hd->hd_type, pid, name ? name : "<unknown>", estype,
+                  te->te_stream);
       }
     }
   }
@@ -458,8 +516,9 @@ parse_pes_header(ts_es_t *te, const uint8_t *buf, size_t len)
     te->te_dts = getpts(buf + 5);
 
     d = (te->te_pts - te->te_dts) & PTS_MASK;
-    if(d > 180000) // More than two seconds of PTS/DTS delta, probably corrupt
-      te->te_dts = te->te_pts = PTS_UNSET;
+    if(d > 180000)
+      // More than two seconds of PTS/DTS delta, PTS is probably corrupt
+      te->te_pts = PTS_UNSET;
 
   } else if((flags & 0xc0) == 0x80) {
     if(hlen < 5)
@@ -541,66 +600,115 @@ probe_duration(ts_es_t *te, uint8_t *data, int size)
 static void
 enqueue_packet(ts_demuxer_t *td, const void *data, int len,
                int64_t dts, int64_t pts, int keyframe,
-               hls_segment_t *hs, int seq, ts_es_t *te)
+               hls_segment_t *hs, int seq, ts_es_t *te,
+               hls_demuxer_t *hd)
 {
-  int64_t ts_offset;
+  hls_t *h = td->td_hd->hd_hls;
 
   dts = rescale(dts);
   pts = rescale(pts);
 
-  if(hs == NULL) {
-    ts_offset = te->te_ts_offset;
-  } else {
+  int64_t user_time = PTS_UNSET;
+  int drive_clock = 0;
 
-    if(unlikely(hs->hs_ts_offset == PTS_UNSET)) {
+  if(hs != NULL) {
+    hls_discontinuity_segment_t *hds = hs->hs_discontinuity_segment;
 
-      if(!hs->hs_discontinuity) {
-        // Not a discontinuity, just steal offset from previous segment
-        hls_segment_t *prev = TAILQ_PREV(hs, hls_segment_queue, hs_link);
-        if(prev != NULL)
-          hs->hs_ts_offset = prev->hs_ts_offset;
-      }
-
-      if(hs->hs_ts_offset == PTS_UNSET && dts != PTS_UNSET) {
-
-        hs->hs_ts_offset = dts - hs->hs_time_offset;
-#if 0
-        printf("TS offset for seq %d: %"PRId64" - %"PRId64" = %"PRId64"\n",
-               hs->hs_seq, dts, hs->hs_time_offset, hs->hs_ts_offset);
-#endif
-        hls_segment_t *next;
-
-        for(next = TAILQ_NEXT(hs, hs_link) ;
-            next != NULL && !next->hs_discontinuity ;
-            next = TAILQ_NEXT(next, hs_link)) {
-          next->hs_ts_offset = hs->hs_ts_offset;
-        }
-      }
+    // Compute user time
+    if(pts != PTS_UNSET) {
 
       if(hs->hs_ts_offset == PTS_UNSET) {
-        return;
+#if 0
+        if(te->te_data_type == MB_VIDEO)
+          printf("%s: segment %d get ts offset %ld\n",
+                 hs->hs_variant->hv_name, hs->hs_seq, pts);
+#endif
+        hs->hs_ts_offset = pts;
+      }
+
+      user_time = hs->hs_time_offset + MAX(pts - hs->hs_ts_offset, 0);
+#if 0
+      if(te->te_data_type == MB_VIDEO)
+        printf("%d: %ld = %ld + (%ld - %ld = %ld)\n",
+               hs->hs_seq,
+               mb->mb_user_time, hs->hs_time_offset, pts, hs->hs_ts_offset,
+               pts - hs->hs_ts_offset);
+#endif
+      drive_clock = te->te_data_type == MB_VIDEO;
+    }
+
+    if(hds->hds_offset == PTS_UNSET) {
+      if(dts != PTS_UNSET) {
+        if(hd->hd_last_dts != PTS_UNSET) {
+          hds->hds_offset = hd->hd_last_dts - dts;
+        } else {
+          hds->hds_offset = 0;
+        }
+        HLS_TRACE(h, "Discontinuity segment %d gets "
+                  "timestamp offset: %"PRId64, hds->hds_seq, hds->hds_offset);
       }
     }
-    ts_offset = te->te_ts_offset = hs->hs_ts_offset;
+
+    if(hds->hds_offset != PTS_UNSET) {
+
+      if(dts != PTS_UNSET) {
+        dts += hds->hds_offset;
+        hd->hd_last_dts = dts;
+      }
+
+      if(pts != PTS_UNSET)
+        pts += hds->hds_offset;
+
+
+    } else {
+      pts = PTS_UNSET;
+      dts = PTS_UNSET;
+    }
+  } else {
+    pts = PTS_UNSET;
+    dts = PTS_UNSET;
+  }
+
+  if(te->te_sample_rate == 0) {
+
+    media_pipe_t *mp = td->td_mp;
+    media_queue_t *mq;
+
+    if(te->te_data_type == MB_VIDEO) {
+      mq = &mp->mp_video;
+    } else {
+      mq = &mp->mp_audio;
+    }
+
+    if(!(mq->mq_demuxer_flags & HLS_QUEUE_KEYFRAME_SEEN)) {
+      if(dts == PTS_UNSET)
+        return;
+      if(!keyframe)
+        return;
+    }
   }
 
   media_buf_t *mb = media_buf_alloc_unlocked(td->td_mp, len);
   memcpy(mb->mb_data, data, len);
-  mb->mb_dts = dts == PTS_UNSET ? PTS_UNSET : dts - ts_offset;
-  mb->mb_pts = pts == PTS_UNSET ? PTS_UNSET : pts - ts_offset;
+  mb->mb_user_time = user_time;
+  mb->mb_dts = dts;
+  mb->mb_pts = pts;
+  mb->mb_drive_clock = drive_clock;
+
   mb->mb_cw = media_codec_ref(te->te_codec);
   mb->mb_data_type = te->te_data_type;
   mb->mb_keyframe = keyframe;
   mb->mb_sequence = seq;
-  mb->mb_epoch = td->td_mp->mp_epoch;
-  mb->mb_drive_clock = te->te_data_type == MB_VIDEO;
 
   if(mb->mb_keyframe && !te->te_logged_keyframe) {
     te->te_logged_keyframe = 1;
-    TRACE(TRACE_DEBUG, "HLS", "%s        keyframe %20lld:%20lld\n",
-          te->te_data_type == MB_VIDEO ? "VIDEO" : "AUDIO",
-          te->te_codec->parser_ctx->dts,
-          te->te_codec->parser_ctx->pts);
+    HLS_TRACE(h,
+              "%s        keyframe %20lld:%20lld demuxer:%s stream:%d\n",
+              te->te_data_type == MB_VIDEO ? "VIDEO" : "AUDIO",
+              te->te_codec->parser_ctx->dts,
+              te->te_codec->parser_ctx->pts,
+              hd->hd_type,
+              te->te_stream);
   }
 
   mb->mb_stream = te->te_stream;
@@ -615,13 +723,12 @@ static void
 parse_data(ts_demuxer_t *td, hls_variant_t *hv, ts_es_t *te,
            const uint8_t *data, int size)
 {
-  media_pipe_t *mp = td->td_mp;
   media_codec_t *mc = te->te_codec;
 
   if(mc == NULL)
     return;
 
-  while(size > 0) {
+  while(size > 0 || data == NULL) {
 
     uint8_t *outbuf;
     int outlen;
@@ -638,27 +745,15 @@ parse_data(ts_demuxer_t *td, hls_variant_t *hv, ts_es_t *te,
       int     seq        = mc->parser_ctx->pos;
       const int keyframe = mc->parser_ctx->key_frame;
 
-      hls_segment_t *hs =
-        hv->hv_frozen ? hv_find_segment_by_seq(hv, seq) : NULL;
+      if(seq == -1)
+        seq = te->te_last_seq;
+      else
+        te->te_last_seq = seq;
 
-
-      media_queue_t *mq;
-
-      if(te->te_data_type == MB_VIDEO) {
-        mq = &mp->mp_video;
-      } else {
-        mq = &mp->mp_audio;
-      }
-
-      if(!(mq->mq_demuxer_flags & HLS_QUEUE_KEYFRAME_SEEN)) {
-        if(dts == PTS_UNSET)
-          goto skip; // We really need a keyframe with a DTS set
-        if(!keyframe)
-          goto skip;
-      }
+      hls_segment_t *hs  = hv != NULL ? hv_find_segment_by_seq(hv, seq) : NULL;
 
       if(te->te_probe_frame) {
-        // Need to find actual duration be decoding a frame
+        // Need to find actual duration by decoding a frame
         probe_duration(te, outbuf, outlen);
       }
 
@@ -669,69 +764,42 @@ parse_data(ts_demuxer_t *td, hls_variant_t *hv, ts_es_t *te,
         dts = pts = te->te_bts + ts;
       }
 
-      enqueue_packet(td, outbuf, outlen, dts, pts, keyframe, hs, seq, te);
+
+      enqueue_packet(td, outbuf, outlen, dts, pts, keyframe, hs, seq, te,
+                     td->td_hd);
     }
-  skip:
 
     te->te_pts = PTS_UNSET;
     te->te_dts = PTS_UNSET;
+
+    if(data == NULL) {
+      if(outlen == 0)
+        return;
+      continue;
+    }
+
     data += rlen;
     size -= rlen;
   }
 }
 
 
-static int
-h264_check_keyframe(const uint8_t *p, int len)
-{
-  return (p[0] & 0x1f) == 0x5;
-}
-
-static int
-is_h264_keyframe(const uint8_t *d, int len)
-{
-  const uint8_t *p = NULL;
-  int is_keyframe = 0;
-
-  len = MIN(len, 1024);
-
-  while(len > 3 && !is_keyframe) {
-    if(!(d[0] == 0 && d[1] == 0 && d[2] == 1)) {
-      d++;
-      len--;
-      continue;
-    }
-
-    if(p != NULL) {
-      is_keyframe |= h264_check_keyframe(p, d - p);
-    }
-
-    d += 3;
-    len -= 3;
-    p = d;
-  }
-  d += len;
-
-  if(p != NULL)
-    is_keyframe |= h264_check_keyframe(p, d - p);
-
-  return is_keyframe;
-}
-
-
-
 /**
  *
  */
 static void
-parse_h264(ts_demuxer_t *td, ts_es_t *te, const uint8_t *data, int size,
-           hls_segment_t *hs)
+drain_parsers(ts_demuxer_t *td)
 {
-  int keyframe = is_h264_keyframe(data, size);
+  ts_es_t *te;
+  while((te = LIST_FIRST(&td->td_elemtary_streams)) != NULL) {
 
-  enqueue_packet(td, data, size, te->te_dts, te->te_pts, keyframe, hs,
-                 hs->hs_seq, te);
+    if(te->te_codec != NULL)
+      parse_data(td, NULL, te, NULL, 0);
+
+    te_destroy(te);
+  }
 }
+
 
 /**
  *
@@ -754,18 +822,21 @@ emit_packet(ts_es_t *te, ts_demuxer_t *td, hls_segment_t *hs)
 
   if(!te->te_logged_ts && te->te_pts != PTS_UNSET) {
     te->te_logged_ts = 1;
-    TRACE(TRACE_DEBUG, "HLS", "%s First timestamp %20lld:%20lld\n",
-          te->te_data_type == MB_VIDEO ? "VIDEO" : "AUDIO",
-          te->te_dts, te->te_pts);
+    HLS_TRACE(hs->hs_variant->hv_demuxer->hd_hls,
+              "%s First timestamp %20lld:%20lld\n",
+              te->te_data_type == MB_VIDEO ? "VIDEO" : "AUDIO",
+              te->te_dts, te->te_pts);
   }
 
   data += hlen;
   size -= hlen;
 
 
+#if 0 // Not in use
   if(te->te_data_type == MB_VIDEO && 0)
-    parse_h264(td, te, data, size, hs);
+    parse_h264(td, te, data, size, hs, hv);
   else
+#endif
     parse_data(td, hs->hs_variant, te, data, size);
 }
 
@@ -868,6 +939,7 @@ hls_ts_demuxer_close(hls_variant_t *hv)
   ts_demuxer_destroy(td);
   hv->hv_demuxer_private = NULL;
   hv->hv_demuxer_close = NULL;
+  hv->hv_demuxer_flush = NULL;
 }
 
 
@@ -884,10 +956,16 @@ hls_ts_demuxer_flush(hls_variant_t *hv)
     media_codec_t *mc = te->te_codec;
     if(mc == NULL)
       continue;
-
     av_parser_close(mc->parser_ctx);
     mc->parser_ctx = av_parser_init(mc->codec_id);
+
+    te->te_packet_size = 0;
+    te->te_pts = PTS_UNSET;
+    te->te_dts = PTS_UNSET;
+    te->te_last_seq = 0;
   }
+  td_flush_packets(td);
+
 }
 
 
@@ -970,38 +1048,6 @@ probe_non_muxed(ts_demuxer_t *td, const uint8_t *data, int size,
 /**
  *
  */
-static const char *hlserrstr[] = {
-  [HLS_ERROR_SEGMENT_NOT_FOUND]     = "Segment not found",
-  [HLS_ERROR_SEGMENT_BROKEN]        = "Unable to open segment",
-  [HLS_ERROR_SEGMENT_BAD_KEY]       = "Unable to get encryption key",
-  [HLS_ERROR_VARIANT_PROBE_ERROR]   = "Probing error",
-  [HLS_ERROR_VARIANT_NO_VIDEO]      = "No video",
-  [HLS_ERROR_VARIANT_UNKNOWN_AUDIO] = "Unknown audio codec",
-};
-
-
-/**
- *
- */
-static void
-bad_variant(hls_variant_t *hv, hls_error_t err)
-{
-  hls_demuxer_t *hd = hv->hv_demuxer;
-  hls_t *h = hd->hd_hls;
-
-  HLS_TRACE(h, "Unable to demux variant %s -- %s",
-            hv->hv_name, hlserrstr[err]);
-  hv->hv_corrupt_counter++;
-  hls_variant_close(hv);
-
-  hd->hd_req = hls_demuxer_select_variant(hd);
-  hd->hd_last_switch = time(NULL);
-}
-
-
-/**
- *
- */
 media_buf_t *
 hls_ts_demuxer_read(hls_demuxer_t *hd)
 {
@@ -1015,9 +1061,7 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
 
     assert(hd->hd_current != NULL);
 
-    time_t now = time(NULL); // Bad
-
-    hls_check_bw_switch(hd, now);
+    hls_check_bw_switch(hd);
 
     if(hd->hd_req != NULL) {
 
@@ -1078,9 +1122,7 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
       hls_segment_t *hs;
       while(1) {
 
-        now = time(NULL);
-
-        hs = hls_variant_select_next_segment(hv, now);
+        hs = hls_variant_select_next_segment(hv);
 
         if(hs == HLS_NYA)
           continue;
@@ -1093,9 +1135,9 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
 
         hls_variant_open(hv);
 
-        HLS_TRACE(h, "%s: Opening variant %s sequence %d discontinuity:%s",
+        HLS_TRACE(h, "%s: Opening variant %s sequence %d discontinuity-seq:%d",
                   hd->hd_type, hv->hv_name, hs->hs_seq,
-                  hs->hs_discontinuity ? "Yes" : "No");
+                  hs->hs_discontinuity_segment->hds_seq);
 
         break;
       }
@@ -1107,7 +1149,7 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
         assert(hs != NULL);
         hls_error_t err = hls_segment_open(hs);
 
-        if(h->h_exit_event != NULL || hd->hd_seek_to_segment != PTS_UNSET) {
+        if(cancellable_is_cancelled(hd->hd_cancellable)) {
           hls_segment_close(hs);
           hv->hv_current_seg = NULL;
           return NULL;
@@ -1131,7 +1173,7 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
         }
 
         if(err) {
-          bad_variant(hv, err);
+          hls_bad_variant(hv, err);
           return NULL;
         }
         hv->hv_current_seg = hs;
@@ -1144,6 +1186,19 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
 
     hls_segment_t *hs = hv->hv_current_seg;
     int r;
+    int hds = hs->hs_discontinuity_segment->hds_seq;
+
+    if(hds != hd->hd_discontinuity_seq) {
+      drain_parsers(td);
+      hd->hd_discontinuity_seq = hds;
+      //      hd->hd_discontinuity = 1;
+    }
+
+#if 0
+    if(hd->hd_discontinuity) {
+      return HLS_DIS;
+    }
+#endif
 
     switch(td->td_mux_mode) {
 
@@ -1155,12 +1210,17 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
         r = fa_read(hs->hs_fh,
                     td->td_buf + td->td_buf_bytes,
                     sizeof(td->td_buf) - td->td_buf_bytes);
+
+        if(cancellable_is_cancelled(hd->hd_cancellable))
+          return NULL;
+
         if(r <= 0) {
-          bad_variant(hv, HLS_ERROR_VARIANT_PROBE_ERROR);
+          hls_bad_variant(hv, HLS_ERROR_VARIANT_PROBE_ERROR);
           return NULL;
         }
 
         td->td_buf_bytes += r;
+        hd->hd_download_counter += r;
       }
 
       // Search stream for TS mux lock, we want two continous packets
@@ -1175,6 +1235,7 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
       if(i != sizeof(td->td_buf) - 188 * 2) {
 
         td->td_mux_mode = TD_MUX_MODE_TS;
+        HLS_TRACE(h, "Variant %s is a transport stream", hv->hv_name);
 
         while(i <= sizeof(td->td_buf) - 188) {
           process_tsb(td, td->td_buf + i, hs);
@@ -1191,12 +1252,12 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
 
 
       if(hd == &h->h_primary) {
-        bad_variant(hv, HLS_ERROR_VARIANT_NO_VIDEO);
+        hls_bad_variant(hv, HLS_ERROR_VARIANT_NO_VIDEO);
         return NULL;
       }
 
       if(probe_non_muxed(td, td->td_buf, sizeof(td->td_buf), hs)) {
-        bad_variant(hv, HLS_ERROR_VARIANT_UNKNOWN_AUDIO);
+        hls_bad_variant(hv, HLS_ERROR_VARIANT_UNKNOWN_AUDIO);
         return NULL;
       }
 
@@ -1207,6 +1268,9 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
     case TD_MUX_MODE_RAW:
       r = fa_read(hs->hs_fh, td->td_buf, sizeof(td->td_buf));
 
+      if(cancellable_is_cancelled(hd->hd_cancellable))
+        return NULL;
+
       if(r < 0)
         return HLS_EOF;
 
@@ -1214,6 +1278,7 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
         hls_segment_close(hs);
         continue;
       }
+      hd->hd_download_counter += r;
 
       unmuxed_input(td, td->td_buf, r, hs);
       break;
@@ -1225,6 +1290,9 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
                   td->td_buf + td->td_buf_bytes,
                   188 - td->td_buf_bytes);
 
+      if(cancellable_is_cancelled(hd->hd_cancellable))
+        return NULL;
+
       if(r < 0)
         return HLS_EOF;
 
@@ -1234,6 +1302,7 @@ hls_ts_demuxer_read(hls_demuxer_t *hd)
       }
 
       td->td_buf_bytes += r;
+      hd->hd_download_counter += r;
 
       if(td->td_buf_bytes == 188) {
         td->td_buf_bytes = 0;

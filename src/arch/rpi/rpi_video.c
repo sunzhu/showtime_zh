@@ -72,6 +72,27 @@ rpi_video_port_settings_changed(omx_component_t *oc)
     }
   }
 
+  OMX_CONFIG_INTERLACETYPE interlace;
+  OMX_INIT_STRUCTURE(interlace);
+  interlace.nPortIndex = 131;
+  if(OMX_GetConfig(oc->oc_handle, OMX_IndexConfigCommonInterlace,
+                   &interlace) == OMX_ErrorNone) {
+
+    switch(interlace.eMode) {
+    default:
+      break;
+    case OMX_InterlaceFieldsInterleavedUpperFirst:
+      fi->fi_tff = 1;
+      fi->fi_interlaced = 1;
+      TRACE(TRACE_DEBUG, "VideoCore", "Interlaced picture top-field-first");
+      break;
+    case OMX_InterlaceFieldsInterleavedLowerFirst:
+      fi->fi_interlaced = 1;
+      TRACE(TRACE_DEBUG, "VideoCore", "Interlaced picture bottom-field-first");
+      break;
+    }
+  }
+
   OMX_PARAM_PORTDEFINITIONTYPE port_image;
   OMX_INIT_STRUCTURE(port_image);
   port_image.nPortIndex = 131;
@@ -79,10 +100,11 @@ rpi_video_port_settings_changed(omx_component_t *oc)
   if(OMX_GetParameter(oc->oc_handle, OMX_IndexParamPortDefinition,
 		      &port_image) == OMX_ErrorNone) {
     char codec_info[64];
-    snprintf(codec_info, sizeof(codec_info), "%s %dx%dp (VideoCore)", 
+    snprintf(codec_info, sizeof(codec_info), "%s %dx%d%c (VideoCore)", 
 	     rvc->rvc_name,
 	     port_image.format.video.nFrameWidth,
-	     port_image.format.video.nFrameHeight);
+	     port_image.format.video.nFrameHeight,
+             fi->fi_interlaced ? 'i' : 'p');
     prop_set_string(mp->mp_video.mq_prop_codec, codec_info);
     TRACE(TRACE_DEBUG, "VideoCore",
 	  "Video decoder output port settings changed to %s (SAR: %d:%d)",
@@ -158,7 +180,20 @@ rpi_codec_decode_locked(struct media_codec *mc, struct video_decoder *vd,
   int domark = 1;
 
   OMX_BUFFERHEADERTYPE *q = NULL, **pq = &q, *buf;
-
+#if 1
+  printf("FRAME\t");
+  if(mb->mb_pts != PTS_UNSET) {
+    static int64_t last_pts;
+    printf("PTS %lld (%lld)", mb->mb_pts, mb->mb_pts - last_pts);
+    last_pts = mb->mb_pts;
+  }
+  if(mb->mb_dts != PTS_UNSET) {
+    static int64_t last_dts;
+    printf("   DTS %lld (%lld)", mb->mb_dts, mb->mb_dts - last_dts);
+    last_dts = mb->mb_dts;
+  }
+  printf("\n");
+#endif
   while(len > 0) {
     buf = oc->oc_avail;
     assert(buf != NULL);

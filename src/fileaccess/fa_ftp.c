@@ -278,7 +278,7 @@ fc_connect(const char *hostname, int port,
     snprintf(buf1, sizeof(buf1), "ftp://%s", hostname);
   fc->fc_url = strdup(buf1);
 
-  usage_inc_counter("ftpconnect", 1);
+  usage_event("FTP Client", 1, NULL);
 
   return fc;
 
@@ -560,7 +560,7 @@ ftp_list_dir(ftp_connection_t *fc, const char *path, fa_dir_t *fd)
  */
 static int
 ftp_scandir(fa_protocol_t *fap, fa_dir_t *fd,
-            const char *url, char *errbuf, size_t errlen)
+            const char *url, char *errbuf, size_t errlen, int flags)
 {
   ftp_file_t *ff = ftp_file_init(url, errbuf, errlen, 0);
   if(ff == NULL)

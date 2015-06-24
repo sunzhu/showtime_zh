@@ -40,20 +40,19 @@ static int vdec_h264_loaded;
 #define VDEC_DETAILED_DEBUG 0
 
 #define VDEC_SPU_PRIO 100
-#define VDEC_PPU_PRIO 1000
 
 LIST_HEAD(vdec_pic_list, vdec_pic);
 
 
 typedef struct pktmeta {
-  int64_t delta;
+  int64_t user_time;
   int epoch;
   char aspect_override;
   char skip : 1;
   char flush : 1; 
   char nopts : 1;
   char nodts : 1;
-  char drive_clock : 1;
+  char drive_clock : 2;
   char disable_deinterlacer : 1;
 } pktmeta_t;
 
@@ -537,7 +536,7 @@ picture_out(vdec_decoder_t *vdd)
   vp->fi.fi_epoch = pm->epoch;
   vp->fi.fi_prescaled = 0;
   vp->fi.fi_color_space = COLOR_SPACE_UNSET;
-  vp->fi.fi_delta = pm->delta;
+  vp->fi.fi_user_time = pm->user_time;
   vp->fi.fi_drive_clock = pm->drive_clock;
 
   vdec_get_picture(vdd->handle, &picfmt, rsx_to_ppu(vp->vp_offset[0]));
@@ -725,7 +724,7 @@ decoder_decode(struct media_codec *mc, struct video_decoder *vd,
   pm->skip = mb->mb_skip == 1;
   pm->flush = vdd->do_flush;
   vdd->do_flush = 0;
-  pm->delta = mb->mb_delta;
+  pm->user_time = mb->mb_user_time;
   pm->drive_clock = mb->mb_drive_clock;
   pm->aspect_override = mb->mb_aspect_override;
   pm->disable_deinterlacer = mb->mb_disable_deinterlacer;
@@ -956,7 +955,7 @@ video_ps3_vdec_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
   vdd->config.mem_addr = (intptr_t)vdd->mem;
   vdd->config.mem_size = dec_attr.mem_size;
   vdd->config.num_spus = spu_threads;
-  vdd->config.ppu_thread_prio = VDEC_PPU_PRIO;
+  vdd->config.ppu_thread_prio = THREAD_PRIO_VDEC;
   vdd->config.spu_thread_prio = VDEC_SPU_PRIO;
   vdd->config.ppu_thread_stack_size = 1 << 14;
 

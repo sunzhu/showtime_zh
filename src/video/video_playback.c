@@ -193,19 +193,37 @@ play_video(const char *url, struct media_pipe *mp,
 	snprintf(errbuf, errlen, "No backend for URL");
 	return NULL;
       }
+
       rstr_t *r = prop_get_string(p, "source", NULL);
-      prop_destroy(p);
       if(r != NULL) {
 	TRACE(TRACE_DEBUG, "vp", "Page %s redirects to video source %s\n",
 	      url, rstr_get(r));
 	event_t *e = play_video(rstr_get(r), mp, flags, priority,
 				errbuf, errlen, vq, parent_title, parent_url,
                                 origin, resume_mode);
+        prop_destroy(p);
 	rstr_release(r);
 	return e;
       }
-      snprintf(errbuf, errlen,
-	       "Page model for '%s' does not provide a video source", url);
+
+      rstr_t *type  = prop_get_string(p, "model", "type", NULL);
+      rstr_t *err   = prop_get_string(p, "model", "error", NULL);
+      rstr_t *title = prop_get_string(p, "model", "metadata", "title", NULL);
+
+      if(type != NULL && !strcmp(rstr_get(type), "openerror")) {
+
+        prop_set(mp->mp_prop_metadata, "title", PROP_SET_RSTRING, title);
+        snprintf(errbuf, errlen, "%s",
+                 err ? rstr_get(err) : "Unable to open URL");
+
+      } else {
+        snprintf(errbuf, errlen,
+                 "Page model for '%s' does not provide sufficient data", url);
+      }
+      rstr_release(type);
+      rstr_release(err);
+      rstr_release(title);
+      prop_destroy(p);
       return NULL;
 
     }
@@ -229,6 +247,34 @@ play_video(const char *url, struct media_pipe *mp,
     }
 
     canonical_url = htsmsg_get_str(m, "canonicalUrl");
+
+    // Metadata
+
+    if((str = htsmsg_get_str(m, "title")) != NULL) {
+      prop_set(mp->mp_prop_metadata, "title", PROP_SET_STRING, str);
+      va.title = str;
+    } else {
+      flags |= BACKEND_VIDEO_SET_TITLE;
+    }
+
+    uint32_t u32;
+    if(!htsmsg_get_u32(m, "year", &u32)) {
+      prop_set(mp->mp_prop_metadata, "year", PROP_SET_INT, u32);
+      va.year = u32;
+    }
+    if(!htsmsg_get_u32(m, "season", &u32)) {
+      prop_set(mp->mp_prop_metadata, "season", PROP_SET_INT, u32);
+      va.season = u32;
+    }
+    if(!htsmsg_get_u32(m, "episode", &u32)) {
+      prop_set(mp->mp_prop_metadata, "episode", PROP_SET_INT, u32);
+      va.episode = u32;
+    }
+
+
+    if((str = htsmsg_get_str(m, "imdbid")) != NULL)
+      va.imdb = str;
+
 
     // Sources
 
@@ -257,33 +303,6 @@ play_video(const char *url, struct media_pipe *mp,
       return NULL;
     }
   
-    // Other metadata
-
-    if((str = htsmsg_get_str(m, "title")) != NULL) {
-      prop_set(mp->mp_prop_metadata, "title", PROP_SET_STRING, str);
-      va.title = str;
-    } else {
-      flags |= BACKEND_VIDEO_SET_TITLE;
-    }
-
-    uint32_t u32;
-    if(!htsmsg_get_u32(m, "year", &u32)) {
-      prop_set(mp->mp_prop_metadata, "year", PROP_SET_INT, u32);
-      va.year = u32;
-    }
-    if(!htsmsg_get_u32(m, "season", &u32)) {
-      prop_set(mp->mp_prop_metadata, "season", PROP_SET_INT, u32);
-      va.season = u32;
-    }
-    if(!htsmsg_get_u32(m, "episode", &u32)) {
-      prop_set(mp->mp_prop_metadata, "episode", PROP_SET_INT, u32);
-      va.episode = u32;
-    }
-
-
-    if((str = htsmsg_get_str(m, "imdbid")) != NULL)
-      va.imdb = str;
-
 
     // Subtitles
 
@@ -670,8 +689,6 @@ video_player_idle(void *aux)
     if(play_url != NULL) {
       prop_set_void(errprop);
 
-      usage_inc_counter("playvideo", 1);
-
       int play_flags = play_flags_permanent;
 
       int resume_mode = VIDEO_RESUME_NO;
@@ -698,6 +715,7 @@ video_player_idle(void *aux)
             resume_mode == VIDEO_RESUME_NO  ? "no" : "ask user",
             resume_ctrl == RESUME_AS_GLOBAL_SETTING ? "" : " (overridden)");
 
+      prop_set(mp->mp_prop_metadata, "title", PROP_SET_VOID);
       e = play_video(rstr_get(play_url), mp,
 		     play_flags, play_priority,
 		     errbuf, sizeof(errbuf), vq,
@@ -705,9 +723,10 @@ video_player_idle(void *aux)
                      origin, resume_mode);
       mp_bump_epoch(mp);
       prop_set(mp->mp_prop_root, "loading", PROP_SET_INT, 0);
-      prop_set(mp->mp_prop_metadata, "title", PROP_SET_VOID);
       if(e == NULL) {
 	prop_set_string(errprop, errbuf);
+      } else {
+        prop_set(mp->mp_prop_metadata, "title", PROP_SET_VOID);
       }
     }
 
@@ -822,6 +841,7 @@ video_player_idle(void *aux)
     video_queue_destroy(vq);
   prop_ref_dec(origin);
   prop_ref_dec(errprop);
+  mp_shutdown(mp);
   mp_release(mp);
   return NULL;
 }

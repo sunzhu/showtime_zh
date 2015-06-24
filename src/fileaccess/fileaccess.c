@@ -404,7 +404,8 @@ fa_set_read_timeout(void *fh_, int ms)
  *
  */
 int
-fa_stat(const char *url, struct fa_stat *buf, char *errbuf, size_t errsize)
+fa_stat_ex(const char *url, struct fa_stat *buf, char *errbuf, size_t errsize,
+           int flags)
 {
   fa_protocol_t *fap;
   char *filename;
@@ -413,7 +414,9 @@ fa_stat(const char *url, struct fa_stat *buf, char *errbuf, size_t errsize)
   if((filename = fa_resolve_proto(url, &fap, NULL, errbuf, errsize)) == NULL)
     return -1;
 
-  r = fap->fap_stat(fap, filename, buf, errbuf, errsize, 0);
+  int non_interactive = !!(flags & FA_NON_INTERACTIVE);
+
+  r = fap->fap_stat(fap, filename, buf, errbuf, errsize, non_interactive);
   fap_release(fap);
   free(filename);
 
@@ -436,7 +439,7 @@ fa_scandir(const char *url, char *errbuf, size_t errsize)
 
   if(fap->fap_scan != NULL) {
     fd = fa_dir_alloc();
-    if(fap->fap_scan(fap, fd, filename, errbuf, errsize)) {
+    if(fap->fap_scan(fap, fd, filename, errbuf, errsize, 0)) {
       fa_dir_free(fd);
       fd = NULL;
     }
@@ -454,7 +457,8 @@ fa_scandir(const char *url, char *errbuf, size_t errsize)
  *
  */
 int
-fa_scandir2(fa_dir_t *fd, const char *url, char *errbuf, size_t errsize)
+fa_scandir2(fa_dir_t *fd, const char *url, char *errbuf, size_t errsize,
+            int flags)
 {
   fa_protocol_t *fap;
   char *filename;
@@ -464,7 +468,7 @@ fa_scandir2(fa_dir_t *fd, const char *url, char *errbuf, size_t errsize)
     return -1;
 
   if(fap->fap_scan != NULL) {
-    if(fap->fap_scan(fap, fd, filename, errbuf, errsize))
+    if(fap->fap_scan(fap, fd, filename, errbuf, errsize, flags))
       rval = -1;
 
   } else {
@@ -1507,6 +1511,8 @@ fa_load(const char *url, ...)
   int tag;
   loadarg_t *la;
   char **locationptr = NULL;
+  int *cache_info_ptr = NULL;
+  int *protocol_code = NULL;
 
   va_list ap;
   va_start(ap, url);
@@ -1582,6 +1588,14 @@ fa_load(const char *url, ...)
       locationptr = va_arg(ap, char **);
       break;
 
+    case FA_LOAD_TAG_CACHE_INFO:
+      cache_info_ptr = va_arg(ap, int *);
+      *cache_info_ptr = 0;
+      break;
+
+    case FA_LOAD_TAG_PROTOCOL_CODE:
+      protocol_code = va_arg(ap, int *);
+      break;
     default:
       abort();
     }
@@ -1628,6 +1642,8 @@ fa_load(const char *url, ...)
 	  free(etag);
           fap_release(fap);
           free(filename);
+          if(cache_info_ptr != NULL)
+            *cache_info_ptr = FA_CACHE_INFO_EXPIRED_FROM_CACHE;
 	  return buf;
 	}
 	
@@ -1636,6 +1652,8 @@ fa_load(const char *url, ...)
 	  free(etag);
           fap_release(fap);
 	  free(filename);
+          if(cache_info_ptr != NULL)
+            *cache_info_ptr = FA_CACHE_INFO_FROM_CACHE;
 	  return buf;
 	}
       } else if(cache_control != NULL) {
@@ -1649,11 +1667,12 @@ fa_load(const char *url, ...)
 
     if(cache_control == BYPASS_CACHE)
       blobcache_get_meta(url, "fa_load", &etag, &mtime);
-    
+
     data2 = fap->fap_load(fap, filename, errbuf, errlen,
 			  &etag, &mtime, &max_age, flags, cb, opaque, c,
-                          request_headers, response_headers, locationptr);
-    
+                          request_headers, response_headers, locationptr,
+                          protocol_code);
+
     fap_release(fap);
     free(filename);
     if(data2 == NOT_MODIFIED) {
@@ -1661,6 +1680,8 @@ fa_load(const char *url, ...)
 	return NOT_MODIFIED;
 
       free(etag);
+      if(cache_info_ptr != NULL)
+        *cache_info_ptr = FA_CACHE_INFO_FROM_CACHE_NOT_MODIFIED;
       return buf;
     }
 
@@ -1669,6 +1690,8 @@ fa_load(const char *url, ...)
          Return the cached entry anyway. It must be better than nothing
       */
       free(etag);
+      if(cache_info_ptr != NULL)
+        *cache_info_ptr = FA_CACHE_INFO_EXPIRED_FROM_CACHE;
       return buf;
     }
 
@@ -1792,7 +1815,7 @@ fa_parent(char *dst, size_t dstlen, const char *url)
 
 
 int
-fa_check_url(const char *url, char *errbuf, size_t errlen)
+fa_check_url(const char *url, char *errbuf, size_t errlen, int timeout_ms)
 {
   fa_protocol_t *fap;
   char *filename;

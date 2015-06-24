@@ -193,6 +193,8 @@ swthread(void *aux)
 
   upgrade_init();
 
+  usage_start();
+
   if(!gconf.disable_upgrades) {
 
     for(int i = 0; i < 10; i++) {
@@ -210,8 +212,6 @@ swthread(void *aux)
       TRACE(TRACE_DEBUG, "upgrade",
             "Failed to check for app upgrade, retrying in %d seconds", i + 1);
     }
-
-    usage_report_send(1);
   }
 
   load_site_news();
@@ -235,7 +235,6 @@ swthread(void *aux)
     if(!timeout)
       plugins_upgrade_check();
     upgrade_refresh();
-    usage_report_send(0);
     load_site_news();
     hts_mutex_lock(&gconf.state_mutex);
   }
@@ -296,9 +295,6 @@ main_init(void)
 
   /* Initialize settings */
   settings_init();
-
-  /* Usage counters */
-  usage_init();
 
   TRACE(TRACE_DEBUG, "core", "Loading resources from %s", app_dataroot());
 
@@ -408,6 +404,8 @@ main_init(void)
   runcontrol_init();
 
   TRACE(TRACE_DEBUG, "SYSTEM", "Hashed device ID: %s", gconf.device_id);
+  if(gconf.device_type[0])
+    TRACE(TRACE_DEBUG, "SYSTEM", "Device type: %s", gconf.device_type);
 }
 
 
@@ -481,6 +479,10 @@ parse_opts(int argc, char **argv)
       continue;
     } else if(!strcmp(argv[0], "--debug-glw")) {
       gconf.debug_glw = 1;
+      argc -= 1; argv += 1;
+      continue;
+    } else if(!strcmp(argv[0], "--show-usage-events")) {
+      gconf.show_usage_events = 1;
       argc -= 1; argv += 1;
       continue;
     } else if(!strcmp(argv[0], "--no-ui")) {
@@ -749,7 +751,6 @@ main_fini(void)
 #endif
   kvstore_fini();
   notifications_fini();
-  usage_fini();
   htsmsg_store_flush();
   TRACE(TRACE_DEBUG, "core", APPNAMEUSER" terminated normally");
   trace_fini();

@@ -20,7 +20,19 @@
 #pragma once
 #include "config.h"
 
-#if ENABLE_LIBAV
+#if ENABLE_COMMONCRYPTO
+
+#include <CommonCrypto/CommonDigest.h>
+
+#define md5_decl(ctx) CC_MD5_CTX ctx
+
+#define md5_init(ctx) CC_MD5_Init(&ctx)
+
+#define md5_update(ctx, data, len) CC_MD5_Update(&ctx, data, len)
+
+#define md5_final(ctx, output) CC_MD5_Final(output, &ctx)
+
+#elif ENABLE_LIBAV
 
 #include <libavutil/md5.h>
 #include <libavutil/mem.h>
@@ -47,5 +59,9 @@
 #define md5_init(ctx) md5_starts(ctx);
 
 #define md5_final(ctx, output) md5_finish(ctx, output);
+
+#else
+
+#error No md5 crypto
 
 #endif

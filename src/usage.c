@@ -26,149 +26,244 @@
 #include "misc/str.h"
 #include "usage.h"
 #include "plugins.h"
+#include "task.h"
+#include "misc/callout.h"
+#include "upgrade.h"
 
 static hts_mutex_t usage_mutex;
-static htsmsg_t *usage_counters;
-static htsmsg_t *plugin_counters;
-static int usage_time_base;
+static htsmsg_t *eventmap;
+static callout_t usage_callout;
 
+static void try_send(void *aux);
 
 /**
  *
  */
-void
-usage_init(void)
+static void
+usage_early_init(void)
 {
   hts_mutex_init(&usage_mutex);
-  usage_time_base = arch_get_ts() / 1000000LL;
-
-  usage_counters  = htsmsg_create_map();
-  plugin_counters = htsmsg_create_map();
 }
 
+INITME(INIT_GROUP_NET, usage_early_init, NULL);
 
-/**
- *
- */
-static htsmsg_t *
-make_usage_report(void)
+
+
+
+static int start_sent;
+static int send_fails;
+static int64_t session_start_time;
+
+static int
+sendmsg(htsmsg_t *msg)
 {
-  extern const char *htsversion_full;
+  //  htsmsg_print("msg", msg);
+  htsmsg_t *list = htsmsg_create_list();
+  htsmsg_add_msg(list, NULL, msg);
 
-  htsmsg_t *out = htsmsg_create_map();
-
-  htsmsg_add_str(out, "deviceid", gconf.device_id);
-  htsmsg_add_str(out, "version", htsversion_full);
-  htsmsg_add_str(out, "arch", arch_get_system_type());
-  htsmsg_add_u32(out, "verint", app_get_version_int());
-  htsmsg_add_u32(out, "generated", time(NULL));
-  if(gconf.os_info[0])
-    htsmsg_add_str(out, "os" , gconf.os_info);
-
-  time_t now = arch_get_ts() / 1000000LL;
-
-  int runtime = now - usage_time_base;
-  htsmsg_s32_inc(usage_counters, "runtime", runtime);
-  usage_time_base = now;
-
-  htsmsg_add_msg(out, "counters", usage_counters);
-  usage_counters = htsmsg_create_map();
-
-  htsmsg_add_msg(out, "plugincounters", plugin_counters);
-  plugin_counters = htsmsg_create_map();
-
-  return out;
-}
-
-
-/**
- *
- */
-void
-usage_fini(void)
-{
-  if(gconf.device_id[0] == 0)
-    return;
-
-  hts_mutex_lock(&usage_mutex);
-
-  int runtime = arch_get_ts() / 1000000LL - usage_time_base;
-  htsmsg_s32_inc(usage_counters, "runtime", runtime);
-
-  htsmsg_t *r = make_usage_report();
-
-  hts_mutex_unlock(&usage_mutex);
-
-  htsmsg_store_save(r, "usage");
-  htsmsg_release(r);
-}
-
-
-/**
- *
- */
-static void *
-send_report(void *aux)
-{
-  htsmsg_t *m = aux;
   htsbuf_queue_t hq;
-
   htsbuf_queue_init(&hq, 0);
 
-  htsmsg_add_msg(m, "plugins", plugins_get_installed_list());
+  htsbuf_append(&hq, "requests=", 9);
 
-  htsmsg_json_serialize(m, &hq, 0);
+  char *json = htsmsg_json_serialize_to_str(list, 0);
+  htsbuf_append_and_escape_url(&hq, json);
+  free(json);
 
-  http_req("https://movian.tv/movian/status/v1/usage",
-           HTTP_POSTDATA(&hq, "application/json"),
-           NULL);
+  int err = http_req("http://analytics1.movian.tv/i/bulk",
+                     HTTP_POSTDATA(&hq, "application/x-www-form-urlencoded"),
+                     HTTP_FLAGS(FA_NO_DEBUG),
+                     NULL);
 
-  htsmsg_release(m);
-  return NULL;
+  htsmsg_release(list);
+  return err;
 }
 
+
+/**
+ *
+ */
+static void
+add_events(htsmsg_t *m)
+{
+  hts_mutex_lock(&usage_mutex);
+
+  if(eventmap != NULL) {
+    htsmsg_add_msg(m, "events", eventmap);
+    eventmap = NULL;
+  }
+
+  hts_mutex_unlock(&usage_mutex);
+}
+
+
+static void
+usage_periodic(struct callout *c, void *aux)
+{
+  task_run(try_send, NULL);
+}
+
+
+/**
+ *
+ */
+static void
+try_send(void *aux)
+{
+  htsmsg_t *m = htsmsg_create_map();
+
+  htsmsg_add_str(m, "device_id", gconf.device_id);
+  htsmsg_add_str(m, "app_key", "3c19a63561f24198533e8372ef4865d54fd185a0");
+
+  if(start_sent == 0) {
+    htsmsg_add_u32(m, "begin_session", 1);
+
+    htsmsg_t *metrics = htsmsg_create_map();
+    extern const char *htsversion_full;
+
+    htsmsg_add_str(metrics, "_os", arch_get_system_type());
+
+    if(gconf.os_info[0])
+      htsmsg_add_str(metrics, "_os_version" , gconf.os_info);
+
+    if(gconf.device_type[0])
+      htsmsg_add_str(metrics, "_device" , gconf.device_type);
+
+    char *track = upgrade_get_track();
+    if(track != NULL)
+      htsmsg_add_str(metrics, "_carrier", track);
+    else
+      htsmsg_add_str(metrics, "_carrier", "none");
+
+    htsmsg_add_str(metrics, "_app_version", htsversion_full);
+    htsmsg_add_str(metrics, "_locale", gconf.lang);
+
+    htsmsg_add_msg(m, "metrics", metrics);
+    session_start_time = arch_get_ts();
+  } else {
+    int duration = (arch_get_ts() - session_start_time) / 1000000;
+    htsmsg_add_u32(m, "session_duration", duration);
+  }
+
+  add_events(m);
+
+  int err = sendmsg(m);
+  if(err == 0) {
+    start_sent = 1;
+    callout_arm(&usage_callout, usage_periodic, NULL, 60 * 5);
+    send_fails = 0;
+  } else {
+    send_fails++;
+    if(send_fails == 10)
+      return; // Give up
+    callout_arm(&usage_callout, usage_periodic, NULL, 10 + send_fails * 2);
+  }
+}
+
+
+/**
+ *
+ */
+static void
+usage_init(void)
+{
+}
 
 
 /**
  *
  */
 void
-usage_report_send(int stored)
+usage_start(void)
 {
-  if(gconf.device_id[0] == 0)
+  if(gconf.disable_analytics || gconf.device_id[0] == 0)
+    return;
+  task_run(try_send, NULL);
+}
+
+/**
+ *
+ */
+void
+usage_event(const char *key, int count, const char **segmentation)
+{
+  htsmsg_t *pm;
+  htsmsg_field_t *f;
+
+#ifdef __linux__
+  if(gconf.show_usage_events) {
+    printf("event: %s %d ", key, count);
+    const char **s = segmentation;
+
+    if(s != NULL) {
+      for(;*s != NULL; s+=2) {
+        printf("%s=%s  ", s[0], s[1]);
+      }
+    }
+    printf("\n");
+  }
+#endif
+
+  if(gconf.disable_analytics)
     return;
 
-  htsmsg_t *m;
-  if(stored) {
-    m = htsmsg_store_load("usage");
-    if(m == NULL)
-      return;
+  hts_mutex_lock(&usage_mutex);
 
-    htsmsg_store_remove("usage");
+  if(eventmap == NULL)
+    eventmap = htsmsg_create_list();
 
-    // Legacy cleanup, remove some day
-    htsmsg_store_remove("usagecounters");
-    htsmsg_store_remove("plugincounters");
+  HTSMSG_FOREACH(f, eventmap) {
+    if((pm = f->hmf_childs) == NULL)
+      continue;
 
-  } else {
+    const char *k = htsmsg_get_str(pm, "key");
+    if(strcmp(key, k))
+      continue;
 
-    hts_mutex_lock(&usage_mutex);
-    m = make_usage_report();
+    htsmsg_t *segs = htsmsg_get_map(pm, "segmentation");
+
+    if(segmentation != NULL) {
+      const char **s = segmentation;
+
+      if(segs == NULL)
+        continue;
+
+      for(;*s != NULL; s+=2) {
+        const char *skey = s[0];
+        const char *sval = s[1];
+
+        const char *v = htsmsg_get_str(segs, skey);
+        if(v == NULL || strcmp(v, sval))
+          break;
+      }
+
+      if(*s != NULL)
+        continue;
+    } else {
+
+      if(segs != NULL)
+        continue;
+    }
+
+    htsmsg_s32_inc(pm, "count", count);
     hts_mutex_unlock(&usage_mutex);
+    return;
   }
 
-  hts_thread_create_detached("report", send_report, m, THREAD_PRIO_BGTASK);
-}
+  pm = htsmsg_create_map();
+  htsmsg_add_str(pm, "key", key);
+  htsmsg_s32_inc(pm, "count", count);
 
+  if(segmentation != NULL) {
+    const char **s = segmentation;
+    htsmsg_t *segs = htsmsg_create_map();
+    for(;*s != NULL; s+=2)
+      htsmsg_add_str(segs, s[0], s[1]);
 
-/**
- *
- */
-void
-usage_inc_counter(const char *id, int value)
-{
-  hts_mutex_lock(&usage_mutex);
-  htsmsg_s32_inc(usage_counters, id, value);
+    htsmsg_add_msg(pm, "segmentation", segs);
+  }
+
+  htsmsg_add_msg(eventmap, NULL, pm);
   hts_mutex_unlock(&usage_mutex);
 }
 
@@ -176,17 +271,31 @@ usage_inc_counter(const char *id, int value)
  *
  */
 void
-usage_inc_plugin_counter(const char *plugin, const char *id, int value)
+usage_page_open(int sync, const char *responder)
 {
-  hts_mutex_lock(&usage_mutex);
-  htsmsg_t *m = htsmsg_get_map(plugin_counters, plugin);
-  if(m == NULL) {
-    m = htsmsg_create_map();
-    htsmsg_add_msg(plugin_counters, plugin, m);
-    m = htsmsg_get_map(plugin_counters, plugin);
-    assert(m != NULL);
-  }
-
-  htsmsg_s32_inc(m, id, value);
-  hts_mutex_unlock(&usage_mutex);
+  usage_event(sync ? "Open model" : "Open page", 1,
+              USAGE_SEG("responder", responder));
 }
+
+
+/**
+ *
+ */
+static void
+usage_fini(void)
+{
+  callout_disarm(&usage_callout);
+  if(!start_sent)
+    return;
+
+  htsmsg_t *m = htsmsg_create_map();
+
+  htsmsg_add_str(m, "device_id", gconf.device_id);
+  htsmsg_add_str(m, "app_key", "3c19a63561f24198533e8372ef4865d54fd185a0");
+  htsmsg_add_u32(m, "end_session", 1);
+  add_events(m);
+  sendmsg(m);
+}
+
+
+INITME(INIT_GROUP_API, usage_init, usage_fini);

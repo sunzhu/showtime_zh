@@ -65,6 +65,9 @@ typedef struct {
   sub_scanner_t *ss;
   const video_args_t *va;
   const char *url;
+
+  int is_loading;
+
 } rtmp_t;
 
 
@@ -112,7 +115,7 @@ handle_metadata0(rtmp_t *r, AMFObject *obj,
     mp_set_duration(mp, r->total_duration * 1000LL);
     mp_set_clr_flags(mp, MP_CAN_SEEK, 0);
 
-    if(r->ss == NULL)
+    if(r->ss == NULL && !(r->va->flags & BACKEND_VIDEO_NO_SUBTITLE_SCAN))
       r->ss = sub_scanner_create(r->url, mp->mp_prop_subtitle_tracks, r->va, 0);
 
   } else {
@@ -237,14 +240,20 @@ sendpkt(rtmp_t *r, media_queue_t *mq, media_codec_t *mc,
   event_t *e = NULL;
   media_buf_t *mb = media_buf_alloc_unlocked(r->mp, size);
 
+  if(r->is_loading) {
+    r->is_loading = 0;
+    prop_set(r->mp->mp_prop_root, "loading", PROP_SET_INT, 0);
+  }
+
   mb->mb_data_type = dt;
   mb->mb_duration = duration;
   mb->mb_cw = media_codec_ref(mc);
   mb->mb_drive_clock = drive_clock;
   mb->mb_dts = dts;
   mb->mb_pts = pts;
+  mb->mb_user_time = pts;
   mb->mb_skip = skip;
-	
+
   memcpy(mb->mb_data, data, size);
 
   do {
@@ -515,6 +524,11 @@ rtmp_loop(rtmp_t *r, media_pipe_t *mp, char *url, char *errbuf, size_t errlen)
       if(ret == 0) {
 	int64_t restartpos = r->seekpos_video;
 
+        if(cancellable_is_cancelled(mp->mp_cancellable)) {
+          snprintf(errbuf, errlen, "Cancelled");
+          return NULL;
+        }
+
 	TRACE(TRACE_ERROR, "RTMP", "Disconnected");
 	sleep(1);
 
@@ -526,8 +540,8 @@ rtmp_loop(rtmp_t *r, media_pipe_t *mp, char *url, char *errbuf, size_t errlen)
 
 
 	RTMP_Close(r->r);
-	
-	RTMP_Init(r->r);
+
+	RTMP_Init(r->r, mp->mp_cancellable);
 
 	memset(&p, 0, sizeof(p));
 
@@ -539,8 +553,7 @@ rtmp_loop(rtmp_t *r, media_pipe_t *mp, char *url, char *errbuf, size_t errlen)
 	  return NULL;
 	}
 
-	if(!RTMP_Connect(r->r, NULL)) {
-	  snprintf(errbuf, errlen, "Unable to connect RTMP session");
+	if(!RTMP_Connect(r->r, NULL, errbuf, errlen, 5000)) {
 	  return NULL;
 	}
 
@@ -655,7 +668,7 @@ rtmp_playvideo(const char *url0, media_pipe_t *mp,
   event_t *e;
   char *url = mystrdupa(url0);
 
-  usage_inc_counter("playvideortmp", 1);
+  usage_event("Play video", 1, USAGE_SEG("format", "RTMP"));
 
   prop_set(mp->mp_prop_metadata, "format", PROP_SET_STRING, "RTMP");
   prop_set(mp->mp_prop_root, "loading", PROP_SET_INT, 1);
@@ -666,7 +679,7 @@ rtmp_playvideo(const char *url0, media_pipe_t *mp,
   RTMP_LogSetLevel(rtmp_log_level);
 
   r.r = RTMP_Alloc();
-  RTMP_Init(r.r);
+  RTMP_Init(r.r, mp->mp_cancellable);
 
   int64_t start = playinfo_get_restartpos(va.canonical_url, va.title, va.resume_mode);
 
@@ -678,8 +691,7 @@ rtmp_playvideo(const char *url0, media_pipe_t *mp,
 
   r.r->Link.lFlags |= RTMP_LF_SWFV;
 
-  if(!RTMP_Connect(r.r, NULL)) {
-    snprintf(errbuf, errlen, "Unable to connect RTMP-session");
+  if(!RTMP_Connect(r.r, NULL, errbuf, errlen, 5000)) {
     rtmp_free(&r);
     return NULL;
   }
@@ -724,7 +736,7 @@ rtmp_playvideo(const char *url0, media_pipe_t *mp,
 
   r.url = url;
   r.va = &va;
-  prop_set(mp->mp_prop_root, "loading", PROP_SET_INT, 0);
+  r.is_loading = 1;
   e = rtmp_loop(&r, mp, url, errbuf, errlen);
 
   if(r.ss)
@@ -744,7 +756,7 @@ rtmp_playvideo(const char *url0, media_pipe_t *mp,
 
   mp_shutdown(mp);
 
-  TRACE(TRACE_DEBUG, "RTMP", "End of stream");
+  TRACE(TRACE_DEBUG, "RTMP", "End of playback");
 
   rtmp_free(&r);
   return e;
@@ -788,13 +800,13 @@ rtmp_init(void)
  *
  */
 static int
-rtmp_probe(const char *url0, char *errbuf, size_t errlen)
+rtmp_probe(const char *url0, char *errbuf, size_t errlen, int timeout_ms)
 {
   RTMP *r;
   char *url = mystrdupa(url0);
 
   r = RTMP_Alloc();
-  RTMP_Init(r);
+  RTMP_Init(r, NULL);
 
   if(!RTMP_SetupURL(r, url)) {
     snprintf(errbuf, errlen, "Unable to setup RTMP-session");
@@ -802,12 +814,13 @@ rtmp_probe(const char *url0, char *errbuf, size_t errlen)
     return BACKEND_PROBE_FAIL;
   }
 
-  if(!RTMP_Connect(r, NULL)) {
-    snprintf(errbuf, errlen, "Unable to connect RTMP-session");
+  if(!RTMP_Connect(r, NULL, errbuf, errlen, timeout_ms)) {
     RTMP_Close(r);
     RTMP_Free(r);
     return BACKEND_PROBE_FAIL;
   }
+
+  RTMP_SetReadTimeout(r, timeout_ms);
 
   if(!RTMP_ConnectStream(r, 0)) {
     snprintf(errbuf, errlen, "Unable to connect RTMP-stream");
@@ -823,6 +836,16 @@ rtmp_probe(const char *url0, char *errbuf, size_t errlen)
 }
 
 
+/**
+ *
+ */
+static int
+rtmp_open(prop_t *page, const char *url, int sync)
+{
+  usage_page_open(sync, "RTMP");
+  return backend_open_video(page, url, sync);
+}
+
 
 /**
  *
@@ -830,7 +853,7 @@ rtmp_probe(const char *url0, char *errbuf, size_t errlen)
 static backend_t be_rtmp = {
   .be_init = rtmp_init,
   .be_canhandle = rtmp_canhandle,
-  .be_open = backend_open_video,
+  .be_open = rtmp_open,
   .be_play_video = rtmp_playvideo,
   .be_probe = rtmp_probe,
 };

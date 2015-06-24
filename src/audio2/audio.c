@@ -474,10 +474,13 @@ audio_process_audio(audio_decoder_t *ad, media_buf_t *mb)
       ad->ad_pts = mb->mb_pts - od - id;
       ad->ad_epoch = mb->mb_epoch;
 
-      if(mb->mb_drive_clock)
-	mp_set_current_time(mp, mb->mb_pts - ad->ad_delay,
-			    mb->mb_epoch, mb->mb_delta);
+      if(mb->mb_drive_clock) {
+        assert(mb->mb_drive_clock == 1);
+	mp_set_current_time(mp, mb->mb_user_time, mb->mb_epoch, ad->ad_delay);
+      }
+
       mb->mb_pts = PTS_UNSET; // No longer valid
+      mb->mb_user_time = PTS_UNSET;
     }
 
 
@@ -623,6 +626,8 @@ audio_decode_thread(void *aux)
       TAILQ_REMOVE(&mq->mq_q_data, data, mb_link);
       mp_check_underrun(mp);
       mb = data;
+      if(mb->mb_dts != PTS_UNSET)
+        mq->mq_last_deq_dts = mb->mb_dts;
     } else {
       hts_cond_wait(&mq->mq_avail, &mp->mp_mutex);
       continue;
@@ -718,7 +723,7 @@ audio_decode_thread(void *aux)
 
       hts_mutex_lock(&mp->mp_mutex);
     }
-    mq_update_stats(mp, mq);
+    mq_update_stats(mp, mq, 1);
     hts_cond_signal(&mp->mp_backpressure);
     media_buf_free_locked(mp, mb);
   }

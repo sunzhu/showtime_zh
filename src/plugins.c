@@ -30,6 +30,7 @@
 #include "notifications.h"
 #include "misc/strtab.h"
 #include "arch/arch.h"
+#include "usage.h"
 
 #include "ecmascript/ecmascript.h"
 
@@ -550,7 +551,7 @@ plugin_load(const char *url, char *errbuf, size_t errlen, int flags)
       goto bad;
     } else {
       TRACE(TRACE_ERROR, "Plugin",
-            "Installed plugin at %s has unknown type %s but keeping anyway ,"
+            "Installed plugin at %s has unknown type %s but keeping anyway, "
             "since it might be upgraded",
             ctrlfile, type);
       r = 0;
@@ -740,6 +741,9 @@ plugin_load_repo(void)
       const char *id = htsmsg_get_str(pm, "id");
       if(id == NULL)
 	continue;
+      const char *type = htsmsg_get_str(pm, "type");
+      if(type != NULL && !strcmp(type, "javascript"))
+        continue;
       pl = plugin_find(id);
       pl->pl_mark = 0;
       plugin_prop_setup(pm, pl, NULL);
@@ -1218,6 +1222,9 @@ plugin_remove(plugin_t *pl)
 {
   char path[PATH_MAX];
 
+  usage_event("Plugin remove", 1,
+              USAGE_SEG("plugin", pl->pl_id));
+
   snprintf(path, sizeof(path), "%s/installedplugins/%s.zip",
 	   gconf.persistent_path, pl->pl_id);
   fa_unlink(path, NULL, 0);
@@ -1242,6 +1249,10 @@ plugin_install(plugin_t *pl, const char *package)
 {
   char errbuf[200];
   char path[200];
+
+  usage_event(pl->pl_can_upgrade ? "Plugin upgrade" : "Plugin install", 1,
+              USAGE_SEG("plugin", pl->pl_id,
+                        "source", package ? "File" : "Repo"));
 
   if(package == NULL)
     package = pl->pl_package;
@@ -1270,6 +1281,9 @@ plugin_install(plugin_t *pl, const char *package)
   if(b == NULL) {
     prop_unlink(status);
     prop_set_string(status, errbuf);
+    TRACE(TRACE_INFO, "plugins", "Failed to download plugin %s from %s -- %s",
+          pl->pl_id, package, errbuf);
+
   cleanup:
     prop_set(pl->pl_status, "canInstall", PROP_SET_INT, 1);
     prop_ref_dec(status);
@@ -1281,6 +1295,9 @@ plugin_install(plugin_t *pl, const char *package)
   if(b->b_size < 4 ||
      buf[0] != 0x50 || buf[1] != 0x4b || buf[2] != 0x03 || buf[3] != 0x04) {
     prop_link(_p("Corrupt plugin bundle"), status);
+    TRACE(TRACE_INFO, "plugins", "Plugin %s from %s -- not a valid bundle",
+          pl->pl_id, package);
+    hexdump("BUNDLE", buf, MIN(b->b_size, 64));
     goto cleanup;
   }
 
@@ -1349,8 +1366,10 @@ static int
 plugin_open_url(prop_t *page, const char *url, int sync)
 {
   if(!strcmp(url, "plugin:start")) {
+    usage_page_open(sync, "Plugins installed");
     prop_link(plugin_start_model, prop_create(page, "model"));
   } else if(!strcmp(url, "plugin:repo")) {
+    usage_page_open(sync, "Plugins repo");
     prop_link(plugin_repo_model, prop_create(page, "model"));
     plugins_upgrade_check();
   } else {

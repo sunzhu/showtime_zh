@@ -448,7 +448,7 @@ stream_radio(icecast_play_context_t *ipc, char *errbuf, size_t errlen)
   media_pipe_t *mp = ipc->ipc_mp;
   mq = &mp->mp_audio;
 
-  usage_inc_counter("icecast", 1);
+  usage_event("Play audio", 1, USAGE_SEG("format", "icecast"));
 
   ipc->ipc_radio_info = prop_create(mp->mp_prop_root, "radioinfo");
 
@@ -535,8 +535,8 @@ stream_radio(icecast_play_context_t *ipc, char *errbuf, size_t errlen)
       memcpy(mb->mb_data, pkt.data, pkt.size);
 
       if(mb->mb_pts != AV_NOPTS_VALUE) {
-        if(ipc->ipc_mf->fctx->start_time != AV_NOPTS_VALUE)
-          mb->mb_delta =  ipc->ipc_mf->fctx->start_time;
+        const int64_t offset = ipc->ipc_mf->fctx->start_time;
+        mb->mb_user_time = mb->mb_pts + (offset != PTS_UNSET ? offset : 0);
 	mb->mb_drive_clock = 1;
       }
 
@@ -613,6 +613,7 @@ icecast_thread(void *aux)
   if(stream_radio(ipc, errbuf, sizeof(errbuf)) == NULL) {
     TRACE(TRACE_ERROR, "Radio", "Error: %s", errbuf);
   }
+  mp_shutdown(ipc->ipc_mp);
   mp_destroy(ipc->ipc_mp);
 
   free((void *)ipc->ipc_url);
@@ -629,7 +630,7 @@ icecast_open(prop_t *page, const char *url, int sync)
 {
   icecast_play_context_t *ipc = calloc(1, sizeof(icecast_play_context_t));
   ipc->ipc_url = strdup(url + strlen("icecast:"));
-
+  usage_page_open(sync, "Icecast");
   hts_thread_create_detached("icecast", icecast_thread, ipc,
 			     THREAD_PRIO_MODEL);
   return 0;

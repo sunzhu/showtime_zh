@@ -79,18 +79,28 @@ video_decoder_infer_pts(const media_buf_meta_t *mbm,
  *
  */
 static void
-video_decoder_set_current_time(video_decoder_t *vd, int64_t ts,
-			       int epoch, int64_t delta)
+video_decoder_set_current_time(video_decoder_t *vd, int64_t user_time,
+			       int epoch, int64_t pts, int drive_mode)
 {
-  if(ts == PTS_UNSET)
+  if(drive_mode == 2) {
+    if(pts == PTS_UNSET || user_time == PTS_UNSET)
+      return;
+    user_time = pts - user_time;
+  } else {
+    if(user_time == PTS_UNSET)
+      return;
+  }
+
+  mp_set_current_time(vd->vd_mp, user_time, epoch, 0);
+
+  if(pts == PTS_UNSET)
     return;
 
-  mp_set_current_time(vd->vd_mp, ts, epoch, delta);
-
-  vd->vd_subpts = ts - vd->vd_mp->mp_svdelta - delta;
+  vd->vd_subpts = user_time - vd->vd_mp->mp_svdelta;
+  pts -= vd->vd_mp->mp_svdelta;
 
   if(vd->vd_ext_subtitles != NULL)
-    subtitles_pick(vd->vd_ext_subtitles, vd->vd_subpts, vd->vd_mp);
+    subtitles_pick(vd->vd_ext_subtitles, vd->vd_subpts, pts, vd->vd_mp);
 }
 
 
@@ -103,10 +113,9 @@ video_deliver_frame(video_decoder_t *vd, const frame_info_t *info)
   int r = vd->vd_mp->mp_video_frame_deliver(info,
                                             vd->vd_mp->mp_video_frame_opaque);
 
-
   if(info->fi_drive_clock && !r)
-    video_decoder_set_current_time(vd, info->fi_pts, info->fi_epoch,
-				   info->fi_delta);
+    video_decoder_set_current_time(vd, info->fi_user_time, info->fi_epoch,
+                                   info->fi_pts, info->fi_drive_clock);
 
   return r;
 }
@@ -167,8 +176,10 @@ vd_thread(void *aux)
 
       vd->vd_estimated_duration = mbm->mbm_duration;
 
-      video_decoder_set_current_time(vd, mbm->mbm_pts, mbm->mbm_epoch,
-				     mbm->mbm_delta);
+      if(mbm->mbm_drive_clock)
+        video_decoder_set_current_time(vd, mbm->mbm_user_time,
+                                       mbm->mbm_epoch, mbm->mbm_pts,
+                                       mbm->mbm_drive_clock);
       hts_mutex_lock(&mp->mp_mutex);
       continue;
     }
@@ -181,7 +192,7 @@ vd_thread(void *aux)
       TAILQ_REMOVE(&mq->mq_q_ctrl, ctrl, mb_link);
       mb = ctrl;
 
-    } else if(aux != NULL && aux->mb_pts < vd->vd_subpts + 1000000LL) {
+    } else if(aux != NULL && aux->mb_user_time < vd->vd_subpts + 1000000LL) {
 
       if(vd->vd_hold) {
 	hts_cond_wait(&mq->mq_avail, &mp->mp_mutex);
@@ -210,6 +221,8 @@ vd_thread(void *aux)
       TAILQ_REMOVE(&mq->mq_q_data, data, mb_link);
       mp_check_underrun(mp);
       mb = data;
+      if(mb->mb_dts != PTS_UNSET)
+        mq->mq_last_deq_dts = mb->mb_dts;
 
     } else {
       hts_cond_wait(&mq->mq_avail, &mp->mp_mutex);
@@ -219,7 +232,7 @@ vd_thread(void *aux)
 
     mq->mq_packets_current--;
     mp->mp_buffer_current -= mb->mb_size;
-    mq_update_stats(mp, mq);
+    mq_update_stats(mp, mq, 1);
 
     hts_cond_signal(&mp->mp_backpressure);
 

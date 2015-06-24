@@ -36,7 +36,7 @@ typedef union media_buf_flags {
     uint32_t flush                : 1;
     uint32_t nopts                : 1;
     uint32_t nodts                : 1;
-    uint32_t drive_clock          : 1;
+    uint32_t drive_clock          : 2;
     uint32_t disable_deinterlacer : 1;
   };
 
@@ -50,7 +50,7 @@ typedef union media_buf_flags {
  *
  */
 typedef struct media_buf_meta {
-  int64_t mbm_delta;
+  int64_t mbm_user_time;
   int64_t mbm_pts;
   int64_t mbm_dts;
   int mbm_epoch;
@@ -84,7 +84,7 @@ typedef struct media_buf {
 #define mb_size       mb_pkt.size
 #define mb_stream     mb_pkt.stream_index
 
-  int64_t mb_delta;
+  int64_t mb_user_time;
 
   media_buf_flags_t mb_flags;
 

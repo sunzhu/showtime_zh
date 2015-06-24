@@ -323,8 +323,11 @@ msg: Aggiorna
 #
 # ./glwskins/default/pages/openerror.view
 #
-id: Unable to open resource
-msg: Impossibile aprire la risorsa
+id: Unable to open %s
+msg: Impossibile aprire
+
+id: resource
+msg: risorsa
 
 #
 # ./glwskins/default/pages/playqueue.view
@@ -371,9 +374,6 @@ msg: Scarica e installa...
 id: Downloading %s
 msg: Scaricando %s
 
-id: Installing %s
-msg: Installando %s
-
 id: New version %s is available for download
 msg: Disponibile la nuova versione %s
 
@@ -398,20 +398,56 @@ msg: Da testare
 id: Unable to query for new version
 msg: Impossibile cercare nuove versioni
 
-id: Verifying %s
-msg: Verificando %s
-
 #
 # ./glwskins/default/pages/video.view
 #
+id: A/V diff:
+msg: diff A/V:
+
+id: Audio codec:
+msg: Codec audio:
+
+id: Audio queue len:
+msg: Lung. coda audio:
+
 id: Audio volume adjustment: %d dB
 msg: Regola il volume audio: %d dB
 
 id: CPU is too slow to decode this video
 msg: CPU troppo lenta per poter decodificare questo video
 
+id: Download speed:
+msg: Velocità di download:
+
+id: Packet buffer:
+msg: Pacchetto buffer:
+
 id: Playback status
 msg: Stato di riproduzione
+
+id: Remaining buffer:
+msg: Buffer rimanente:
+
+id: Remote queue drops:
+msg: Persi nella coda remota:
+
+id: Remote queue len:
+msg: Lung. coda remota:
+
+id: Source:
+msg: Fonte:
+
+id: Video bitrate:
+msg: Bitrate video:
+
+id: Video codec:
+msg: Codec video:
+
+id: Video decode time:
+msg: Tempo di decodifica video:
+
+id: Video queue len:
+msg: Lung. coda video:
 
 #
 # ./glwskins/default/playdecks/dvd.view
@@ -909,7 +945,7 @@ id: Default character set
 msg: Collezione carattere di default
 
 id: Ignore 'The' at beginning of words when sorting
-msg: Ignora 'The' all'inizio delle parole durante l'ordinamento
+msg: Ignora l'articolo all'inizio delle parole durante l'ordinamento
 
 id: Language
 msg: Linguaggio
@@ -940,12 +976,6 @@ msg: Codice di linguaggio terziario per l'audio
 
 id: Tertiary subtitle language code
 msg: Codice di linguaggio terziario per i sottotitoli
-
-#
-# ./src/js/js_page.c
-#
-id: No handler for URL
-msg: Nessun handler per URL
 
 #
 # ./src/keymapper.c
@@ -1151,14 +1181,14 @@ msg: Segnalibri
 id: Music
 msg: Musica
 
+id: No handler for URL
+msg: Nessun handler per URL
+
 id: Other
 msg: Altro
 
 id: Photos
 msg: Foto
-
-id: Published in Virtual File System
-msg: Pubblicato nel file system virtuale
 
 id: Removed bookmark: %s
 msg: Segnalibro rimosso: %s
