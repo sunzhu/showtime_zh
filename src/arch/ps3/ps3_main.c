@@ -482,15 +482,10 @@ hfree(void *ptr, size_t size)
 static void
 set_device_id(void)
 {
-  uint8_t buf[16];
   uint8_t digest[16];
-
-  Lv2Syscall1(870, (uint64_t)&buf[0]);
 
   md5_decl(ctx);
   md5_init(ctx);
-
-  md5_update(ctx, buf, 16);
 
   union net_ctl_info info;
 
@@ -499,6 +494,19 @@ set_device_id(void)
 
   md5_final(ctx, digest);
   bin2hex(gconf.device_id, sizeof(gconf.device_id), digest, sizeof(digest));
+
+  uint8_t platinfo[0x18] = {0};
+  int v = Lv2Syscall1(387, (uint64_t)platinfo);
+  if(v == 0) {
+    snprintf(gconf.os_info, sizeof(gconf.os_info), "PS3 %d.%d%x",
+             platinfo[0],
+             platinfo[1],
+             platinfo[2]);
+
+    strcpy(gconf.device_type, "PS3 ");
+    memcpy(gconf.device_type + 4, platinfo+8, 8);
+  }
+
 }
 
 
@@ -597,6 +605,8 @@ main(int argc, char **argv)
   lv2SpuInitialize(6, 0);
 #endif
 
+  TRACE(TRACE_DEBUG, "SYSTEM", "System version %s", gconf.os_info);
+
   sys_event_queue_attribute_t attr = {
     .attr_protocol = 2,
     .type = 1,
@@ -605,11 +615,7 @@ main(int argc, char **argv)
   int r;
   r = Lv2Syscall4(128, (intptr_t)&crash_event_queue,(intptr_t)&attr, 0, 64);
 
-  TRACE(TRACE_INFO, "TRAPHANDLER", "createqueue=%d", r);
-
   r = Lv2Syscall1(944, crash_event_queue);
-
-  TRACE(TRACE_INFO, "TRAPHANDLER", "init=%d", r);
   sys_ppu_thread_t tid;
 
   r = sys_ppu_thread_create(&tid, (void *)exec_catcher, 0,

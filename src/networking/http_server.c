@@ -33,7 +33,7 @@
 #include "prop/prop.h"
 #include "arch/arch.h"
 #include "asyncio.h"
-
+#include "misc/bytestream.h"
 #include "upnp/upnp.h"
 
 static LIST_HEAD(, http_path) http_paths;
@@ -101,6 +101,10 @@ struct http_connection {
   void *hc_opaque;
 
   char hc_my_addr[128]; // hc_local_addr as text
+
+  uint8_t hc_ws_opcode;
+  int hc_ws_packet_size;
+  void *hc_ws_packet;
 };
 
 
@@ -782,24 +786,28 @@ http_handle_request(http_connection_t *hc, htsbuf_queue_t *q)
 /**
  *
  */
-static int
-http_read_line(htsbuf_queue_t *q, char *buf, size_t bufsize)
+static char *
+http_read_line(htsbuf_queue_t *q)
 {
   int len;
 
   len = htsbuf_find(q, 0xa);
   if(len == -1)
-    return 0;
+    return NULL;
 
-  if(len >= bufsize - 1)
-    return -1;
+  if(len >= 10000)
+    return (void *)-1;
+
+  char *buf = malloc(len + 1);
+  if(buf == NULL)
+    return (void *)-1;
 
   htsbuf_read(q, buf, len);
   buf[len] = 0;
   while(len > 0 && buf[len - 1] < 32)
     buf[--len] = 0;
   htsbuf_drop(q, 1); /* Drop the \n */
-  return 1;
+  return buf;
 }
 
 
@@ -882,11 +890,10 @@ websocket_input(http_connection_t *hc, htsbuf_queue_t *q)
 
   if(p < 2)
     return 0;
-
+  uint8_t fin = hdr[0] & 0x80;
   int opcode  = hdr[0] & 0xf;
   int64_t len = hdr[1] & 0x7f;
   int hoff = 2;
-
   if(len == 126) {
     if(p < 4)
       return 0;
@@ -895,10 +902,7 @@ websocket_input(http_connection_t *hc, htsbuf_queue_t *q)
   } else if(len == 127) {
     if(p < 10)
       return 0;
-    memcpy(&len, hdr + 2, sizeof(uint64_t));
-#if defined(__LITTLE_ENDIAN__)
-    len = __builtin_bswap64(len);
-#endif
+    len = rd64_be(hdr + 2);
     hoff = 10;
   }
 
@@ -915,28 +919,44 @@ websocket_input(http_connection_t *hc, htsbuf_queue_t *q)
   if(q->hq_size < hoff + len)
     return 0;
 
-  uint8_t *d = mymalloc(len+1);
-  if(d == NULL)
+  htsbuf_drop(q, hoff);
+
+  if(opcode & 0x8) {
+    // Ctrl frame
+    uint8_t *p = mymalloc(len);
+    if(p == NULL)
+      return 1;
+
+    htsbuf_read(q, p, len);
+    if(m != NULL) for(int i = 0; i < len; i++) p[i] ^= m[i&3];
+
+    if(opcode == 9) // PING
+      websocket_send(hc, 10, p, len);
+    free(p);
+    return -1;
+  }
+
+  hc->hc_ws_packet = myrealloc(hc->hc_ws_packet, hc->hc_ws_packet_size + len+1);
+  if(hc->hc_ws_packet == NULL)
     return 1;
 
-  htsbuf_drop(q, hoff);
-  htsbuf_read(q, d, len);
+  uint8_t *d = hc->hc_ws_packet + hc->hc_ws_packet_size;
   d[len] = 0;
+  htsbuf_read(q, d, len);
 
-  if(m != NULL) {
-    int i;
-    for(i = 0; i < len; i++)
-      d[i] ^= m[i&3];
-  }
-  
 
-  if(opcode == 9) {
-    // PING
-    websocket_send(hc, 10, d, len);
-  } else {
-    hc->hc_path->hp_ws_data(hc, opcode, d, len, hc->hc_opaque);
+  if(m != NULL) for(int i = 0; i < len; i++) d[i] ^= m[i&3];
+
+  if(opcode != 0)
+    hc->hc_ws_opcode = opcode;
+
+  hc->hc_ws_packet_size += len;
+
+  if(fin) {
+    hc->hc_path->hp_ws_data(hc, hc->hc_ws_opcode, hc->hc_ws_packet,
+                            hc->hc_ws_packet_size, hc->hc_opaque);
+    hc->hc_ws_packet_size = 0;
   }
-  free(d);
   return -1;
 }
 
@@ -948,9 +968,9 @@ websocket_input(http_connection_t *hc, htsbuf_queue_t *q)
 static int
 http_handle_input(http_connection_t *hc, htsbuf_queue_t *q)
 {
-  char buf[1024];
+  char *buf;
   char *argv[3], *c;
-  int r, n;
+  int n, r;
 
   while(1) {
 
@@ -959,26 +979,29 @@ http_handle_input(http_connection_t *hc, htsbuf_queue_t *q)
       free(hc->hc_post_data);
       hc->hc_post_data = NULL;
 
-      r = http_read_line(q, buf, sizeof(buf));
-
-      if(r == -1)
-	return 1;
-
-      if(r == 0)
+      buf = http_read_line(q);
+      if(buf == NULL)
 	return 0;
+
+      if(buf == (void *)-1)
+	return -1;
 
       hsprintf("%p: %s\n", hc, buf);
 
-      if((n = http_tokenize(buf, argv, 3, -1)) != 3)
-	return 1;
+      if((n = http_tokenize(buf, argv, 3, -1)) != 3) {
+        free(buf);
+	return -1;
+      }
 
       hc->hc_cmd = str2val(argv[0], HTTP_cmdtab);
 
       mystrset(&hc->hc_url, argv[1]);
       mystrset(&hc->hc_url_orig, argv[1]);
 
-      if((hc->hc_version = str2val(argv[2], HTTP_versiontab)) == -1)
-	return 1;
+      if((hc->hc_version = str2val(argv[2], HTTP_versiontab)) == -1) {
+        free(buf);
+	return -1;
+      }
 
       hc->hc_state = HCS_HEADERS;
       /* FALLTHRU */
@@ -986,13 +1009,16 @@ http_handle_input(http_connection_t *hc, htsbuf_queue_t *q)
       http_headers_free(&hc->hc_req_args);
       http_headers_free(&hc->hc_request_headers);
       http_headers_free(&hc->hc_response_headers);
+      free(buf);
 
     case HCS_HEADERS:
-      if((r = http_read_line(q, buf, sizeof(buf))) == -1)
-	return 1;
 
-      if(r == 0)
+      buf = http_read_line(q);
+      if(buf == NULL)
 	return 0;
+
+      if(buf == (void *)-1)
+	return -1;
 
       hsprintf("%p: %s\n", hc, buf);
 
@@ -1002,22 +1028,30 @@ http_handle_input(http_connection_t *hc, htsbuf_queue_t *q)
 	http_header_add_lws(&hc->hc_request_headers, buf+1);
 
       } else if(buf[0] == 0) {
-	
-	if(http_handle_request(hc, q))
-	  return 1;
 
-	if(TAILQ_FIRST(&hc->hc_output.hq_q) == NULL && !hc->hc_keep_alive)
+	if(http_handle_request(hc, q)) {
+          free(buf);
 	  return 1;
+        }
+
+	if(TAILQ_FIRST(&hc->hc_output.hq_q) == NULL && !hc->hc_keep_alive) {
+          free(buf);
+	  return 1;
+        }
 
       } else {
 
-	if((c = strchr(buf, ':')) == NULL)
+	if((c = strchr(buf, ':')) == NULL) {
+          free(buf);
 	  return 1;
+        }
+
 	*c++ = 0;
 	while(*c == 32)
 	  c++;
 	http_header_add(&hc->hc_request_headers, buf, c, 0);
       }
+      free(buf);
       break;
 
     case HCS_POSTDATA:
@@ -1060,6 +1094,7 @@ http_close(http_connection_t *hc)
   free(hc->hc_url);
   free(hc->hc_url_orig);
   free(hc->hc_post_data);
+  free(hc->hc_ws_packet);
 
   if(hc->hc_path != NULL && hc->hc_path->hp_ws_fini != NULL)
     hc->hc_path->hp_ws_fini(hc, hc->hc_opaque);
@@ -1084,7 +1119,10 @@ static void
 http_io_read(void *opaque, htsbuf_queue_t *q)
 {
   http_connection_t *hc = opaque;
-  http_handle_input(hc, q);
+  if(http_handle_input(hc, q)) {
+    http_close(hc);
+    return;
+  }
   http_write(hc);
 }
 
@@ -1095,7 +1133,7 @@ http_io_read(void *opaque, htsbuf_queue_t *q)
 const char *
 http_get_my_host(http_connection_t *hc)
 {
-  if(!hc->hc_my_addr)
+  if(!hc->hc_my_addr[0])
     net_fmt_host(hc->hc_my_addr, sizeof(hc->hc_my_addr), &hc->hc_local_addr);
   return hc->hc_my_addr;
 }

@@ -213,6 +213,7 @@ typedef struct gconf {
   int fullscreen;
   int swrefresh;
   int debug_glw;
+  int show_usage_events;
 
   int can_standby;
   int can_poweroff;
@@ -225,7 +226,7 @@ typedef struct gconf {
   int disable_upgrades;
   int disable_sd;
 
-
+  int disable_analytics;
   int enable_bin_replace;
   int enable_omnigrade;
   int enable_http_debug;
@@ -304,6 +305,10 @@ typedef struct gconf {
   char device_id[64];
 
   char os_info[128];
+
+  char lang[32];
+
+  char device_type[64];
 
 } gconf_t;
 

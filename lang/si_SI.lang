@@ -354,8 +354,13 @@ msg: Posodobi
 #
 # ./glwskins/default/pages/openerror.view
 #
-id: Unable to open resource
-msg: Nemogoče odpreti izvor
+id: Unable to open %s
+# Missing translation
+msg: 
+
+id: resource
+# Missing translation
+msg: 
 
 #
 # ./glwskins/default/pages/playqueue.view
@@ -406,10 +411,6 @@ id: Downloading %s
 # Missing translation
 msg: 
 
-id: Installing %s
-# Missing translation
-msg: 
-
 id: New version %s is available for download
 msg: Nova verzija %s je dosegljiva za prenos
 
@@ -436,13 +437,21 @@ msg: Testno
 id: Unable to query for new version
 msg: Nemogoče preveriti za novo verzijo
 
-id: Verifying %s
-# Missing translation
-msg: 
-
 #
 # ./glwskins/default/pages/video.view
 #
+id: A/V diff:
+# Missing translation
+msg: 
+
+id: Audio codec:
+# Missing translation
+msg: 
+
+id: Audio queue len:
+# Missing translation
+msg: 
+
 id: Audio volume adjustment: %d dB
 # Missing translation
 msg: 
@@ -450,8 +459,48 @@ msg:
 id: CPU is too slow to decode this video
 msg: CPU je prepočasen za dekodiranje videa
 
+id: Download speed:
+# Missing translation
+msg: 
+
+id: Packet buffer:
+# Missing translation
+msg: 
+
 id: Playback status
 msg: Status predvajanja
+
+id: Remaining buffer:
+# Missing translation
+msg: 
+
+id: Remote queue drops:
+# Missing translation
+msg: 
+
+id: Remote queue len:
+# Missing translation
+msg: 
+
+id: Source:
+# Missing translation
+msg: 
+
+id: Video bitrate:
+# Missing translation
+msg: 
+
+id: Video codec:
+# Missing translation
+msg: 
+
+id: Video decode time:
+# Missing translation
+msg: 
+
+id: Video queue len:
+# Missing translation
+msg: 
 
 #
 # ./glwskins/default/playdecks/dvd.view
@@ -1059,12 +1108,6 @@ id: Tertiary subtitle language code
 msg: Tretji jezik podnapisov
 
 #
-# ./src/js/js_page.c
-#
-id: No handler for URL
-msg: URL povezave ni mogoče obdelati
-
-#
 # ./src/keymapper.c
 #
 id: Configure mapping of keyboard and remote controller keys
@@ -1293,15 +1336,14 @@ msg: Priljubljene
 id: Music
 msg: Glasba
 
+id: No handler for URL
+msg: URL povezave ni mogoče obdelati
+
 id: Other
 msg: Ostalo
 
 id: Photos
 msg: Slike
-
-id: Published in Virtual File System
-# Missing translation
-msg: 
 
 id: Removed bookmark: %s
 msg: Odstranjene priljubljene: %s

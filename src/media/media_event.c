@@ -39,13 +39,13 @@ update_epoch_in_queue(struct media_buf_queue *q, int epoch)
  *
  */
 static int
-mp_seek_in_queues(media_pipe_t *mp, int64_t pos)
+mp_seek_in_queues(media_pipe_t *mp, int64_t user_time)
 {
   media_buf_t *abuf, *vbuf, *vk, *mb;
   int rval = 1;
 
   TAILQ_FOREACH(abuf, &mp->mp_audio.mq_q_data, mb_link)
-    if(abuf->mb_pts != PTS_UNSET && abuf->mb_pts >= pos)
+    if(abuf->mb_user_time != PTS_UNSET && abuf->mb_user_time >= user_time)
       break;
 
   if(abuf != NULL) {
@@ -54,7 +54,7 @@ mp_seek_in_queues(media_pipe_t *mp, int64_t pos)
     TAILQ_FOREACH(vbuf, &mp->mp_video.mq_q_data, mb_link) {
       if(vbuf->mb_keyframe)
 	vk = vbuf;
-      if(vbuf->mb_pts != PTS_UNSET && vbuf->mb_pts >= pos)
+      if(vbuf->mb_pts != PTS_UNSET && vbuf->mb_user_time >= user_time)
 	break;
     }
     
@@ -70,7 +70,7 @@ mp_seek_in_queues(media_pipe_t *mp, int64_t pos)
 	media_buf_free_locked(mp, mb);
 	adrop++;
       }
-      mq_update_stats(mp, &mp->mp_audio);
+      mq_update_stats(mp, &mp->mp_audio, 1);
 
       while(1) {
 	mb = TAILQ_FIRST(&mp->mp_video.mq_q_data);
@@ -82,7 +82,7 @@ mp_seek_in_queues(media_pipe_t *mp, int64_t pos)
 	media_buf_free_locked(mp, mb);
 	vdrop++;
       }
-      mq_update_stats(mp, &mp->mp_video);
+      mq_update_stats(mp, &mp->mp_video, 1);
 
 
       while(mb != vbuf) {
@@ -141,7 +141,7 @@ mp_direct_seek(media_pipe_t *mp, int64_t ts)
 
   prop_set(mp->mp_prop_root, "seektime", PROP_SET_FLOAT, ts / 1000000.0);
 
-  if(!mp_seek_in_queues(mp, ts + mp->mp_start_time))
+  if(!mp_seek_in_queues(mp, ts))
     return;
 
   /* If there already is a seek event enqueued, update it */
@@ -389,10 +389,13 @@ mp_event_set_callback(struct media_pipe *mp,
   event_t *e;
   hts_mutex_lock(&mp->mp_mutex);
 
-  while((e = TAILQ_FIRST(&mp->mp_eq)) != NULL) {
-    TAILQ_REMOVE(&mp->mp_eq, e, e_link);
-    mp_callback(mp, opaque, e);
-    event_release(e);
+  if(mp_callback != NULL) {
+    // Fire any pending events immediately
+    while((e = TAILQ_FIRST(&mp->mp_eq)) != NULL) {
+      TAILQ_REMOVE(&mp->mp_eq, e, e_link);
+      mp_callback(mp, opaque, e);
+      event_release(e);
+    }
   }
 
   mp->mp_handle_event = mp_callback;

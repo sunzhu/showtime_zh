@@ -225,16 +225,17 @@ metadata_stream_make_prop(const metadata_stream_t *ms, prop_t *parent,
     rstr_release(fmt);
   }
   
-  mp_add_trackr(parent,
-		title,
-		url,
-		ms->ms_codec,
-		ms->ms_info,
-		ms->ms_isolang,
-		NULL,
-		_p("Embedded in file"),
-		score,
-                autosel);
+  prop_t *p = mp_add_trackr(parent,
+                            title,
+                            url,
+                            ms->ms_codec,
+                            ms->ms_info,
+                            ms->ms_isolang,
+                            NULL,
+                            _p("Embedded in file"),
+                            score,
+                            autosel);
+  prop_ref_dec(p);
   
   rstr_release(title);
 }
@@ -336,3 +337,29 @@ metadata_init(void)
   metadata_sources_init();
 }
 
+
+
+const char *
+metadata_qtypestr(int qtype)
+{
+  switch(qtype) {
+  case METADATA_QTYPE_FILENAME:
+    return "filename";
+  case METADATA_QTYPE_IMDB:
+    return "IMDB ID";
+  case METADATA_QTYPE_CUSTOM_IMDB:
+    return "Custom IMDB ID";
+  case METADATA_QTYPE_DIRECTORY:
+    return "Folder name";
+  case METADATA_QTYPE_CUSTOM:
+    return "Custom query";
+  case METADATA_QTYPE_EPISODE:
+    return "Filename as TV episode";
+  case METADATA_QTYPE_MOVIE:
+    return "Movie title";
+  case METADATA_QTYPE_TVSHOW:
+    return "Title, Season, Episode";
+  default:
+    return "???";
+  }
+}

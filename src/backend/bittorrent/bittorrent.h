@@ -196,6 +196,7 @@ typedef struct peer {
   char p_peer_interested : 1;
   char p_fast_ext : 1;
   char p_ext_prot : 1;
+  char p_pending_have_all : 1;
 
   char p_id[21];
 
@@ -300,6 +301,7 @@ typedef struct torrent_piece {
   uint8_t tp_on_disk       : 1;
   uint8_t tp_disk_fail     : 1;
   uint8_t tp_load_req      : 1;
+  uint8_t tp_loadfail      : 1;
 
   struct torrent_fh_list tp_active_fh;
 
@@ -403,6 +405,7 @@ typedef struct torrent {
   char to_new_valid_piece;
   char to_need_updated_interest;
   char to_corrupt_piece;
+  char to_loadfail;
 
   char to_errbuf[256];
 
@@ -482,7 +485,8 @@ typedef struct tracker_torrent {
  * Protocol definitions
  */
 
-torrent_t *torrent_create_from_hash(const uint8_t *info_hash);
+torrent_t *torrent_create_from_hash(const uint8_t *info_hash,
+                                    const char *initiator);
 
 torrent_t *torrent_create_from_infofile(buf_t *metainfo,
                                         char *errbuf, size_t errlen);

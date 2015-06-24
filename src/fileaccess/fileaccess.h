@@ -182,7 +182,8 @@ typedef enum {
 
 
 fa_dir_t *fa_scandir(const char *url, char *errbuf, size_t errsize);
-int fa_scandir2(fa_dir_t *fd, const char *url, char *errbuf, size_t errsize);
+int fa_scandir2(fa_dir_t *fd, const char *url, char *errbuf, size_t errsize,
+                int flags);
 
 fa_dir_t *fa_get_parts(const char *url, char *errbuf, size_t errsize);
 
@@ -207,7 +208,11 @@ int64_t fa_seek4(void *fh, int64_t pos, int whence, int lazy);
 int64_t fa_fsize(void *fh);
 int fa_ftruncate(void *fh, uint64_t newsize);
 
-int fa_stat(const char *url, struct fa_stat *buf, char *errbuf, size_t errsize);
+int fa_stat_ex(const char *url, struct fa_stat *buf, char *errbuf,
+               size_t errsize, int flags);
+
+#define fa_stat(a, b, c, d) fa_stat_ex(a, b, c, d, 0)
+
 int fa_findfile(const char *path, const char *file, 
 		char *fullpath, size_t fullpathlen);
 void fa_set_read_timeout(void *fh_, int ms);
@@ -295,6 +300,8 @@ enum {
   FA_LOAD_TAG_REQUEST_HEADERS,
   FA_LOAD_TAG_RESPONSE_HEADERS,
   FA_LOAD_TAG_LOCATION,
+  FA_LOAD_TAG_CACHE_INFO,
+  FA_LOAD_TAG_PROTOCOL_CODE, // HTTP code (400, 403, etc)
 };
 
 #define FA_LOAD_ERRBUF(a, b)            FA_LOAD_TAG_ERRBUF, a, b
@@ -309,6 +316,12 @@ enum {
 #define FA_LOAD_REQUEST_HEADERS(a)      FA_LOAD_TAG_REQUEST_HEADERS, a
 #define FA_LOAD_RESPONSE_HEADERS(a)     FA_LOAD_TAG_RESPONSE_HEADERS, a
 #define FA_LOAD_LOCATION(a)             FA_LOAD_TAG_LOCATION, a
+#define FA_LOAD_CACHE_INFO(a)           FA_LOAD_TAG_CACHE_INFO, a
+#define FA_LOAD_PROTOCOL_CODE(a)        FA_LOAD_TAG_PROTOCOL_CODE, a
+
+#define FA_CACHE_INFO_FROM_CACHE              1
+#define FA_CACHE_INFO_FROM_CACHE_NOT_MODIFIED 2
+#define FA_CACHE_INFO_EXPIRED_FROM_CACHE      3
 
 buf_t *fa_load(const char *url, ...) attribute_null_sentinel;
 
@@ -323,20 +336,13 @@ rstr_t *fa_absolute_path(rstr_t *filename, rstr_t *at);
 
 rstr_t *fa_get_title(const char *url);
 
-int fa_check_url(const char *url, char *errbuf, size_t errlen);
+int fa_check_url(const char *url, char *errbuf, size_t errlen, int timeout_ms);
 
 int fa_read_to_htsbuf(struct htsbuf_queue *hq, fa_handle_t *fh, int maxbytes);
 
 void fa_pathjoin(char *dst, size_t dstlen, const char *p1, const char *p2);
 
 void fa_url_get_last_component(char *dst, size_t dstlen, const char *url);
-
-// Cache (XXX: Remove me)
-
-void fa_cache_init(void);
-
-fa_handle_t *fa_cache_open(const char *url, char *errbuf,
-			   size_t errsize, int flags, struct prop *stats);
 
 // Buffered I/O
 

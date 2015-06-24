@@ -116,7 +116,7 @@ typedef struct frame_info {
   int fi_width;
   int fi_height;
   int64_t fi_pts;
-  int64_t fi_delta;
+  int64_t fi_user_time;
   int fi_epoch;
   int fi_duration;
 
@@ -237,6 +237,7 @@ typedef struct media_pipe {
   int mp_svdelta;           // Subtitle vs video delta (µs)
   int mp_auto_standby;
   int mp_stats;
+  int mp_stats_update_limiter;
 
   struct audio_decoder *mp_audio_decoder;
 
@@ -310,7 +311,6 @@ typedef struct media_pipe {
   prop_sub_t *mp_sub_eventsink;
 
   int64_t mp_seek_base;
-  int64_t mp_start_time;
   int64_t mp_duration;  // Duration of currently played (0 if unknown)
   int mp_epoch;
 

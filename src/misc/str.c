@@ -1133,46 +1133,90 @@ bin2hex(char *dst, size_t dstlen, const uint8_t *src, size_t srclen)
 
 
 /**
+ *
+ */
+char *
+fmtstrv(const char *fmt, va_list src)
+{
+  int n;
+  int size = 100;
+  char *p, *np;
+  va_list ap;
+
+  if((p = malloc(size)) != NULL) {
+    while(1) {
+      va_copy(ap, src);
+      n = vsnprintf(p, size, fmt, ap);
+      va_end(ap);
+
+      if(n < 0)
+        break;
+
+      if(n < size)
+        return p;
+
+      size = n + 1;
+
+      if((np = realloc(p, size)) == NULL) {
+        free(p);
+        break;
+      } else {
+        p = np;
+      }
+    }
+  }
+  return strdup("<out-of-memory>");
+}
+
+
+/**
+ *
+ */
+char *
+fmtstr(const char *fmt, ...)
+{
+  va_list ap;
+
+  va_start(ap, fmt);
+  char *r = fmtstrv(fmt, ap);
+  va_end(ap);
+  return r;
+}
+
+
+
+/**
  * Create URL using ref referred from base
  */
 char *
 url_resolve_relative(const char *proto, const char *hostname, int port,
 		     const char *path, const char *ref)
 {
-  char out[512];
-  int l;
-  
   if(strstr(ref, "://"))
     return strdup(ref);
 
-  if(port != -1)
-    l = snprintf(out, sizeof(out), "%s://%s:%d", proto, hostname, port);
-  else
-    l = snprintf(out, sizeof(out), "%s://%s", proto, hostname);
-  
+  int pathlen = 0;
 
   if(*ref != '/') {
+    char *x = strrchr(path, '?');
+    if(x != NULL) {
+      char *x2 = mystrdupa(path);
+      x2[x - path] = 0;
+      path = x2;
+    }
 
     const char *r = strrchr(path, '/');
     if(r != NULL) {
-      size_t l2 = r + 1 - path;
-
-      if(l2 + l > sizeof(out) - 1)
-	return NULL;
-
-      memcpy(out + l, path, l2);
-      l += l2;
-
-      size_t l3 = strlen(ref) + 1;
-      if(l3 + l > sizeof(out) - 1)
-	return NULL;
-      
-      memcpy(out + l, ref, l3);
-      return strdup(out);
+      pathlen = r - path + 1;
     }
   }
-  snprintf(out + l, sizeof(out) - l, "%s", ref); 
-  return strdup(out);
+
+  if(port != -1)
+    return fmtstr("%s://%s:%d%.*s%s", proto, hostname, port,
+                  pathlen, path, ref);
+
+  return fmtstr("%s://%s%.*s%s", proto, hostname,
+                pathlen, path, ref);
 }
 
 
@@ -1184,7 +1228,7 @@ url_resolve_relative_from_base(const char *base, const char *url)
 {
   char proto[20];
   char hostname[200];
-  char path[200];
+  char path[2048];
   int port;
 
   url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),

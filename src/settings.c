@@ -36,6 +36,7 @@
 #include "htsmsg/htsmsg_store.h"
 #include "db/kvstore.h"
 #include "misc/minmax.h"
+#include "usage.h"
 
 #if ENABLE_NETLOG
 #include <netinet/in.h>
@@ -1304,6 +1305,7 @@ be_settings_canhandle(const char *url)
 static int
 be_settings_open(prop_t *page, const char *url0, int sync)
 {
+  usage_page_open(sync, "Settings");
   prop_link(settings_model, prop_create(page, "model"));
   return 0;
 }
@@ -1408,6 +1410,11 @@ init_dev_settings(void)
 
   add_dev_bool(s, "Enable omnigrade",
 	       "omnigrade", &gconf.enable_omnigrade);
+
+#ifndef NDEBUG
+  add_dev_bool(s, "Disable analytics",
+	       "disableanalytics", &gconf.disable_analytics);
+#endif
 
   add_dev_bool(s, "Always close pages when pressing back",
 	       "navalwaysclose", &gconf.enable_nav_always_close);

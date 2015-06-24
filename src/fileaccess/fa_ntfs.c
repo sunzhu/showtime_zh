@@ -57,7 +57,7 @@ fs_urlsnprintf(char *buf, size_t bufsize, const char *prefix, const char *base,
  */
 static int
 ntfs_scandir(fa_protocol_t *fap, fa_dir_t *fd,
-	     const char *url, char *errbuf, size_t errlen)
+	     const char *url, char *errbuf, size_t errlen, int flags)
 {
   DIR_ITER *di = ps3ntfs_diropen(url);
   char filename[1024];
@@ -344,7 +344,7 @@ ntfs_periodic(struct callout *c, void *opaque)
     TRACE(TRACE_DEBUG, "NTFS", "Mounted %d partitions on device %d",
 	  d->partitions_mounted, i);
 
-    usage_inc_counter("ntfsmount", 1);
+    usage_event("NTFS Mount", 1, NULL);
 
     d->services = malloc(sizeof(service_t *) * d->partitions_mounted);
 

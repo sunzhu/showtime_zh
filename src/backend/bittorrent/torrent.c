@@ -32,7 +32,7 @@
 #include "bittorrent.h"
 #include "bencode.h"
 #include "misc/minmax.h"
-
+#include "usage.h"
 
 #define TORRENT_REQ_SIZE 16384
 
@@ -143,7 +143,7 @@ torrent_find_by_hash(const uint8_t *info_hash)
  *
  */
 static torrent_t *
-torrent_create(const uint8_t *info_hash)
+torrent_create(const uint8_t *info_hash, const char *initiator)
 {
   if(LIST_FIRST(&torrents) == NULL)
     asyncio_wakeup_worker(torrent_boot_periodic_signal);
@@ -161,6 +161,9 @@ torrent_create(const uint8_t *info_hash)
   to->to_title = malloc(41);
   bin2hex(to->to_title, 41, info_hash, 20);
   to->to_title[40] = 0;
+
+  usage_event("Open Torrent", 1,
+              USAGE_SEG("initiator", initiator));
   return to;
 }
 
@@ -169,7 +172,7 @@ torrent_create(const uint8_t *info_hash)
  *
  */
 torrent_t *
-torrent_create_from_hash(const uint8_t *info_hash)
+torrent_create_from_hash(const uint8_t *info_hash, const char *initiator)
 {
   torrent_t *to;
   char errbuf[512];
@@ -179,7 +182,7 @@ torrent_create_from_hash(const uint8_t *info_hash)
       break;
 
   if(to == NULL)
-    to = torrent_create(info_hash);
+    to = torrent_create(info_hash, initiator);
 
   if(to->to_metainfo == NULL) {
     buf_t *b = torrent_diskio_load_infofile_from_hash(info_hash);
@@ -237,7 +240,7 @@ torrent_create_from_infofile(buf_t *b, char *errbuf, size_t errlen)
       break;
 
   if(to == NULL)
-    to = torrent_create(info_hash);
+    to = torrent_create(info_hash, "infofile");
 
   if(to->to_metainfo == NULL) {
     if(torrent_parse_torrentfile(to, doc, errbuf, errlen)) {
@@ -1246,7 +1249,7 @@ torrent_send_have(torrent_t *to)
     peer_t *p;
 
     const int pid = tp->tp_index;
-
+    assert(pid < to->to_num_pieces);
     LIST_FOREACH(p, &to->to_running_peers, p_running_link) {
 
       if(p->p_piece_flags == NULL)
@@ -1358,6 +1361,23 @@ torrent_reload_corrupt_pieces(torrent_t *to)
  *
  */
 static void
+torrent_reload_loadfail_pieces(torrent_t *to)
+{
+  torrent_piece_t *tp;
+
+  TAILQ_FOREACH(tp, &to->to_active_pieces, tp_link) {
+    if(tp->tp_loadfail) {
+      tp->tp_loadfail = 0;
+      torrent_piece_enqueue_requests(to, tp);
+    }
+  }
+}
+
+
+/**
+ *
+ */
+static void
 torrent_check_pendings(void)
 {
   hts_mutex_lock(&bittorrent_mutex);
@@ -1378,6 +1398,11 @@ torrent_check_pendings(void)
     if(to->to_corrupt_piece) {
       to->to_corrupt_piece = 0;
       torrent_reload_corrupt_pieces(to);
+    }
+
+    if(to->to_loadfail) {
+      to->to_loadfail = 0;
+      torrent_reload_loadfail_pieces(to);
     }
 
     torrent_io_do_requests(to);
@@ -1611,7 +1636,7 @@ torrent_wakeup_for_metadata_requests(void)
  *
  */
 static void
-torrent_io_init(void)
+torrent_early_init(void)
 {
   btg.btg_max_peers_global = 200;
   btg.btg_max_peers_torrent = 50;
@@ -1626,11 +1651,21 @@ torrent_io_init(void)
   hts_cond_init(&torrent_piece_io_needed_cond, &bittorrent_mutex);
   hts_cond_init(&torrent_piece_verified_cond, &bittorrent_mutex);
   hts_cond_init(&torrent_metainfo_available_cond, &bittorrent_mutex);
+}
 
+INITME(INIT_GROUP_NET, torrent_early_init, NULL);
+
+
+/**
+ *
+ */
+static void
+torrent_asyncio_init(void)
+{
   hts_mutex_lock(&bittorrent_mutex);
   torrent_settings_init();
   hts_mutex_unlock(&bittorrent_mutex);
 
 }
 
-INITME(INIT_GROUP_ASYNCIO, torrent_io_init, NULL);
+INITME(INIT_GROUP_ASYNCIO, torrent_asyncio_init, NULL);

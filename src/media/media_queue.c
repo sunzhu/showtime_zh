@@ -52,10 +52,11 @@ mq_flush_q(media_pipe_t *mp, media_queue_t *mq, struct media_buf_queue *q,
 static void
 mq_flush_locked(media_pipe_t *mp, media_queue_t *mq, int full)
 {
+  mq->mq_last_deq_dts = PTS_UNSET;
   mq_flush_q(mp, mq, &mq->mq_q_data, full);
   mq_flush_q(mp, mq, &mq->mq_q_ctrl, full);
   mq_flush_q(mp, mq, &mq->mq_q_aux, full);
-  mq_update_stats(mp, mq);
+  mq_update_stats(mp, mq, 1);
 }
 
 
@@ -127,27 +128,34 @@ mq_get_buffer_delay(media_queue_t *mq)
   media_buf_t *f, *l;
 
   if(mq->mq_stream == -1)
-    return INT32_MAX;
+    return 0;
 
   f = TAILQ_FIRST(&mq->mq_q_data);
   l = TAILQ_LAST(&mq->mq_q_data, media_buf_queue);
 
-  int cnt = 5;
+  if(f == NULL) {
+    mq->mq_buffer_delay = 0;
+    return 0;
+  }
 
-  while(f && f->mb_pts == AV_NOPTS_VALUE && cnt > 0) {
+  int cnt = 10;
+
+  while(f && f->mb_dts == PTS_UNSET && cnt > 0) {
     f = TAILQ_NEXT(f, mb_link);
     cnt--;
   }
 
-  cnt = 5;
-  while(l && l->mb_pts == AV_NOPTS_VALUE && cnt > 0) {
+  cnt = 10;
+  while(l && l->mb_dts == PTS_UNSET && cnt > 0) {
     l = TAILQ_PREV(l, media_buf_queue, mb_link);
     cnt--;
   }
 
   if(f != NULL && l != NULL && f->mb_epoch == l->mb_epoch &&
-     l->mb_pts != AV_NOPTS_VALUE && f->mb_pts != AV_NOPTS_VALUE) {
-    mq->mq_buffer_delay = (l->mb_pts - l->mb_delta) - (f->mb_pts - f->mb_delta);
+     l->mb_dts != PTS_UNSET && f->mb_dts != PTS_UNSET) {
+    mq->mq_buffer_delay = l->mb_dts - f->mb_dts;
+    if(mq->mq_buffer_delay < 0)
+      mq->mq_buffer_delay = 0;
   }
 
   return mq->mq_buffer_delay;
@@ -163,7 +171,7 @@ mp_update_buffer_delay(media_pipe_t *mp)
   int vd = mq_get_buffer_delay(&mp->mp_video);
   int ad = mq_get_buffer_delay(&mp->mp_audio);
 
-  mp->mp_buffer_delay = MIN(vd, ad);
+  mp->mp_buffer_delay = MAX(vd, ad);
 }
 
 
@@ -282,7 +290,7 @@ mb_enqueue_no_block(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb,
   mq->mq_packets_current++;
   mp->mp_buffer_current += mb->mb_size;
   mb->mb_epoch = mp->mp_epoch;
-  mq_update_stats(mp, mq);
+  mq_update_stats(mp, mq, 0);
   hts_cond_signal(&mq->mq_avail);
 
   hts_mutex_unlock(&mp->mp_mutex);
@@ -306,8 +314,12 @@ mb_enqueue_always(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb)
  *
  */
 void
-mq_update_stats(media_pipe_t *mp, media_queue_t *mq)
+mq_update_stats(media_pipe_t *mp, media_queue_t *mq, int force)
 {
+  if(!force && --mp->mp_stats_update_limiter > 0)
+    return;
+  mp->mp_stats_update_limiter = 100;
+
   int satisfied = mp->mp_eof ||
     mp->mp_buffer_current == 0 ||
     mp->mp_buffer_current * 8 > mp->mp_buffer_limit * 7 ||
@@ -346,6 +358,7 @@ void
 mq_init(media_queue_t *mq, prop_t *p, hts_mutex_t *mutex, media_pipe_t *mp)
 {
   mq->mq_mp = mp;
+  mq->mq_last_deq_dts = PTS_UNSET;
   TAILQ_INIT(&mq->mq_q_data);
   TAILQ_INIT(&mq->mq_q_ctrl);
   TAILQ_INIT(&mq->mq_q_aux);
@@ -530,7 +543,9 @@ mb_enq(media_pipe_t *mp, media_queue_t *mq, media_buf_t *mb)
   mq->mq_packets_current++;
   mb->mb_epoch = mp->mp_epoch;
   mp->mp_buffer_current += mb->mb_size;
-  mq_update_stats(mp, mq);
+
+  mq_update_stats(mp, mq, 0);
+
   if(do_signal)
     hts_cond_signal(&mq->mq_avail);
 }
