@@ -120,6 +120,7 @@ keyring_lookup(const char *id, char **username, char **password,
   hts_mutex_lock(&keyring_mutex);
 
   if(flags & KEYRING_QUERY_USER) {
+    char tmpbuf[64];
     htsmsg_t *parent;
     prop_t *p = prop_ref_inc(prop_create_root(NULL));
 
@@ -148,8 +149,8 @@ keyring_lookup(const char *id, char **username, char **password,
     if(domain != NULL)
       prop_set_string(dom, *domain);
 
-    TRACE(TRACE_INFO, "keyring", "Requesting credentials for %s : %s : %s",
-	  id, source, reason);
+    TRACE(TRACE_INFO, "keyring", "Requesting credentials for %s : %s : %s (%s)",
+	  id, source, reason, hts_thread_name(tmpbuf, sizeof(tmpbuf)));
 
 
     event_t *e = popup_display(p);
