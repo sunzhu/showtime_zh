@@ -45,6 +45,7 @@ torrent_resolve_file(const char *url, char *errbuf, size_t errlen)
     if(!strcmp(url, tf->tf_fullpath))
       return tf;
   }
+  snprintf(errbuf, errlen, "File not found");
   return NULL;
 }
 

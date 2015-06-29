@@ -1,200 +1,182 @@
-﻿language: Slovak
-native: Slovensky
-maintainer: lubek76 <lubek@76.net>
+﻿language: Hungarian
+native: Magyar
+maintainer: Döme Gergely István <domegergely@hotmail.com>
 #
 # ./glwskins/default/cmdmenu.view
 #
 id: Add current page to bookmarks
-msg: Pridať k obľúbeným
+msg: Jelenlegi oldal hozzáadása könyvjelzőkhöz
 
 id: Open settings
-msg: Otvoriť nastavenia
+msg: Beállítások megnyitása
 
 id: Remove current page from bookmarks
-msg: Odtránť z obľúbených
+msg: Jelenlegi oldal törlése a könyvjelzőkből
 
 #
 # ./glwskins/default/cmdmenu/cmdmenu_common.view
 #
 id: Activate sleep timer
-# Missing translation
-msg: 
+msg: Elalvás időzítő aktiválása
 
 id: Disable sleep timer
-# Missing translation
-msg: 
+msg: Elalvás időzítő kikapcsolása
 
 id: Exit %s
-# Missing translation
-msg: 
+msg: Kilépés %s
 
 id: Go to Home screen
-msg: Prejsť na úvodnú stránku
+msg: Visszatérés a főképernyőre
 
 id: Hide system info
-# Missing translation
-msg: 
+msg: Rendszer információk elrejtése
 
 id: Master volume
-# Missing translation
-msg: 
+msg: Fő hangerő
 
 id: Navigation
-msg: Navigácia
+msg: Navigáció
 
 id: Open Settings
-msg: Otvoriť nastavenia
+msg: Beállítások megnyitása
 
 id: Playqueue
-msg: Front prehrávania
+msg: Lejátszási lista
 
 id: Power off
-# Missing translation
-msg: 
+msg: Kikapcsolás
 
 id: Reload current page
-msg: Obnoviť stránku
+msg: Jelenlegi oldal újratöltése
 
 id: Show system info
-# Missing translation
-msg: 
+msg: Rendszerinformációk megjelenítése
 
 id: Suspend
-# Missing translation
-msg: 
+msg: Készenlét
 
 id: System
-# Missing translation
-msg: 
+msg: Rendszer
 
 id: Time until sleep
-# Missing translation
-msg: 
+msg: Idő az alvó módba lépésig
 
 id: dB
-# Missing translation
-msg: 
+msg: dB
 
 id: min
-# Missing translation
-msg: 
+msg: perc
 
 #
 # ./glwskins/default/cmdmenu/cmdmenu_dir.view
 #
 id: Add '%s' to home screen
-msg: Pridať '%s' na úvodnú stránku
+msg: '%s' hozzáadása a főképernyőhöz
 
 id: Remove '%s' from home screen
-msg: Odobrať '%s' z úvodnej stránky
+msg: '%s' törlése a főképernyőről
 
 #
 # ./glwskins/default/cmdmenu/cmdmenu_item.view
 #
 id: Continue from %s
-msg: Pokračovať od %s
+msg: Folytatás %s-tól
 
 id: Continue playback here
-msg: Prehrávať odtialto
+msg: Lejátszás folytatása innen
 
 id: Delete
-msg: Zmazať
+msg: Törlés
 
 id: Mark as seen
-msg: Označiť ako prehrané
+msg: Megnézettnek jelölés
 
 id: Mark as unseen
-msg: Označiť ako neprehrané
+msg: Nem-megnézettnek jelölés
 
 id: Play from beginning
-msg: Hrať od začiatku
+msg: Lejátszás az elejétől
 
 id: Play until end of list
-msg: Hráť do konca zoznamu
+msg: Lejátszás a lista végéig
 
 id: Queue
-msg: Front
+msg: Lejátszási lista
 
 id: Star
-msg: Star
+msg: Kedvenc
 
 id: Unstar
-msg: Unstar
+msg: Nem kedvenc
 
 #
 # ./glwskins/default/cmdmenu/cmdmenu_video.view
 #
 id: Audio
-msg: Audio
+msg: Hang
 
 id: Audio settings
-msg: Nastavenie zvuku
+msg: Hang beállítások
 
 id: Audio tracks
-msg: Zvukové stopy
+msg: Hangsávok
 
 id: Chapters
-# Missing translation
-msg: 
+msg: Fejezetek
 
 id: Seek by time
-msg: Hľadať podľa času
+msg: Tekerés idő alapján
 
 id: Settings
-msg: Nastavenie
+msg: Beállítások
 
 id: Subtitle settings
-msg: Nastavenie titulkov
+msg: Felirat beállítások
 
 id: Subtitle tracks
-msg: Titulky
+msg: Felirat sávok
 
 id: Subtitles
-msg: Titulky
+msg: Feliratok
 
 id: Video
-msg: Video
+msg: Videó
 
 id: Video menu
-msg: Video menu
+msg: Videó menü
 
 id: Video settings
-msg: Nastavenie videa
+msg: Videó beállítások
 
 #
 # ./glwskins/default/loading.view
 #
 id: %d kb/s
-# Missing translation
-msg: 
+msg: %d kb/s
 
 id: Bitrate:
-# Missing translation
-msg: 
+msg: Bitráta:
 
 #
 # ./glwskins/default/log.view
 #
 id: System log
-msg: Systémové udalosti
+msg: Rendszernapló
 
 #
 # ./glwskins/default/osk.view
 #
 id: Cancel
-msg: Storno
+msg: Mégse
 
 id: Clear
-# Missing translation
-msg: 
+msg: Töröl
 
 id: Default
-# Missing translation
-msg: 
+msg: Alapértelmezett
 
 id: Keyboard layout:
-# Missing translation
-msg: 
+msg: Billentyűzetkiosztás
 
 id: OK
 msg: OK
@@ -206,60 +188,55 @@ id: Album
 msg: Album
 
 id: Artist
-# Missing translation
-msg: 
+msg: Előadó
 
 id: Custom
-msg: Užívateľské
+msg: Saját
 
 id: Images
-msg: Obrázky
+msg: Képek
 
 id: List
-msg: Zoznam
+msg: Lista
 
 id: Slideshow
-msg: Prezentácia
+msg: Képvetítés
 
 id: Tvchannels
-# Missing translation
-msg: 
+msg: Tv csatornák
 
 id: View
-msg: Pohľad
+msg: Megjelenítés
 
 #
 # ./glwskins/default/pages/discovered.view
 #
 id: Discovered resources on local network
-msg: Hľadám zdroje v lokálnej sieti
+msg: Helyi hálózaton talált adathordózók
 
 #
 # ./glwskins/default/pages/home.view
 #
 id: Tiled
-# Missing translation
-msg: 
+msg: Csempék
 
 #
 # ./glwskins/default/pages/home_clist.view
 #
 id: Apps
-# Missing translation
-msg: 
+msg: Alkalmazások
 
 id: Dismiss
-msg: Zamietnuť
+msg: Megszakít
 
 id: Search / Open URL
-# Missing translation
-msg: 
+msg: Keresés / Cím megnyitása
 
 #
 # ./glwskins/default/pages/iteminfo/image.view
 #
 id: Camera: 
-msg: Kamera
+msg: Kamera:
 
 id: Date: 
 msg: Dátum:
@@ -268,559 +245,479 @@ msg: Dátum:
 # ./glwskins/default/pages/iteminfo/plugin.view
 #
 id: %s %s or newer is required
-# Missing translation
-msg: 
+msg: %s %s vagy újabb szükséges
 
 id: Author: 
-msg: Autor:
+msg: Készítő:
 
 id: Available version: 
-msg: Dostupná verzia:
+msg: Elérhető verzió:
 
 id: Installed version: 
-msg: Inštalovaná verzia:
+msg: Telepített verzió:
 
 #
 # ./glwskins/default/pages/iteminfo/video.view
 #
 id: Duration:
-msg: Dĺžka:
+msg: Hossz:
 
 id: File date:
-msg: Čas súboru:
+msg: Fájl dátuma:
 
 id: Genre:
-msg: Žáner:
+msg: Műfaj:
 
 id: Metadata from
-msg: Metadata z
+msg: Metadata 
 
 id: Rating:
-msg: Hodnotenie:
+msg: Értékelés:
 
 id: Year:
-msg: Rok:
+msg: Év:
 
 id: Seen %d times
-msg[0]: 
-msg[1]: 
+msg[0]: Megtekintve %d alkalommal
+msg[1]: Megtekintve %d alkalommal
 
 #
 # ./glwskins/default/pages/listitems/add.view
 #
 id: Add new entry
-msg: Pridať položku
+msg: Új hozzáadása
 
 #
 # ./glwskins/default/pages/listitems/bool.view
 #
 id: No
-msg: Nie
+msg: Nem
 
 id: Yes
-msg: Áno 
+msg: Igen
 
 #
 # ./glwskins/default/pages/listitems/font.view
 #
 id: Condensed
-# Missing translation
-msg: 
+msg: Sűrített
 
 id: Main
-# Missing translation
-msg: 
+msg: Normál
 
 id: Subs
-# Missing translation
-msg: 
+msg: Felirat
 
 #
 # ./glwskins/default/pages/listitems/plugin.view
 #
 id: Install
-msg: Inštalovať
+msg: Telepít
 
 id: Uninstall
-msg: Odinštalovať
+msg: Töröl
 
 id: Upgrade
-msg: Upgradovať
+msg: Frissítés
 
 #
 # ./glwskins/default/pages/openerror.view
 #
 id: Unable to open %s
-# Missing translation
-msg: 
+msg: Nem lehet megnyitni: %s
 
 id: resource
-# Missing translation
-msg: 
+msg: Források
 
 #
 # ./glwskins/default/pages/playqueue.view
 #
 id: Track %d / %d
-msg: Skladba %d / %d
+msg: Szám %d / %d
 
 #
 # ./glwskins/default/pages/slideshow.view
 #
 id: Paused
-# Missing translation
-msg: 
+msg: Szünet
 
 #
 # ./glwskins/default/pages/upgrade.view
 #
 id: %s is up to date
-# Missing translation
-msg: 
+msg: A %s a legújabb verzió
 
 id: An error occured during download
-msg: Pri sťahovaní došlo k chybe
+msg: Hiba lépett fel a letöltés közben
 
 id: Available version:
-msg: Dostupná verzia:
+msg: Elérhető verzió:
 
 id: Changelog for %s releases
-msg: Zoznam zmien verzie %s
+msg: Változás lista a %s kiadáshoz
 
 id: Check for updates now
-msg: Skontrolovať aktualizácie
+msg: Frissités keresése most
 
 id: Checking for updates...
-msg: Kontrolujem aktualizácie:
+msg: Frissitések keresése...
 
 id: Checking installed version of %s
-# Missing translation
-msg: 
+msg: %s telepített verziójának elellenőrzése
 
 id: Current version:
-msg: Súčasná verzia:
+msg: Jelenlegi verzió:
 
 id: Download and install...
-msg: Stiahnuť a nainštalovať...
+msg: Letöltés és telepítés..
 
 id: Downloading %s
-# Missing translation
-msg: 
+msg: %s letöltése
 
 id: New version %s is available for download
-msg: Nová verzia %s je k stiahnuťiu
+msg: A %s új verziója elérhető
 
 id: No upgrade available
-msg: Upgrade nie je k dispozícii
+msg: Frissítés nem található
 
 id: Patching %s
-# Missing translation
-msg: 
+msg: Patchelés %s
 
 id: Restarting %s in %d seconds...
-# Missing translation
-msg: 
+msg: %s újraindítása %d másodperc múlva...
 
 id: Retry...
-msg: Skúšam znova...
+msg: Újra...
 
 id: Stable
-msg: Stabilný
+msg: Stabil
 
 id: Testing
-msg: Testovací
+msg: Teszt
 
 id: Unable to query for new version
-msg: Nepodarilo sa zistiť novú verziu
+msg: Nem lehet lekérni a verzió listát
 
 #
 # ./glwskins/default/pages/video.view
 #
 id: A/V diff:
-# Missing translation
-msg: 
+msg: A/V diff:
 
 id: Audio codec:
-# Missing translation
-msg: 
+msg: Hang kodek:
 
 id: Audio queue len:
-# Missing translation
-msg: 
+msg: Hang hossz:
 
 id: Audio volume adjustment: %d dB
-# Missing translation
-msg: 
+msg: Hangerő: %d dB
 
 id: CPU is too slow to decode this video
-msg: CPU je príliš pomalý pre dekódovanie tohoto videa
+msg: A processzor túl lassú hogy dekódolja ezt a videót
 
 id: Download speed:
-# Missing translation
-msg: 
+msg: Letöltési sebesség:
 
 id: Packet buffer:
-# Missing translation
-msg: 
+msg: Csomag buffer:
 
 id: Playback status
-msg: Stav prehrávania
+msg: Lejátszás állapota
 
 id: Remaining buffer:
-# Missing translation
-msg: 
+msg: Fennmaradt buffer:
 
 id: Remote queue drops:
-# Missing translation
-msg: 
+msg: Szerver kérés megszakítások:
 
 id: Remote queue len:
-# Missing translation
-msg: 
+msg: Szerver lista hossz.:
 
 id: Source:
-# Missing translation
-msg: 
+msg: Forrás:
 
 id: Video bitrate:
-# Missing translation
-msg: 
+msg: Videó bitráta:
 
 id: Video codec:
-# Missing translation
-msg: 
+msg: Videó kodek:
 
 id: Video decode time:
-# Missing translation
-msg: 
+msg: Videó dekódolási idő:
 
 id: Video queue len:
-# Missing translation
-msg: 
+msg: Videó hossz.:
 
 #
 # ./glwskins/default/playdecks/dvd.view
 #
 id: Chapter: %d
-msg: Kapitola:
+msg: Fejezet: %d
 
 id: Title: %d
-msg: Názov:
+msg: Cím: %d
 
 #
 # ./glwskins/default/popups/auth.view
 #
 id: Domain
-msg: Doména
+msg: Cím
 
 id: Password
-msg: Heslo
+msg: Jelszó
 
 id: Remember me
-msg: Pamätať si
+msg: Emlékezzen rám
 
 id: Username
-msg: Užívateľ
+msg: Felhasználó név
 
 #
 # ./glwskins/default/popups/resume.view
 #
 id: No, Start over
-# Missing translation
-msg: 
+msg: Nem, kezdje elölről
 
 id: Resume %s from %s
-# Missing translation
-msg: 
+msg: %s folytatása %s-tól
 
 #
 # ./glwskins/default/screensaver.view
 #
 id: No media loaded
-msg: Žiadne médium
+msg: Nincs média betöltve
 
 #
 # ./glwskins/default/sysinfo.view
 #
 id: CPU Temp
-# Missing translation
-msg: 
+msg: CPU Hő
 
 id: Fragmentation
-# Missing translation
-msg: 
+msg: Töredezettség
 
 id: GPU Temp
-# Missing translation
-msg: 
+msg: GPU Hő
 
 id: HDD Avail
-# Missing translation
-msg: 
+msg: HDD
 
 id: Inactive mem
-# Missing translation
-msg: 
+msg: Inaktív memória
 
 id: Memory usage
-# Missing translation
-msg: 
+msg: Memória használat
 
 id: System Free
-# Missing translation
-msg: 
+msg: Szabad ram
 
 id: System Total
-# Missing translation
-msg: 
+msg: Össz. ram
 
 #
 # ./glwskins/default/universe.view
 #
 id: Audio muted
-msg: Zvuk stišený
+msg: Hang némitva
 
 id: Master volume: %d dB
-msg: Hlasitosť: %d dB
+msg: Fő hangerő: %d dB
 
 #
 # ./src/api/tmdb.c
 #
 id: Language (ISO 639-1 code)
-# Missing translation
-msg: 
+msg: Nyelv (ISO 639-1 kódolás)
 
 id: Use original title
-# Missing translation
-msg: 
+msg: Eredeti cím használata
 
 #
 # ./src/arch/linux/pulseaudio.c
 #
 id: Unable to initialize audio system %s -- %s
-# Missing translation
-msg: 
+msg: Nem lehetséges az audió rendszer indítása %s -- %s
 
 #
 # ./src/arch/ps3/ps3_main.c
 #
 id: System is low on memory (%d kB RAM available)
-msg: Systém má málo pamäte (%d kb RAM volných)
+msg: A rendszeren kevés memória érhető el (%d kB RAM elérhető)
 
 #
 # ./src/arch/ps3/ps3_vdec.c
 #
 id: Cell-h264: %d Ref-frames for %d content is incompatible with PS3 HW decoder. Disabling acceleration
-# Missing translation
-msg: 
+msg: Cell-h264: %d Referencia képkocka %d tartalomhoz nem kompatibilis a PS3 dekódoló hardverével. Gyorsítás letiltása.
 
 id: Cell-h264: Broken headers, Disabling acceleration
-# Missing translation
-msg: 
+msg: Cell-h264: Nem megfelelő videó fejléc, hardveres gyorsítás letiltva.
 
 id: Cell-h264: Forcing level 4.2 for content in level %d.%d. This may break video playback.
-msg: Cell-h264: Forcing level 4.2 for content in level %d.%d. This may break video playback.
+msg: Cell-h264: 4.2 szint erőltetése %d.%d szintű tartalomhoz. Ez megakadályozhatja a videó lejátszását.
 
 id: Unable to accelerate %s, library not loaded.
-msg: Unable to accelerate %s, library not loaded.
+msg: Nem gyorsítható a %s, a könyvtár nincs betöltve.
 
 id: Unable to open Cell codec. Error 0x%x
-msg: Unable to open Cell codec. Error 0x%x
+msg: A Cell kodek nem indítható. Hibakód 0x%x
 
 id: Unable to open Cell codec. Unable to allocate %d bytes of RAM
-msg: Unable to open Cell codec. Unable to allocate %d bytes of RAM
+msg: A Cell kodek nem indítható. Nem foglalható le %d bájt RAM.
 
 id: Unable to query Cell codec. Error 0x%x
-msg: Unable to query Cell codec. Error 0x%x
+msg: A Cell kodek nem indítható. Hibakód 0x%x
 
 #
 # ./src/arch/rpi/rpi_audio.c
 #
 id: 8 Channel PCM
-# Missing translation
-msg: 
+msg: 8 csatornás PCM
 
 id: AC3 Pass-Through
-# Missing translation
-msg: 
+msg: AC3 közvetlen
 
 id: Analog
-# Missing translation
-msg: 
+msg: Analóg
 
 id: Audio output port
-# Missing translation
-msg: 
+msg: Hang kimenet
 
 id: Autodetect
-# Missing translation
-msg: 
+msg: Automatikus érzékelés
 
 id: DTS Pass-Through
-# Missing translation
-msg: 
+msg: DTS közvetlen
 
 id: HDMI
-# Missing translation
-msg: 
+msg: HDMI
 
 id: Off
-msg: Vyp
+msg: Ki
 
 id: On
-# Missing translation
-msg: 
+msg: Be
 
 #
 # ./src/arch/rpi/rpi_cec.c
 #
 id: Configure communications with your TV
-# Missing translation
-msg: 
+msg: Kommunikáció konfigurálása a TV-vel
 
 id: Consumer Electronics Control
-# Missing translation
-msg: 
+msg: Consumer Electronics Control
 
 #
 # ./src/audio2/audio.c
 #
 id: Audio delay
-msg: Oneskorenie zvuku
+msg: Hang késleltetés
 
 id: Audio gain adjustment during video playback
-# Missing translation
-msg: 
+msg: Hang szabályozása videó lejátszás közben
 
 id: Audio settings during video playback
-# Missing translation
-msg: 
+msg: Hang beállítások videó lejátszás közben
 
 id: Setup audio output
-# Missing translation
-msg: 
+msg: Hang kimenet beállítása
 
 #
 # ./src/audio2/audio_test.c
 #
 id: 440Hz sinewave -12dB
-# Missing translation
-msg: 
+msg: 440Hz szinuszgörbe -12dB
 
 id: Audio test
-# Missing translation
-msg: 
+msg: Hang teszt
 
 id: Center
-msg: Stred
+msg: Középső (center)
 
 id: Front Left
-# Missing translation
-msg: 
+msg: Bal első
 
 id: Front Right
-# Missing translation
-msg: 
+msg: Jobb első
 
 id: LFE
-# Missing translation
-msg: 
+msg: Mélynyomó
 
 id: Pink noise
-# Missing translation
-msg: 
+msg: Rózsaszín zaj
 
 id: Play test signal
-# Missing translation
-msg: 
+msg: Teszt hang lejtszása
 
 id: Rear Left
-# Missing translation
-msg: 
+msg: Bal hátsó
 
 id: Rear Right
-# Missing translation
-msg: 
+msg: Jobb hátsó
 
 id: Speaker position
-# Missing translation
-msg: 
+msg: Hangszóró helyzete
 
 id: Surround Left
-# Missing translation
-msg: 
+msg: Térhangzás balra
 
 id: Surround Right
-# Missing translation
-msg: 
+msg: Térhangzás jobbra
 
 id: Test signal type
-# Missing translation
-msg: 
+msg: Teszt hang típusa
 
 #
 # ./src/backend/bittorrent/bt_backend.c
 #
 id: No files in torrent
-# Missing translation
-msg: 
+msg: Nem találhatók fájlok a torrentben
 
 id: Unable to open torrent: %s
-# Missing translation
-msg: 
+msg: A torrent nem nyitható meg: %s
 
 #
 # ./src/backend/bittorrent/diskio.c
 #
 id: Cached torrents use %d MB out of allowed %d MB. Total free space on volume: %d MB
-# Missing translation
-msg: 
+msg: Az előtöltött torrentek %d MB-ot használnak a megengedett %d MB-ból. Összes szabad hely: %d MB
 
 #
 # ./src/backend/bittorrent/fa_torrent.c
 #
 id: Connected peers
-# Missing translation
-msg: 
+msg: Csatlakozott peer
 
 id: Known peers
-# Missing translation
-msg: 
+msg: Ismert peer
 
 id: Receiving from
-# Missing translation
-msg: 
+msg: Fogadás
 
 id: Torrent leechers
-# Missing translation
-msg: 
+msg: Torrent leech
 
 id: Torrent seeders
-# Missing translation
-msg: 
+msg: Torrent seed
 
 #
 # ./src/backend/bittorrent/torrent_settings.c
 #
 id: Clear cache
-# Missing translation
-msg: 
+msg: Cache ürítése
 
 id: Enable bittorrent
-# Missing translation
-msg: 
+msg: Bittorent engedélyezése
 
 id: Max usage of free space for caching torrents
-# Missing translation
-msg: 
+msg: Maximum felhasználható szabadhely a torrentek előtöltésére
 
 id: Status
-# Missing translation
-msg: 
+msg: Státusz
 
 id: Torrent cache path
-# Missing translation
-msg: 
+msg: Torrent előtöltés helye
 
 #
 # ./src/backend/dvd/dvd.c
@@ -829,529 +726,481 @@ id: DVD
 msg: DVD
 
 id: DVD read error, restarting disc
-msg: Chyba pri čítaní DVD, disk bude načítaný znovu
+msg: DVD olvasási hiba, lemez újraindítása
 
 #
 # ./src/backend/hls/hls.c
 #
 id: Primary
-# Missing translation
-msg: 
+msg: Elsődleges
 
 id: Supplementary
-# Missing translation
-msg: 
+msg: Másodlagos
 
 #
 # ./src/backend/htsp/htsp.c
 #
 id: Invalid HTSP URL
-msg: Neplatný HTSP URL
+msg: Hibás HTSP URL
 
 #
 # ./src/backend/search.c
 #
 id: Search
-msg: Hľadanie
+msg: Keresés
 
 id: Search result for: %s
-msg: Výsledky hľadania pre: %s
+msg: Keresés eredménye a: %s
 
 #
 # ./src/backend/spotify/spotify.c
 #
 id: Albums
-# Missing translation
-msg: 
+msg: Albumok
 
 id: Automatic login on start
-# Missing translation
-msg: 
+msg: Automatikus belépés indulásnál
 
 id: Collaborative
-msg: Spolupráca
+msg: Együttműködés
 
 id: Compilations
-# Missing translation
-msg: 
+msg: Összeállítások
 
 id: Forget me
-msg: Nepamätať si ma 
+msg: Felejts el
 
 id: Friends
-msg: Priatelia
+msg: Barátok
 
 id: High bitrate
-msg: Vysoký bitrate
+msg: Magas bitráta
 
 id: Inbox
-msg: Inbox
+msg: Bejövő
 
 id: New albums on Spotify
-msg: Nové albumy na Spotify
+msg: Új albumok a Spotify-on
 
 id: New releases
-msg: Nová verzia
+msg: Új kiadások
 
 id: Offline
 msg: Offline
 
 id: Offline sync in 96kbps
-msg: Offline synchronizácia na 96kbps
+msg: Offlink szinkronizáció 96kbps-al
 
 id: Playlists
-msg: Zoznamy skladieb
+msg: Lejátszási lista
 
 id: Relogin (switch user)
-msg: Nové prihlásenie (prepnúť užívateľa)
+msg: Belépés újra (felhasználóváltás)
 
 id: Search result
-msg: Výsledky hľadania
+msg: Keresés eredménye
 
 id: Singles
-# Missing translation
-msg: 
+msg: Egyedül
 
 id: Spotify friends
-msg: Spotify priatelia
+msg: Spotify barátok
 
 id: Spotify music service
-msg: Spotify hudobné služby
+msg: Spotify zene szolgáltatás
 
 id: Spotify playlists
-msg: Spotify zoznamy skladieb
+msg: Spotyfy lejátszási listák
 
 id: Spotify: Connection error: %s
-msg: Spotify: Chyba pripojenia: %s
+msg: Spotify: Csatlakozási hiba: %s
 
 id: Starred
-msg: Z hviezdičkou
+msg: Megjelölt
 
 #
 # ./src/blobcache_file.c
 #
 id: Cache cleared
-msg: Cache vymazané
+msg: Cache törölve
 
 id: Clear cached files
-msg: Vymazať dočasné súbory
+msg: Előtöltött fájlok törtlése
 
 #
 # ./src/fileaccess/fa_backend.c
 #
 id: Can't handle content type %d
-msg: Nemožno spracovať %d
+msg: A %d típusú tartalom nem kezelhető
 
 id: Checking file contents
-# Missing translation
-msg: 
+msg: Fájl tartalmának ellenőrzése
 
 id: Unable to open file: %s
-msg: Nemožno otvoriť súbor: %s
+msg: A %s nem nyitható meg
 
 #
 # ./src/fileaccess/fa_locatedb.c
 #
 id: Search using Unix locatedb
-msg: Pri hľadaní použiť Unix locatedb
+msg: Keresés Unix locatedb segítségével
 
 #
 # ./src/fileaccess/fa_scanner.c
 #
 id: Artists
-# Missing translation
-msg: 
+msg: Előadok
 
 id: Date (newest first)
-# Missing translation
-msg: 
+msg: Dátum (újabb először)
 
 id: Date (oldest first)
-# Missing translation
-msg: 
+msg: Dátum (régebbi először)
 
 id: Deleted %s
-# Missing translation
-msg: 
+msg: Törölve %s
 
 id: Filename
-msg: Názov súboru
+msg: Fájlnév
 
 id: Indexed mode
-# Missing translation
-msg: 
+msg: Indexelt mód
 
 id: Show only supported files
-msg: Zobraziť len podporované súbory
+msg: Csak a támogatott fájltípusok megjelenítése
 
 id: Sort folders first
-msg: Adresáre na začiatok
+msg: Először a mappák
 
 id: Sort on
-msg: Triediť podľa
+msg: Rendezés
 
 id: Unable to delete %s\n%s
-# Missing translation
-msg: 
+msg: Nem törölhető: %s\n%s
 
 #
 # ./src/fileaccess/fa_spotlight.c
 #
 id: Search using spotlight
-msg: Hľadať pomocou Spotlight
+msg: Keresés spotlight segítségével
 
 #
 # ./src/fileaccess/fileaccess.c
 #
 id: Are you sure you want to delete:
-# Missing translation
-msg: 
+msg: Biztos hogy törölni szeretné:
 
 id: BitTorrent
-# Missing translation
-msg: 
+msg: BitTorrent
 
 id: Browse archives as folders
-# Missing translation
-msg: 
+msg: Archívumok könyvtárként való megjelenítése
 
 id: Enable file deletion from item menu
-# Missing translation
-msg: 
+msg: Fájl törlésének engedélyezése az eszköz menüből
 
 id: File browsing
-# Missing translation
-msg: 
+msg: Fálj böngészés
 
 id: Show filename extensions
-# Missing translation
-msg: 
+msg: Fájl kiterjesztések megjelenítése
 
 id: Store per-file settings in filesystem
-# Missing translation
-msg: 
+msg: Fájl beállítások elmentése a fájlrendszerben
 
 id: %d archive parts
-msg[0]: 
-msg[1]: 
+msg[0]: %d archívum
+msg[1]: %d archívum
 
 id: %d directories
-msg[0]: 
-msg[1]: 
+msg[0]: %d Mappa
+msg[1]: %d Mappa
 
 id: %d files
-msg[0]: 
-msg[1]: 
+msg[0]: %d fájl
+msg[1]: %d fájl
 
 #
 # ./src/fileaccess/smb/fa_nativesmb.c
 #
 id: Access denied
-msg: Prístup zamietnutý
+msg: Hozzáférés megtagadva
 
 id: Account restricted
-msg: Účet obmedzený
+msg: Felhasználó nem engedélyezve
 
 id: Bad network share name
-msg: Nesprávný názov sieťového umiestnenia
+msg: Rossz megosztási név
 
 id: Logon failure
-msg: Chyba prihlásenia
+msg: Belépési hiba
 
 id: Object name not found
-# Missing translation
-msg: 
+msg: Objektumnév nem található
 
 #
 # ./src/i18n.c
 #
 id: Default character set
-# Missing translation
-msg: 
+msg: Alapértelmezett karakterkészlet
 
 id: Ignore 'The' at beginning of words when sorting
-# Missing translation
-msg: 
+msg: A 'The' szó figyelmen kívül hagyása rendezésnél
 
 id: Language
-msg: Jazyk
+msg: Nyelv
 
 id: Language codes should be configured as three character ISO codes, example (eng, swe, fra)
-msg: Trojznakový ISO kód jazyka, napr. (eng, swe, skk)
+msg: A nyelvi kódokat a három betűs ISO kódokkal kell megadni, például: eng, swe, jpn, hun
 
 id: Languages
-msg: Jazyk
+msg: Nyelvek
 
 id: Preferred languages
-msg: Predvolený jazyk
+msg: Előnyben részesített nyelvek
 
 id: Primary audio language code
-msg: Jazyk zvuku
+msg: Elsődleges audió nyelv kódja
 
 id: Primary subtitle language code
-msg: Predvolený jazyk titulkov
+msg: Elsődleges felirat nyelv kódja
 
 id: Secondary audio language code
-msg: Druhý jazyk zvuku
+msg: Másodlagos audió nyelv kódja
 
 id: Secondary subtitle language code
-msg: Druhý jazyk titulkov
+msg: Másodlagos felirat nyelv kódja
 
 id: Tertiary audio language code
-msg: Tretí jazyk zvuku
+msg: Harmadlagos audió nyelv kódja
 
 id: Tertiary subtitle language code
-msg: Tretí jazyk titulkov
+msg: Harmadlagos felirat nyelv kódja
 
 #
 # ./src/keymapper.c
 #
 id: Configure mapping of keyboard and remote controller keys
-msg: Nastavenie klávesnice a diaľkového ovládania
+msg: A billentyűzet és a távirányító gombjainak beállítása
 
 id: Keymapper
-msg: Ovládanie
+msg: Billentyű kiosztás
 
 #
 # ./src/keyring.c
 #
 id: Forget remembered passwords
-msg: Vymazať uložené heslá
+msg: Megjegyzett jelszavak elfelejtése
 
 id: Rembered passwords erased
-msg: Uložené heslá vymazané
+msg: Megjegyzett jelszavak törölve
 
 #
 # ./src/media/media_settings.c
 #
 id: Align subtitles on video frame
-msg: Zarovnať titulky do obrazu
+msg: Felirat elhelyezése a videó képkockán
 
 id: Audio volume
-# Missing translation
-msg: 
+msg: Hangerő
 
 id: Go to standby after video ends
-# Missing translation
-msg: 
+msg: Készenléti állapot miután a videó véget ér
 
 id: Horizontal pan
-# Missing translation
-msg: 
+msg: Vízszintes helyzet
 
 id: Reset defaults for folder '%s'
-# Missing translation
-msg: 
+msg: Alapértelmezések visszaállítása a '%s' mappában
 
 id: Save as defaults for folder '%s'
-# Missing translation
-msg: 
+msg: Alapértelmezések mentése a '%s' mappában
 
 id: Save as global default
-# Missing translation
-msg: 
+msg: Elmentés mint globális alapértelmezés
 
 id: Stretch video to fullscreen
-msg: Roztiahnuť video na celú obrazovku
+msg: Videó teljes kijelzőre nyújtása
 
 id: Stretch video to widescreen
-msg: Roztiahnuť video na šírku 
+msg: Videó szélesvásznú kijelzőre nyújtása 
 
 id: Subtitle delay
-msg: Oneskorenie titulkov
+msg: Felirat késleltetés
 
 id: Subtitle horizontal displacement
-# Missing translation
-msg: 
+msg: Felirat vízszintes elhelyezkedése
 
 id: Subtitle scaling
-msg: Veľkosť titulkov
+msg: Felirat méret
 
 id: Subtitle vertical displacement
-# Missing translation
-msg: 
+msg: Felirat függőleges elhelyezkedése
 
 id: Vertical pan
-# Missing translation
-msg: 
+msg: Függőleges helyzet
 
 id: Video frame interpolation
-# Missing translation
-msg: 
+msg: Videó interpoláció
 
 id: Video zoom
-msg: Video zoom
+msg: Videó zoom
 
 #
 # ./src/metadata/browsemdb.c
 #
 id: Indexing
-# Missing translation
-msg: 
+msg: Indexelés
 
 #
 # ./src/metadata/decoration.c
 #
 id: Automatic
-msg: Automaticky
+msg: Autómata
 
 id: Erase all playback info
-# Missing translation
-msg: 
+msg: Minden lejátszási információ törlése
 
 id: Manual
-# Missing translation
-msg: 
+msg: Manuális
 
 id: Mark all as seen
-# Missing translation
-msg: 
+msg: Mindegyik megjelölése nézettnek
 
 id: Mark all as unseen
-# Missing translation
-msg: 
+msg: Mindegyik megjelölése nem nézettnek
 
 id: Metadata mode
-# Missing translation
-msg: 
+msg: Metadata mód
 
 #
 # ./src/metadata/metadata.c
 #
 id: Embedded in file
-msg: Vložené v súbore
+msg: Fájlba ágyazott
 
 id: Track %d
-msg: Track %d
+msg: Sáv %d
 
 #
 # ./src/metadata/metadata_sources.c
 #
 id: Enabled
-msg: Povolené
+msg: Engedélyezve
 
 id: Metadata
 msg: Metadata
 
 id: Metadata configuration and provider settings
-msg: Nastavenie metadata a poskytovateľa
+msg: Metadata konfiguráció és szolgáltató beállítások
 
 id: Providers for Music
-msg: Poskytovatelia pre hudbu
+msg: Zene szolgáltató
 
 id: Providers for Video
-# Missing translation
-msg: 
+msg: Videó szolgáltató
 
 #
 # ./src/metadata/metadb.c
 #
 id: %d items deleted
-# Missing translation
-msg: 
+msg: %d elem törölve
 
 id: Clear all metadata
-# Missing translation
-msg: 
+msg: Minden metadata törlése
 
 id: Clearing all metadata means losing <b>all</b> metadata cached from external sources such as themoviedb.org, etc\n\nInformation about resume-points, playcount, etc will be saved.\nAre you sure you proceed?
-# Missing translation
-msg: 
+msg: Minden metadata törlése azt jelenti hogy <b>minden</b> metadata ami tárolva lett a külső forrásokból mint pl. a themoviedb.org, stb törlödnek.\n\nAz információk a lejátszás folytatásáról, lejátszási számról, stb megmaradnak.\nBiztos hogy törölni szeretné?
 
 #
 # ./src/metadata/mlp.c
 #
 id: Custom search query
-msg: Užívateľské hľadanie
+msg: Saját keresési lista
 
 id: Custom title
-# Missing translation
-msg: 
+msg: Saját cím
 
 id: IMDb ID
 msg: IMDb ID
 
 id: Metadata loaded from '%s' using %s
-msg: Metadata získané z '%s' pomocí %s
+msg: Metadata betöltve a '%s'-ból, %s használatával
 
 id: Metadata search
-msg: Hľadanie metadata
+msg: Metadata keresés
 
 id: Metadata source
-msg: Zdroj metadata
+msg: Metadata forrása
 
 id: Movie
 msg: Film
 
 id: Movie title
-# Missing translation
-msg: 
+msg: Filmcím
 
 id: No data found
-msg: Data nenájdené
+msg: Adat nem található
 
 id: None
-msg: Žiadne
+msg: Nincs
 
 id: Refresh metadata
-msg: Obnoviť metadata
+msg: Metadata frissítése
 
 id: Title, Season, Episode
-# Missing translation
-msg: 
+msg: Cím, Évad, Epizód
 
 id: custom IMDb ID
-msg: užívateľské IMDb ID
+msg: saját IMDb ID
 
 id: custom query
-msg: užívateľská otázka
+msg: saját lista
 
 id: filename
-msg: názov súboru
+msg: fájlnév
 
 id: filename as TV episode
-# Missing translation
-msg: 
+msg: fájlnév mint TV epizód
 
 id: folder name
-msg: názov adresára
+msg: Mappa név
 
 #
 # ./src/navigator.c
 #
 id: Add and remove items on homepage
-# Missing translation
-msg: 
+msg: Kezdőképernyő tartalmak hozzáadása vagy törlése
 
 id: Added new bookmark: %s
-msg: Pridaná záložka: %s
+msg: Új könyvjelző hozzáadva: %s
 
 id: Bookmarks
-msg: Obľúbené
+msg: Könyvjelzők
 
 id: Music
-msg: Hudba
+msg: Zene
 
 id: No handler for URL
-msg: Nemožno spracovať URL
+msg: Nincs kezelő az URL-hez
 
 id: Other
-msg: Ostatné
+msg: Egyéb
 
 id: Photos
-msg: Snímky
+msg: Fotók
 
 id: Removed bookmark: %s
-msg: Odstránená záložka: %s
+msg: Törölt könyvjelző: %s
 
 id: TV
 msg: TV
 
 id: Title
-msg: Názov
+msg: Cím
 
 id: Type
-msg: Typ
+msg: Típus
 
 id: URL
 msg: URL
@@ -1360,539 +1209,470 @@ msg: URL
 # ./src/networking/connman.c
 #
 id: Enable Wi-Fi
-# Missing translation
-msg: 
+msg: Wi-Fi engedélyezése
 
 id: Network connections
-# Missing translation
-msg: 
+msg: Hálózati kapcsolatok
 
 #
 # ./src/networking/ftp_server.c
 #
 id: Enable FTP server
-# Missing translation
-msg: 
+msg: FTP szerver engedélyezése
 
 id: FTP server
-# Missing translation
-msg: 
+msg: FTP szerver
 
 id: Server TCP port
-# Missing translation
-msg: 
+msg: Szerver TCP port
 
 #
 # ./src/plugins.c
 #
 id: Alternate plugin Repository URL
-msg: URL náhradného úložiska pluginov
+msg: Alternatív plugin tároló URL
 
 id: Automatically upgrade plugins
-msg: Automaticky upgradovať pluginy
+msg: Pluginok automatikus frissítése
 
 id: Available plugins
-# Missing translation
-msg: 
+msg: Elérhető pluginok
 
 id: Background
-# Missing translation
-msg: 
+msg: Háttér
 
 id: Beta testing passwords
-# Missing translation
-msg: 
+msg: Beta teszt jelszó
 
 id: Browse available plugins
-# Missing translation
-msg: 
+msg: Elérhető pluginok böngészése
 
 id: Browsing
-# Missing translation
-msg: 
+msg: Böngészés
 
 id: Cloud services
-# Missing translation
-msg: 
+msg: Felhő szolgáltatások
 
 id: Corrupt plugin bundle
-msg: Zväzok poškodených pluginov
+msg: Hibás plugin lista
 
 id: Disk write error
-msg: Chyba pri zápise na disk
+msg: Lemez írási hiba
 
 id: Downloading
-msg: Sťahujem
+msg: Letöltés
 
 id: File open error
-msg: Chyba pri otváraní súboru
+msg: Fájl megnyitási hiba
 
 id: Home page
-# Missing translation
-msg: 
+msg: Kezdőoldal
 
 id: Installed plugins
-# Missing translation
-msg: 
+msg: Telepített pluginok
 
 id: Installed version higher than available
-# Missing translation
-msg: 
+msg: A telepített verzió frissebb mint az elérhető
 
 id: Installing
-msg: Inštalujem
+msg: Telepítés
 
 id: List of albums
-# Missing translation
-msg: 
+msg: Albumok listája
 
 id: Loading screen
-# Missing translation
-msg: 
+msg: Betöltő képernyő
 
 id: Movies
-# Missing translation
-msg: 
+msg: Filmek
 
 id: Music streaming
-# Missing translation
-msg: 
+msg: Zene streamelés
 
 id: Not installable
-msg: Nemožno nainštalovať
+msg: Nem telepíthető
 
 id: Not installed
-msg: Nenainštalované
+msg: Nem telepített
 
 id: Not upgradable
-msg: Nemožno aktualizovať
+msg: Nem frissíthető
 
 id: On Screen Keyboards
-# Missing translation
-msg: 
+msg: Képernyő billentyűzetek
 
 id: Online TV
-# Missing translation
-msg: 
+msg: Online TV
 
 id: Plugin %s %s has been uninstalled because it may cause problems.\nYou may try reinstalling a different version manually.
-# Missing translation
-msg: 
+msg: A plugin %s %s törlésre került, mert problémákat okozhat.\nProbáljon meg egy másik verziót telepíteni manuálisan.
 
 id: Plugins
-msg: Pluginy
+msg: Pluginok
 
 id: Preferred views from plugins
-# Missing translation
-msg: 
+msg: Előnyben részesített plugin megjelenés
 
 id: Screen saver
-# Missing translation
-msg: 
+msg: Képernyőkímélő
 
 id: TV channels
-# Missing translation
-msg: 
+msg: TV csatornák
 
 id: Unable to load plugin.json: %s
-msg: Nemožno načítať plugin.json: %s
+msg: Nem betölthető a plugin.json: %s
 
 id: Unable to load plugin.json: Malformed JSON
-msg: Nemožno načítať plugin.json: nesprávne JSON
+msg: Nem betölthető a plugin.json: Rosszul formázott JSON
 
 id: Uncategorized
-# Missing translation
-msg: 
+msg: Nem kategorizált
 
 id: Up to date
-msg: Aktuálne
+msg: Legfrissebb verzió
 
 id: Upgradable
-msg: Dostupný upgrade
+msg: Frissítés elérhető
 
 id: Upgraded plugin %s to version %s
-msg: Plugin %s upgradovaný na verziu %s
+msg: A %s plugin frissítve a %s verzióra
 
 id: User interface extensions
-# Missing translation
-msg: 
+msg: Felhasználói felület kiegészítések
 
 id: Video streaming
-# Missing translation
-msg: 
+msg: Video streamelés
 
 #
 # ./src/runcontrol.c
 #
 id: Automatic standby
-msg: Automatické vypnutie
+msg: Automatikus készenlét
 
 id: Enable SSH server
-# Missing translation
-msg: 
-
+msg: SSH szerver aktiválása
+ 
 id: Logout
-msg: Odhlásiť
+msg: Kijelentkezés
 
 id: Open shell
-msg: Príkazové riadky
+msg: Parancssor megnyitása
 
 id: Power off system
-msg: Vypnúť systém
+msg: Renszer leállítása
 
 id: Quit
-# Missing translation
-msg: 
+msg: Kilépés
 
 id: SSH server
-# Missing translation
-msg: 
+msg: SSH szerver
 
 id: Standby
-# Missing translation
-msg: 
+msg: Készenlét
 
 id: Starting and stopping
-# Missing translation
-msg: 
+msg: Indulás és leállás
 
 #
 # ./src/sd/sd.c
 #
 id: Enabled on home screen
-msg: Povolené na domovskej obrazovke
+msg: Engedélyezve a Főképernyőn
 
 id: Name
-msg: Názov
+msg: Név
 
 #
 # ./src/service.c
 #
 id: Local network
-msg: Miestna sieť
+msg: Helyi hálozat
 
 #
 # ./src/settings.c
 #
 id: Applications and installed plugins
-msg: Aplikácie a nainštalované doplnky
+msg: Alkalmazások és telepített pluginok
 
 id: Developer settings
-msg: Nastavenie pre vývojárov
+msg: Fejlesztői beállítások
 
 id: Discovered media sources
-msg: Vyhľadať zdroje videa a zvuku
+msg: Talált média források
 
 id: Fonts and user interface styling
-# Missing translation
-msg: 
+msg: Betűk és felhasználói felület
 
 id: General
-msg: Všeobecné
+msg: Általános
 
 id: Global settings
-msg: Hlavné nastavenie
+msg: Globális beállítások
 
 id: Look and feel
-# Missing translation
-msg: 
+msg: Kinézet
 
 id: Network services, etc
-# Missing translation
-msg: 
+msg: Hálozati szolgáltatások, stb
 
 id: Network settings
-# Missing translation
-msg: 
+msg: Hálózati beállítások
 
 id: Settings useful for developers
-msg: Nastavenia pre vývojárov
+msg: Hasznos beállítások fejlesztőknek
 
 id: System name
-# Missing translation
-msg: 
+msg: Rendszer neve
 
 id: System related settings
-msg: Systémové nastavenia
+msg: Rendszerrel kapcsolatos beállítások
 
 #
 # ./src/subtitles/subtitles.c
 #
 id: Any subtitle in central folder
-# Missing translation
-msg: 
+msg: Bármilyen felirat a fő mappában
 
 id: Any subtitle in same folder as video
-# Missing translation
-msg: 
+msg: Bármilyen felirat abban a mappában mint a videó
 
 id: Auto
 msg: Auto
 
 id: Automatically select from this source
-# Missing translation
-msg: 
+msg: Automatikusan válasszon ebből a forrásból
 
 id: Central subtitle folder
-# Missing translation
-msg: 
+msg: Fő felirat mappa
 
 id: Color
-msg: Farba
+msg: Szín
 
 id: External file
-msg: Externý súbor
+msg: Külső fájl
 
 id: Force subtitles to reside on video frame
-msg: Vynútiť titulky na plochu videa
+msg: Felirat kényszerítése a videóra
 
 id: Generic settings for video subtitles
-msg: Všeobecné nastavenie video titulkov
+msg: Videó feliratok beállításai
 
 id: Ignore embedded styling
-msg: Ignorovať vložené štýly
+msg: Beágyazott stílus figyelmen kívül hagyása
 
 id: Left
-msg: Ľavý
+msg: Bal
 
 id: Outline color
-msg: Farba okraja
+msg: Körvonal színe
 
 id: Outline size
-msg: Veľkosť okraja
+msg: Körvonal mérete
 
 id: Path to central folder
-# Missing translation
-msg: 
+msg: Fő mappa helye
 
 id: Providers for Subtitles
-# Missing translation
-msg: 
+msg: Felirat szolgáltatók
 
 id: Right
-msg: Pravý
+msg: Jobb
 
 id: Shadow color
-msg: Farba tieňa
+msg: Árnyék színe
 
 id: Shadow offset
-msg: Posun tieňa
+msg: Árnyék helye
 
 id: Subtitle position
-msg: Pozícia titulkov
+msg: Felirat pozíciója
 
 id: Subtitle size
-msg: Veľkosť titulkov
+msg: Felirat mérete
 
 id: Subtitle size and positioning
-msg: Veľkosť a pozícia titulkov
+msg: Felirat méret és pozíció
 
 id: Subtitles embedded in video file
-# Missing translation
-msg: 
+msg: Videóba ágyazott feliratok
 
 id: Subtitles with matching filename in central folder
-# Missing translation
-msg: 
+msg: Feliratok ugyanazzal a fájlnévvel mint a videó, a fő mappában
 
 id: Subtitles with matching filename in same folder as video
-# Missing translation
-msg: 
+msg: Feliratok ugyanazzal a fájlnévvel mint a videó, a videót tartalmazó mappában
 
 #
 # ./src/text/fontstash.c
 #
 id: Defaults
-# Missing translation
-msg: 
+msg: Alapértelmezett
 
 id: Fonts
-# Missing translation
-msg: 
+msg: Betűkészletek
 
 id: Installed fonts
-# Missing translation
-msg: 
+msg: Telepített betűkészletek
 
 id: Narrow text
-# Missing translation
-msg: 
+msg: Keskeny szöveg
 
 id: Reset main font to default
-# Missing translation
-msg: 
+msg: Alap betűstílus visszaállítása
 
 id: Reset narrow font to default
-# Missing translation
-msg: 
+msg: Keskeny szöveg visszaállítása
 
 id: Reset subtitle font to default
-# Missing translation
-msg: 
+msg: Alap felirat betűstílus visszaállítása
 
 id: Unable to install font: %s
-# Missing translation
-msg: 
+msg: A következő betűkészlet nem telíthető: %s
 
 id: Use font %s for
-# Missing translation
-msg: 
+msg: A %s készlet használata a
 
 id: User interface
-# Missing translation
-msg: 
+msg: Felhasználói felület
 
 #
 # ./src/ui/glw/glw_ps3.c
 #
 id: Seek using L2 and R2 button
-# Missing translation
-msg: 
+msg: Tekerés a L2 és az R2 gombbal
 
 id: Yes with Select button
-# Missing translation
-msg: 
+msg: Igen, a select gombbal
 
 #
 # ./src/ui/glw/glw_settings.c
 #
 id: Font and icon size
-# Missing translation
-msg: 
+msg: Betű és ikonméret
 
 id: Horizontal underscan
-msg: Horizontální podscan
+msg: Vízszintes kép fixálás
 
 id: Screensaver delay
-msg: Oneskorenie šporiča
+msg: Képernyőkímélő késleltetése
 
 id: Vertical underscan
-# Missing translation
-msg: 
+msg: Függőleges kép fixálás
 
 id: Wrap when reaching beginning/end of lists
-# Missing translation
-msg: 
+msg: Visszaugrás mikor eléri a lista elejét/végét
 
 #
 # ./src/ui/glw/glw_x11.c
 #
 id: Map mouse wheel to up/down
-msg: Kolečko myši posouvá nahoru/dolů
+msg: Egérgörgő beállítása a fel/le-re
 
 #
 # ./src/ui/linux/nvidia.c
 #
 id: Auto-switch to this mode
-msg: Automaticky prepnúť do tohoto režimu
+msg: Automatikus váltás ebbe a módba
 
 id: DVI-Video color range
-msg: DVI-Video rozsah farieb
+msg: DVI-Videó színtartomány
 
 id: Switch to this mode now
-msg: Prepnúť ihneď do tohoto režimu
+msg: Átváltás ebbe a módba most
 
 id: Video modes
-msg: Režimy videa
+msg: Videó módok
 
 #
 # ./src/upgrade.c
 #
 id: %s version %s is available
-# Missing translation
-msg: 
+msg: %s verzió %s elérhető
 
 id: Notify about upgrades
-msg: Upozorniť na aktualizácie
+msg: Értesítés a frissítésekről
 
 id: Open download page
-msg: Otvoriť stránku s downloadmi
+msg: Letöltési oldal megnyitása
 
 id: Software upgrade
-msg: Upgrade aplikácie
+msg: Szoftver frissítés
 
 id: Upgrade to releases from
-msg: Upgradovať na vydanie z
+msg: Frissítés kiadásokra a
 
 #
 # ./src/upnp/upnp_browse.c
 #
 id: Device not found
-msg: Zariadenie nebolo nájdené
+msg: Eszköz nem található
 
 id: Malformed URI after device
-msg: Malformed URI after device
+msg: Rosszul formázott URI az eszköz után
 
 id: Malformed URI after service
-msg: Malformed URI after service
+msg: Rosszul formázott URI a szolgáltatás után
 
 id: Service not found
-msg: Služba nebola nájdená
+msg: Szolgáltatás nem található
 
 #
 # ./src/video/video_settings.c
 #
 id: Always
-# Missing translation
-msg: 
+msg: Mindig
 
 id: Ask
-# Missing translation
-msg: 
+msg: Kérdezzen
 
 id: Automatically play next video in list
-msg: Automaticky prehrať dalšie video v zozname
+msg: Automatikusan lejátssza a következő videót a listában
 
 id: Count video as played when reaching
-msg: Považovať video za prehrané po dosiahnutí
+msg: Lejátszottnak számítsa a videót mikor eléri a
 
 id: Enable VDA
-msg: Povoliť VDA
+msg: VDA engedélyezése
 
 id: Enable VDPAU
-msg: Povoliť VDPAU
+msg: VDPAU engedélyezése
 
 id: Maximum resolution for deinterlacer
-msg: Maximálne rozlíšenie pre deinterlacer
+msg: Deinterlace maximum felbontása
 
 id: Never
-# Missing translation
-msg: 
+msg: Soha
 
 id: No limit
-msg: Bez obmedzenia
+msg: Nincs limit
 
 id: Per-file volume
-# Missing translation
-msg: 
+msg: Hangerő fájlonként
 
 id: Preferred VDPAU deinterlacer method
-msg: Preferovaná metoda VDPAU deinterlaceru
+msg: Előnyben részesített VDPAU deinterlace
 
 id: Resume video playback
-msg: Obnoviť prehrávanie
+msg: Videó lejátszás folytatása
 
 id: Step when seeking backward
-# Missing translation
-msg: 
+msg: Lépés visszatekerésnél
 
 id: Step when seeking forward
-# Missing translation
-msg: 
+msg: Lépés előretekerésnél
 
 id: Temporal
-msg: Temporálne
+msg: Időbeli
 
 id: Temporal/Spatial
-msg: Temporálne/Priestorové
+msg: Időbeli/Térbeli
 
 id: Up / Down during video playback controls
-# Missing translation
-msg: 
+msg: Le / fel videó lejátszás közben
 
 id: Video acceleration and display behaviour
-msg: Video akcelerácia a nastavenie displeja
+msg: Videó gyorsítás és képernyő megjelenítés
 
 id: Video playback
-msg: Prehrávanie videa
+msg: Videó lejátszás
 

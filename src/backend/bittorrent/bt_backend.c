@@ -79,11 +79,11 @@ torrent_open_url(const char **urlp, char *errbuf, size_t errlen)
     if(url[40] == 0) {
       *urlp = NULL;
     } else {
-      url += 41;
-      if(*url == 0)
+      url += 40;
+      if(*url == 0 || !strcmp(url, "/"))
         *urlp = NULL;
       else
-        *urlp = url;
+        *urlp = url + 1;
     }
   } else {
 
@@ -193,12 +193,17 @@ torrent_movie_open(prop_t *page, const char *url0, int sync)
   char errbuf[512];
   usage_page_open(sync, "Torrent movie");
 
+  prop_t *m = prop_create_r(page, "model");
+
+  prop_set(m, "loading", PROP_SET_INT, 1);
+
   hts_mutex_lock(&bittorrent_mutex);
 
   torrent_t *to = torrent_create_from_uri(url0, errbuf, sizeof(errbuf));
 
   if(to == NULL) {
     hts_mutex_unlock(&bittorrent_mutex);
+    prop_ref_dec(m);
     return nav_open_errorf(page, _("Unable to open torrent: %s"), errbuf);
   }
 
@@ -206,6 +211,7 @@ torrent_movie_open(prop_t *page, const char *url0, int sync)
 
   if(best == NULL) {
     hts_mutex_unlock(&bittorrent_mutex);
+    prop_ref_dec(m);
     return nav_open_errorf(page, _("No files in torrent"));
   }
 
@@ -239,7 +245,6 @@ torrent_movie_open(prop_t *page, const char *url0, int sync)
   rstr_t *rstr = htsmsg_json_serialize_to_rstr(vp, "videoparams:");
   prop_set(page, "source", PROP_ADOPT_RSTRING, rstr);
 
-  prop_t *m = prop_create_r(page, "model");
   prop_set(m, "type", PROP_SET_STRING, "video");
   prop_ref_dec(m);
 
@@ -284,7 +289,7 @@ static event_t *
 bt_playvideo(const char *url, media_pipe_t *mp,
              char *errbuf, size_t errlen,
              video_queue_t *vq, struct vsource_list *vsl,
-             const video_args_t *va)
+             const video_args_t *va0)
 {
   const char *u;
 
@@ -321,7 +326,10 @@ bt_playvideo(const char *url, media_pipe_t *mp,
   torrent_retain(to);
   hts_mutex_unlock(&bittorrent_mutex);
 
-  event_t *e = backend_play_video(newurl, mp, errbuf, errlen, vq, vsl, va);
+  video_args_t va = *va0;
+  va.canonical_url = newurl;
+
+  event_t *e = backend_play_video(newurl, mp, errbuf, errlen, vq, vsl, &va);
 
   hts_mutex_lock(&bittorrent_mutex);
   torrent_release(to);

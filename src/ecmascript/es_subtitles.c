@@ -146,14 +146,12 @@ esp_query(subtitle_provider_t *SP, sub_scanner_t *ss, int score,
 
   es_context_begin(ec);
   duk_context *ctx = ec->ec_duk;
-  if(ctx != NULL) {
+  if(ctx != NULL && ss != NULL) {
 
     extern ecmascript_native_class_t es_native_prop;
 
     usage_event("Subtitle search", 1,
                 USAGE_SEG("responder", rstr_get(ec->ec_id)));
-
-    sub_scanner_retain(ss);
 
     es_push_root(ctx, esp);
 

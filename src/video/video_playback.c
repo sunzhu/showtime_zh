@@ -183,6 +183,8 @@ play_video(const char *url, struct media_pipe *mp,
 
   mp_reset(mp);
 
+  prop_set(mp->mp_prop_root, "loading", PROP_SET_INT, 1);
+
   if(strncmp(url, "videoparams:", strlen("videoparams:"))) {
     backend_t *be = backend_canhandle(url);
 
@@ -233,7 +235,6 @@ play_video(const char *url, struct media_pipe *mp,
     va.parent_url = parent_url;
     va.flags = flags | BACKEND_VIDEO_SET_TITLE;
 
-    mp_set_url(mp, url, va.parent_url, va.parent_title);
     e = be->be_play_video(url, mp, errbuf, errlen, vq, &vsources, &va);
 
   } else {
