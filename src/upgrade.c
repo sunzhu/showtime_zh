@@ -55,7 +55,7 @@ extern char *showtime_bin;
 
 static HTS_MUTEX_DECL(upgrade_mutex);
 
-static const char *ctrlbase = "http://upgrade.movian.tv/upgrade/1";
+static const char *ctrlbase = "http://upgrade.movian.tv/upgrade/2";
 static const char *artifact_type;
 static const char *archname;
 
@@ -1298,7 +1298,7 @@ upgrade_init(void)
   setting_create(SETTING_MULTIOPT, gconf.settings_general,
                  SETTINGS_INITIAL_UPDATE,
                  SETTING_TITLE(_p("Upgrade to releases from")),
-                 SETTING_HTSMSG("track", store, "upgrade"),
+                 SETTING_HTSMSG("track-4-10", store, "upgrade"),
                  SETTING_OPTION("stable",  _p("Stable")),
                  SETTING_OPTION("testing", _p("Testing")),
                  SETTING_OPTION_CSTR("master", "Bleeding Edge (Very unstable)"),

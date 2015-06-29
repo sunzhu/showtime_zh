@@ -1809,6 +1809,8 @@ be_htsp_playvideo(const char *url, media_pipe_t *mp,
   int primary = !!(va->flags & BACKEND_VIDEO_PRIMARY);
   const char *r;
 
+  mp_set_url(mp, va->canonical_url, va->parent_url, va->parent_title);
+
   TRACE(TRACE_DEBUG, "HTSP",
 	"Starting video playback %s primary=%s, priority=%d",
 	url, primary ? "yes" : "no", va->priority);
@@ -1973,6 +1975,8 @@ htsp_subscriptionStart(htsp_connection_t *hc, htsmsg_t *m)
     return;
 
   mp = hs->hs_mp;
+
+  prop_set(mp->mp_prop_root, "loading", PROP_SET_INT, 0);
 
   TRACE(TRACE_DEBUG, "HTSP", "Got start notitification");
   mp->mp_audio.mq_stream  = -1;

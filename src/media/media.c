@@ -33,6 +33,7 @@
 #include "backend/backend.h"
 #include "settings.h"
 #include "misc/minmax.h"
+#include "task.h"
 
 #include "subtitles/video_overlay.h"
 #include "subtitles/dvdspu.h"
@@ -293,10 +294,14 @@ mp_create(const char *name, int flags)
 void
 mp_reset(media_pipe_t *mp)
 {
+  mp_unhold(mp, MP_HOLD_PRE_BUFFERING | MP_HOLD_STREAM |  MP_HOLD_SYNC);
   cancellable_reset(mp->mp_cancellable);
 
   prop_set(mp->mp_prop_io, "bitrate", PROP_SET_VOID);
   prop_set(mp->mp_prop_io, "bitrateValid", PROP_SET_VOID);
+
+  prop_t *p = prop_create(mp->mp_prop_io, "infoNodes");
+  prop_destroy_childs(p);
 
   prop_destroy_childs(mp->mp_prop_audio_tracks);
   prop_destroy_childs(mp->mp_prop_subtitle_tracks);
@@ -342,9 +347,20 @@ mp_destroy(media_pipe_t *mp)
 
 }
 
-
 /**
  *
+ */
+static void
+mp_final_release(void *aux)
+{
+  media_pipe_t *mp = aux;
+  prop_destroy(mp->mp_prop_root);
+  free(mp);
+}
+
+
+/**
+ * prop_mutex can be held here, so we need to avoid locking it
  */
 void
 mp_release(media_pipe_t *mp)
@@ -375,7 +391,6 @@ mp_release(media_pipe_t *mp)
   mq_destroy(&mp->mp_video);
 
 
-  prop_destroy(mp->mp_prop_root);
 
   video_overlay_flush_locked(mp, 0);
   dvdspu_destroy_all(mp);
@@ -391,7 +406,12 @@ mp_release(media_pipe_t *mp)
     atomic_dec(&media_buffer_hungry);
 
   cancellable_release(mp->mp_cancellable);
-  free(mp);
+
+  /**
+   * We need to destroy mp_prop_root but there is a risk that prop_mutex
+   * is held here, so we need to dispatch
+   */
+  task_run(mp_final_release, mp);
 }
 
 
