@@ -60,7 +60,7 @@
 }
 
 - (void)windowWillClose:(NSNotification *)notification {
-  [self shutdown];
+  [self autorelease];
 }
 
 - (void)windowDidMiniaturize:(NSNotification *)notification
@@ -128,6 +128,7 @@
  */
 - (void)toggleFullscreen
 {
+  [self retain]; // Closing window will release but we want to live on
   [view stop];
   [window close];
   [view release];
@@ -263,9 +264,9 @@ static prop_t *stored_nav;
 
 
 /**
- * Shutdown this UI instance
+ *
  */
-- (void)shutdown
+- (void)dealloc
 {
   [view stop];
 
@@ -286,15 +287,9 @@ static prop_t *stored_nav;
 
   free(gr);
 
-  [view release];
-  [self release];
-}
+  [title release];
 
-/**
- *
- */
-- (void)dealloc
-{
+  [view release];
   [super dealloc];
 }
 @end
