@@ -153,8 +153,6 @@ posix_init(void)
   decorate_trace = isatty(2);
 
   signal(SIGPIPE, SIG_IGN);
-  
-  TRACE(TRACE_INFO, "core", "Using %d CPU(s)", gconf.concurrency);
 
 #ifdef RLIMIT_AS
   do {
@@ -175,7 +173,7 @@ posix_init(void)
 #endif
 
   if(gconf.trace_to_syslog)
-    openlog("showtime", 0, LOG_USER);
+    openlog(APPNAME, 0, LOG_USER);
 }
 
 

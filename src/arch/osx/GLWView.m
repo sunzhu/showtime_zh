@@ -393,8 +393,11 @@ glw_in_fullwindow(void *opaque, int val)
 
   NSRect bb = [self convertRectToBacking:[self bounds]];
 
+  glw_lock(gr);
   gr->gr_width = bb.size.width;
   gr->gr_height = bb.size.height;
+  glw_need_refresh(gr, 0);
+  glw_unlock(gr);
 
   NSOpenGLContext *cc = [self openGLContext];
   [cc makeCurrentContext];
@@ -486,6 +489,10 @@ glw_in_fullwindow(void *opaque, int val)
   glw_unlock(gr);
 
   CGLUnlockContext((CGLContextObj)[currentContext CGLContextObj]);
+
+  [self showCursor];
+  prop_unsubscribe(fullWindow);
+  fullWindow = NULL;
 }
 
 
@@ -495,8 +502,6 @@ glw_in_fullwindow(void *opaque, int val)
 - (void)dealloc
 {
   CVDisplayLinkRelease(m_displayLink);
-  [self showCursor];
-  prop_unsubscribe(fullWindow);
   [super dealloc];
 }
 

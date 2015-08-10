@@ -25,6 +25,8 @@
 #include "src/ui/glw/glw.h"
 #include "navigator.h"
 
+#include "networking/net.h"
+#include "prop/prop_proxy.h"
 
 @interface GLWWindow : NSWindow
 {
@@ -55,18 +57,12 @@
 
 @implementation GLWUI
 
-/**
- *
- */
-- (void) closeWindow: (NSNotification *)not
-{
-  [window close];
+- (BOOL)windowShouldClose:(NSNotification *)notification {
+  return YES;
 }
 
-
-- (BOOL)windowShouldClose:(NSNotification *)notification {
-  [self shutdown];
-  return YES;
+- (void)windowWillClose:(NSNotification *)notification {
+  [self autorelease];
 }
 
 - (void)windowDidMiniaturize:(NSNotification *)notification
@@ -114,7 +110,7 @@
 				     backing:NSBackingStoreBuffered
 				       defer:NO];
 
-     [window setTitle:@"Showtime"];
+     [window setTitle:title];
      [window setFrameAutosaveName:@"main"];
   }
 
@@ -134,6 +130,7 @@
  */
 - (void)toggleFullscreen
 {
+  [self retain]; // Closing window will release but we want to live on
   [view stop];
   [window close];
   [view release];
@@ -227,16 +224,38 @@ static prop_t *stored_nav;
 
   gr->gr_prop_ui = prop_create_root("ui");
 
-  if(stored_nav != NULL) {
+
+  if(gconf.remote_ui) {
+    struct net_addr na;
+    const char *errtxt;
+    if(net_resolve(gconf.remote_ui, &na, &errtxt))
+      exit(1);
+    na.na_port = 42000;
+    prop_t *p = prop_proxy_connect(&na);
+
+    gr->gr_prop_core = p;
+
+    gr->gr_prop_nav =
+      prop_get_by_name(PNVEC("remote", "navigators", "current"),
+                       1,
+                       PROP_TAG_NAMED_ROOT, p, "remote",
+                       NULL);
+
+    title = [[NSString alloc] initWithUTF8String: "Remote"];
+
+  } else if(stored_nav != NULL) {
     gr->gr_prop_nav = stored_nav;
     stored_nav = NULL;
+    title = [[NSString alloc] initWithUTF8String: APPNAMEUSER];
   } else {
     gr->gr_prop_nav = nav_spawn();
+    title = [[NSString alloc] initWithUTF8String: APPNAMEUSER];
   }
 
   if(glw_init(gr)) {
     prop_destroy(gr->gr_prop_ui);
     free(gr);
+    [title release];
     [self release];
     return nil;
   }
@@ -269,9 +288,9 @@ static prop_t *stored_nav;
 
 
 /**
- * Shutdown this UI instance
+ *
  */
-- (void)shutdown
+- (void)dealloc
 {
   [view stop];
 
@@ -292,15 +311,9 @@ static prop_t *stored_nav;
 
   free(gr);
 
-  [view release];
-  [self release];
-}
+  [title release];
 
-/**
- *
- */
-- (void)dealloc
-{
+  [view release];
   [super dealloc];
 }
 @end

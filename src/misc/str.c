@@ -1076,6 +1076,21 @@ strvec_addp(char ***strvp, const char *v)
 /**
  *
  */
+int
+strvec_len(char **s)
+{
+  int len = 0;
+  while(*s != NULL) {
+    len++;
+    s++;
+  }
+  return len;
+}
+
+
+/**
+ *
+ */
 void
 strappend(char **strp, const char *src)
 {
@@ -1573,11 +1588,11 @@ utf16_to_utf8(buf_t *b)
   if(len < 2)
     return NULL;
 
-  if(src[0] == 0xff && src[1] == 0xfe) {
+  if((uint8_t)src[0] == 0xff && (uint8_t)src[1] == 0xfe) {
     le = 1;
     src += 2;
     len -= 2;
-  } else if(src[0] == 0xfe && src[1] == 0xff) {
+  } else if((uint8_t)src[0] == 0xfe && (uint8_t)src[1] == 0xff) {
     src += 2;
     len -= 2;
   }
@@ -1752,5 +1767,36 @@ rgbstr_to_floatvec(const char *s, float *out)
     out[1] = 0;
     out[2] = 0;
   }
+}
 
+
+static char
+mkup(char x)
+{
+  if(x >= 'a' && x <= 'z')
+    x -= 32;
+  return x;
+}
+
+
+/**
+ *
+ */
+int
+pattern_match(const char *str, const char *pat)
+{
+  for(; '*'^*pat; ++pat, ++str) {
+    if(!*str)
+      return !*pat;
+    if(mkup(*str) ^ mkup(*pat) && '?' ^ *pat)
+      return 0;
+  }
+  while('*' == pat[1])
+    pat++;
+
+  do {
+    if(pattern_match(str, pat + 1))
+      return 1;
+  } while (*str++);
+  return 0;
 }

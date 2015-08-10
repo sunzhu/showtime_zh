@@ -69,7 +69,7 @@
 
 
 #define TYPED_ITEM(ICON, TYPE, TITLE, URL) {
-  ITEM(ICON ?? "dataroot://resources/svg/" + 
+  ITEM(ICON ?? "dataroot://res/svg/" + 
        translate(TYPE, "Folder",
 		 "music",    "Music",
 		 "video",    "Movie",
@@ -93,18 +93,18 @@ widget(container_x, {
     .center = 0.2;
     .spacing = $ui.size / 2;
 
-    $view.focused = focusedChild();
+    $view.focused <- focusedChild();
 
     $view.change = changed($view.focused, 1);
 
     // News
 
-    cloner($global.news, container_x, {
+    cloner($core.news, container_x, {
       spacing: $ui.size;
       padding: [$ui.size*2, 0];
 
       widget(icon, {
-	source: "dataroot://resources/svg/Alert.svg";
+	source: "dataroot://res/svg/Alert.svg";
 	shadow: true;
 	sizeScale: 1;
       });
@@ -162,7 +162,7 @@ widget(container_x, {
 
       widget(image, {
 	.width = $ui.size * 4;
-	.source = "dataroot://resources/svg/Search.svg";;
+	.source = "dataroot://res/svg/Search.svg";;
 	.shadow = true;
       });
 
@@ -199,23 +199,23 @@ widget(container_x, {
     });
 
 
-    $view.video  = propSorter($global.services.enabled,
+    $view.video  = propSorter($core.services.enabled,
 			      sort,   "node.title", false, false,
 			      filter, "node.type", neq, "video", exclude);
 
-    $view.music  = propSorter($global.services.enabled,
+    $view.music  = propSorter($core.services.enabled,
 			      sort,   "node.title", false, false,
 			      filter, "node.type", neq, "music", exclude);
 
-    $view.tv     = propSorter($global.services.enabled,
+    $view.tv     = propSorter($core.services.enabled,
 			      sort,   "node.title", false, false,
 			      filter, "node.type", neq, "tv", exclude);
 
-    $view.photos = propSorter($global.services.enabled,
+    $view.photos = propSorter($core.services.enabled,
 			      sort,   "node.title", false, false,
 			      filter, "node.type", neq, "photos", exclude);
 
-    $view.other  = propSorter($global.services.enabled,
+    $view.other  = propSorter($core.services.enabled,
 			      sort,   "node.title", false, false,
 			      filter, "node.type", neq, "other", exclude);
     
@@ -254,7 +254,7 @@ widget(container_x, {
 
     DIVIDER("System", false);
 
-    ITEM("dataroot://resources/svg/Settings.svg", _("Settings"), "settings:");
-    ITEM("dataroot://resources/svg/Plugin.svg", _("Apps"), "plugin:start");
+    ITEM("dataroot://res/svg/Settings.svg", _("Settings"), "settings:");
+    ITEM("dataroot://res/svg/Plugin.svg", _("Apps"), "plugin:start");
   });
 });

@@ -31,6 +31,9 @@
 #include "prop_i.h"
 #include "misc/str.h"
 #include "event.h"
+
+#include "prop_proxy.h"
+
 #ifdef PROP_DEBUG
 int prop_trace;
 static prop_sub_t *track_sub;
@@ -70,7 +73,7 @@ static void prop_flood_flag(prop_t *p, int set, int clr);
 static void prop_destroy_childs0(prop_t *p);
 
 #define PROPTRACE(fmt, ...) \
-  trace(TRACE_NO_PROP, TRACE_DEBUG, "prop", fmt, ##__VA_ARGS__)
+  tracelog(TRACE_NO_PROP, TRACE_DEBUG, "prop", fmt, ##__VA_ARGS__)
 
 #ifdef PROP_SUB_STATS
 static LIST_HEAD(, prop_sub) all_subs;
@@ -133,8 +136,8 @@ prop_get_name(prop_t *p)
 attribute_unused static const char *
 prop_get_DN(prop_t *p, int compact)
 {
-  static __thread int idx;
-  static __thread char buf[4][256];
+  static int idx;
+  static char buf[4][256];
   
   const int maxlen = 256;
   prop_t *revvec[32];
@@ -459,25 +462,22 @@ prop_notify_free_payload(prop_notify_t *n)
   case PROP_SET_CSTRING:
   case PROP_SET_INT:
   case PROP_SET_FLOAT:
-    prop_ref_dec_locked(n->hpn_prop2);
     break;
 
   case PROP_SET_RSTRING:
     rstr_release(n->hpn_rstring);
-    prop_ref_dec_locked(n->hpn_prop2);
     break;
 
   case PROP_SET_URI:
     rstr_release(n->hpn_uri_title);
     rstr_release(n->hpn_uri);
-    prop_ref_dec_locked(n->hpn_prop2);
     break;
 
   case PROP_ADD_CHILD_BEFORE:
   case PROP_MOVE_CHILD:
   case PROP_REQ_MOVE_CHILD:
   case PROP_SELECT_CHILD:
-    prop_ref_dec_locked(n->hpn_prop2);
+    prop_ref_dec_locked(n->hpn_prop_extra);
   case PROP_ADD_CHILD:
   case PROP_DEL_CHILD:
   case PROP_REQ_NEW_CHILD:
@@ -488,12 +488,11 @@ prop_notify_free_payload(prop_notify_t *n)
 
   case PROP_EXT_EVENT:
     event_release(n->hpn_ext_event);
-    prop_ref_dec_locked(n->hpn_prop2);
     break;
 
 
   case PROP_ADD_CHILD_VECTOR_BEFORE:
-    prop_ref_dec_locked(n->hpn_prop2);
+    prop_ref_dec_locked(n->hpn_prop_extra);
     // FALLTHRU
   case PROP_REQ_DELETE_VECTOR:
   case PROP_ADD_CHILD_VECTOR:
@@ -508,6 +507,7 @@ prop_notify_free_payload(prop_notify_t *n)
   case PROP_HAVE_MORE_CHILDS_NO:
   case PROP_DESTROYED:
   case PROP_ADOPT_RSTRING:
+  case PROP_VALUE_PROP:
     break;
   }
 }
@@ -712,58 +712,52 @@ notify_invoke(prop_sub_t *s, prop_notify_t *n)
   case PROP_SET_DIR:
   case PROP_SET_VOID:
     if(pt != NULL)
-      pt(s, n->hpn_event, n->hpn_prop2);
+      pt(s, n->hpn_event);
     else
-      cb(s->hps_opaque, n->hpn_event, n->hpn_prop2, s->hps_user_int);
-    if(n->hpn_prop2 != NULL)
-      prop_ref_dec(n->hpn_prop2);
+      cb(s->hps_opaque, n->hpn_event, s->hps_user_int);
     break;
 
   case PROP_SET_RSTRING:
     if(pt != NULL)
-      pt(s, n->hpn_event, n->hpn_rstring, n->hpn_prop2, n->hpn_rstrtype);
+      pt(s, n->hpn_event, n->hpn_rstring, n->hpn_rstrtype);
     else
-      cb(s->hps_opaque, n->hpn_event, n->hpn_rstring, n->hpn_prop2, n->hpn_rstrtype, s->hps_user_int);
+      cb(s->hps_opaque, n->hpn_event, n->hpn_rstring,
+         n->hpn_rstrtype, s->hps_user_int);
     rstr_release(n->hpn_rstring);
-    prop_ref_dec(n->hpn_prop2);
     break;
 
   case PROP_SET_CSTRING:
     if(pt != NULL)
-      pt(s, n->hpn_event, n->hpn_cstring, n->hpn_prop2);
+      pt(s, n->hpn_event, n->hpn_cstring);
     else
-      cb(s->hps_opaque, n->hpn_event, n->hpn_cstring, n->hpn_prop2, s->hps_user_int);
-    prop_ref_dec(n->hpn_prop2);
+      cb(s->hps_opaque, n->hpn_event, n->hpn_cstring, s->hps_user_int);
     break;
 
   case PROP_SET_URI:
     if(pt != NULL)
-      pt(s, n->hpn_event, n->hpn_uri_title, n->hpn_uri, n->hpn_prop2);
+      pt(s, n->hpn_event, n->hpn_uri_title, n->hpn_uri);
     else
       cb(s->hps_opaque, n->hpn_event, n->hpn_uri_title, n->hpn_uri,
-	 n->hpn_prop2, s->hps_user_int);
+	 s->hps_user_int);
     rstr_release(n->hpn_uri_title);
     rstr_release(n->hpn_uri);
-    prop_ref_dec(n->hpn_prop2);
     break;
 
 
   case PROP_SET_INT:
     if(pt != NULL)
-      pt(s, n->hpn_event, n->hpn_int, n->hpn_prop2, s->hps_user_int);
+      pt(s, n->hpn_event, n->hpn_int, s->hps_user_int);
     else
-      cb(s->hps_opaque, n->hpn_event, n->hpn_int, n->hpn_prop2, s->hps_user_int);
-    prop_ref_dec(n->hpn_prop2);
+      cb(s->hps_opaque, n->hpn_event, n->hpn_int, s->hps_user_int);
     break;
 
   case PROP_SET_FLOAT:
     if(pt != NULL)
-      pt(s, n->hpn_event, n->hpn_float, n->hpn_prop2,
+      pt(s, n->hpn_event, n->hpn_float,
 	 n->hpn_float_how, s->hps_user_int);
     else
-      cb(s->hps_opaque, n->hpn_event, n->hpn_float, n->hpn_prop2,
+      cb(s->hps_opaque, n->hpn_event, n->hpn_float,
 	 n->hpn_float_how, s->hps_user_int);
-    prop_ref_dec(n->hpn_prop2);
     break;
 
   case PROP_ADD_CHILD:
@@ -779,14 +773,12 @@ notify_invoke(prop_sub_t *s, prop_notify_t *n)
   case PROP_SELECT_CHILD:
   case PROP_REQ_MOVE_CHILD:
     if(pt != NULL)
-      pt(s, n->hpn_event, n->hpn_prop, n->hpn_prop2, n->hpn_flags, s->hps_user_int);
+      pt(s, n->hpn_event, n->hpn_prop, n->hpn_prop_extra, n->hpn_flags, s->hps_user_int);
     else
-      cb(s->hps_opaque, n->hpn_event, n->hpn_prop, 
-	 n->hpn_prop2, n->hpn_flags, s->hps_user_int);
-    if(n->hpn_prop != NULL)
-      prop_ref_dec(n->hpn_prop);
-    if(n->hpn_prop2 != NULL)
-      prop_ref_dec(n->hpn_prop2);
+      cb(s->hps_opaque, n->hpn_event, n->hpn_prop,
+	 n->hpn_prop_extra, n->hpn_flags, s->hps_user_int);
+    prop_ref_dec(n->hpn_prop);
+    prop_ref_dec(n->hpn_prop_extra);
     break;
 
   case PROP_DEL_CHILD:
@@ -810,11 +802,10 @@ notify_invoke(prop_sub_t *s, prop_notify_t *n)
 
   case PROP_EXT_EVENT:
     if(pt != NULL)
-      pt(s, n->hpn_event, n->hpn_ext_event, n->hpn_prop2, s->hps_user_int);
+      pt(s, n->hpn_event, n->hpn_ext_event, s->hps_user_int);
     else
-      cb(s->hps_opaque, n->hpn_event, n->hpn_ext_event, n->hpn_prop2, s->hps_user_int);
+      cb(s->hps_opaque, n->hpn_event, n->hpn_ext_event, s->hps_user_int);
     event_release(n->hpn_ext_event);
-    prop_ref_dec(n->hpn_prop2);
     break;
 
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
@@ -840,13 +831,20 @@ notify_invoke(prop_sub_t *s, prop_notify_t *n)
 
   case PROP_ADD_CHILD_VECTOR_BEFORE:
     if(pt != NULL)
-      pt(s, n->hpn_event, n->hpn_propv, n->hpn_prop2, s->hps_user_int);
+      pt(s, n->hpn_event, n->hpn_propv, n->hpn_prop_extra, s->hps_user_int);
     else
-      cb(s->hps_opaque, n->hpn_event, n->hpn_propv, n->hpn_prop2, s->hps_user_int);
+      cb(s->hps_opaque, n->hpn_event, n->hpn_propv, n->hpn_prop_extra,
+         s->hps_user_int);
 
     prop_vec_release(n->hpn_propv);
-    prop_ref_dec(n->hpn_prop2);
+    prop_ref_dec(n->hpn_prop_extra);
     break;
+  case PROP_VALUE_PROP:
+    assert(pt == NULL);
+    cb(s->hps_opaque, n->hpn_event, n->hpn_prop);
+    prop_ref_dec(n->hpn_prop);
+    break;
+
   case PROP_SET_STRING:
   case PROP_ADOPT_RSTRING:
     break;
@@ -1163,8 +1161,8 @@ courier_enqueue0(prop_sub_t *s, prop_notify_t *n, int expedite)
 /**
  *
  */
-static void
-courier_enqueue(prop_sub_t *s, prop_notify_t *n)
+void
+prop_courier_enqueue(prop_sub_t *s, prop_notify_t *n)
 {
   courier_enqueue0(s, n, s->hps_flags & PROP_SUB_EXPEDITE);
 }
@@ -1173,8 +1171,8 @@ courier_enqueue(prop_sub_t *s, prop_notify_t *n)
 /**
  *
  */
-static prop_notify_t *
-get_notify(prop_sub_t *s)
+prop_notify_t *
+prop_get_notify(prop_sub_t *s)
 {
   prop_notify_t *n = pool_get(notify_pool);
   atomic_inc(&s->hps_refcount);
@@ -1232,6 +1230,8 @@ prop_build_notify_value(prop_sub_t *s, int direct, const char *origin,
     case PROP_PROP:
       PROPTRACE("prop by %s%s", origin, trail);
       break;
+    case PROP_PROXY:
+      abort();
     }
   }
   if((direct || s->hps_flags & PROP_SUB_INTERNAL) && pnq == NULL) {
@@ -1243,55 +1243,62 @@ prop_build_notify_value(prop_sub_t *s, int direct, const char *origin,
     prop_callback_t *cb = s->hps_callback;
     prop_trampoline_t *pt = s->hps_trampoline;
 
+
+    if(s->hps_flags & PROP_SUB_SEND_VALUE_PROP) {
+      assert(pt == NULL);
+      cb(s->hps_opaque, PROP_VALUE_PROP, p);
+    }
+
     switch(p->hp_type) {
     case PROP_RSTRING:
       if(pt != NULL)
-	pt(s, PROP_SET_RSTRING, p->hp_rstring, p, p->hp_rstrtype, s->hps_user_int);
+	pt(s, PROP_SET_RSTRING, p->hp_rstring, p->hp_rstrtype, s->hps_user_int);
       else
-	cb(s->hps_opaque, PROP_SET_RSTRING, p->hp_rstring, p, p->hp_rstrtype, s->hps_user_int);
+	cb(s->hps_opaque, PROP_SET_RSTRING,
+           p->hp_rstring, p->hp_rstrtype, s->hps_user_int);
       break;
 
     case PROP_CSTRING:
       if(pt != NULL)
-	pt(s, PROP_SET_CSTRING, p->hp_cstring, p, s->hps_user_int);
+	pt(s, PROP_SET_CSTRING, p->hp_cstring, s->hps_user_int);
       else
-	cb(s->hps_opaque, PROP_SET_CSTRING, p->hp_cstring, p, s->hps_user_int);
+	cb(s->hps_opaque, PROP_SET_CSTRING, p->hp_cstring, s->hps_user_int);
       break;
 
     case PROP_URI:
       if(pt != NULL)
-	pt(s, PROP_SET_URI, p->hp_uri_title, p->hp_uri, p, s->hps_user_int);
+	pt(s, PROP_SET_URI, p->hp_uri_title, p->hp_uri, s->hps_user_int);
       else
 	cb(s->hps_opaque, PROP_SET_URI,
-	   p->hp_uri_title, p->hp_uri, p, s->hps_user_int);
+	   p->hp_uri_title, p->hp_uri, s->hps_user_int);
       break;
 
     case PROP_FLOAT:
       if(pt != NULL)
-	pt(s, PROP_SET_FLOAT, p->hp_float, p, how, s->hps_user_int);
+	pt(s, PROP_SET_FLOAT, p->hp_float, how, s->hps_user_int);
       else
-	cb(s->hps_opaque, PROP_SET_FLOAT, p->hp_float, p, how, s->hps_user_int);
+	cb(s->hps_opaque, PROP_SET_FLOAT, p->hp_float, how, s->hps_user_int);
       break;
 
     case PROP_INT:
       if(pt != NULL)
-	pt(s, PROP_SET_INT, p->hp_int, p, s->hps_user_int);
+	pt(s, PROP_SET_INT, p->hp_int, s->hps_user_int);
       else
-	cb(s->hps_opaque, PROP_SET_INT, p->hp_int, p, s->hps_user_int);
+	cb(s->hps_opaque, PROP_SET_INT, p->hp_int, s->hps_user_int);
       break;
 
     case PROP_DIR:
       if(pt != NULL)
-	pt(s, PROP_SET_DIR, p, s->hps_user_int);
+	pt(s, PROP_SET_DIR, s->hps_user_int);
       else
-	cb(s->hps_opaque, PROP_SET_DIR, p, s->hps_user_int);
+	cb(s->hps_opaque, PROP_SET_DIR, s->hps_user_int);
       break;
 
     case PROP_VOID:
       if(pt != NULL)
-	pt(s, PROP_SET_VOID, p, s->hps_user_int);
+	pt(s, PROP_SET_VOID, s->hps_user_int);
       else
-	cb(s->hps_opaque, PROP_SET_VOID, p, s->hps_user_int);
+	cb(s->hps_opaque, PROP_SET_VOID, s->hps_user_int);
       break;
 
     case PROP_PROP:
@@ -1302,15 +1309,25 @@ prop_build_notify_value(prop_sub_t *s, int direct, const char *origin,
       break;
 
     case PROP_ZOMBIE:
+    case PROP_PROXY:
       abort();
 
     }
     return;
   }
 
-  n = get_notify(s);
+  if(s->hps_flags & PROP_SUB_SEND_VALUE_PROP) {
+    n = prop_get_notify(s);
+    n->hpn_prop = prop_ref_inc(p);
+    n->hpn_event = PROP_VALUE_PROP;
+    if(pnq) {
+      TAILQ_INSERT_TAIL(pnq, n, hpn_link);
+    } else {
+      prop_courier_enqueue(s, n);
+    }
+  }
 
-  n->hpn_prop2 = prop_ref_inc(p);
+  n = prop_get_notify(s);
 
   switch(p->hp_type) {
   case PROP_RSTRING:
@@ -1356,13 +1373,14 @@ prop_build_notify_value(prop_sub_t *s, int direct, const char *origin,
     break;
 
   case PROP_ZOMBIE:
+  case PROP_PROXY:
     abort();
   }
 
   if(pnq) {
     TAILQ_INSERT_TAIL(pnq, n, hpn_link);
   } else {
-    courier_enqueue(s, n);
+    prop_courier_enqueue(s, n);
   }
 }
 
@@ -1388,11 +1406,11 @@ prop_notify_void(prop_sub_t *s)
     return;
   }
 
-  prop_notify_t *n = get_notify(s);
+  prop_notify_t *n = prop_get_notify(s);
 
   n->hpn_event = PROP_SET_VOID;
-  n->hpn_prop2 = NULL;
-  courier_enqueue(s, n);
+  n->hpn_prop_extra = NULL;
+  prop_courier_enqueue(s, n);
 }
 
 
@@ -1413,7 +1431,7 @@ prop_notify_destroyed(prop_sub_t *s)
     return;
   }
 
-  prop_notify_t *n = get_notify(s);
+  prop_notify_t *n = prop_get_notify(s);
 
   n->hpn_event = PROP_DESTROYED;
 
@@ -1464,14 +1482,14 @@ prop_build_notify_child(prop_sub_t *s, prop_t *p, prop_event_t event,
     return;
   }
 
-  n = get_notify(s);
+  n = prop_get_notify(s);
 
   if(p != NULL)
     atomic_inc(&p->hp_refcount);
   n->hpn_flags = flags;
   n->hpn_prop = p;
   n->hpn_event = event;
-  courier_enqueue(s, n);
+  prop_courier_enqueue(s, n);
 }
 
 
@@ -1512,17 +1530,17 @@ prop_build_notify_child2(prop_sub_t *s, prop_t *p, prop_t *extra,
     return;
   }
 
-  n = get_notify(s);
+  n = prop_get_notify(s);
 
   atomic_inc(&p->hp_refcount);
   if(extra != NULL)
     atomic_inc(&extra->hp_refcount);
 
   n->hpn_prop = p;
-  n->hpn_prop2 = extra;
+  n->hpn_prop_extra = extra;
   n->hpn_event = event;
   n->hpn_flags = flags;
-  courier_enqueue(s, n);
+  prop_courier_enqueue(s, n);
 }
 
 
@@ -1561,12 +1579,12 @@ prop_build_notify_childv(prop_sub_t *s, prop_vec_t *pv, prop_event_t event,
   }
 
 
-  prop_notify_t *n = get_notify(s);
+  prop_notify_t *n = prop_get_notify(s);
   n->hpn_propv = prop_vec_addref(pv);
   n->hpn_flags = 0;
   n->hpn_event = event;
-  n->hpn_prop2 = prop_ref_inc(p2);
-  courier_enqueue(s, n);
+  n->hpn_prop_extra = prop_ref_inc(p2);
+  prop_courier_enqueue(s, n);
 }
 
 
@@ -1594,17 +1612,22 @@ prop_send_ext_event0(prop_t *p, event_t *e)
   prop_sub_t *s;
   prop_notify_t *n;
 
+  if(p->hp_type == PROP_PROXY) {
+    prop_proxy_send_event(p, e);
+    return;
+  }
+
+
   while(p->hp_originator != NULL)
     p = p->hp_originator;
 
   LIST_FOREACH(s, &p->hp_value_subscriptions, hps_value_prop_link) {
-    n = get_notify(s);
+    n = prop_get_notify(s);
 
     n->hpn_event = PROP_EXT_EVENT;
-    n->hpn_prop2 = prop_ref_inc(p);
     atomic_inc(&e->e_refcount);
     n->hpn_ext_event = e;
-    courier_enqueue(s, n);
+    prop_courier_enqueue(s, n);
   }
 }
 
@@ -1628,9 +1651,9 @@ prop_send_event(prop_t *p, prop_event_t e)
       else
 	cb(s->hps_opaque, e, s->hps_user_int);
     } else {
-      n = get_notify(s);
+      n = prop_get_notify(s);
       n->hpn_event = e;
-      courier_enqueue(s, n);
+      prop_courier_enqueue(s, n);
     }
   }
 }
@@ -1647,9 +1670,9 @@ prop_send_subscription_monitor_active(prop_t *p)
 
   LIST_FOREACH(s, &p->hp_value_subscriptions, hps_value_prop_link) {
     if(s->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR) {
-      n = get_notify(s);
+      n = prop_get_notify(s);
       n->hpn_event = PROP_SUBSCRIPTION_MONITOR_ACTIVE;
-      courier_enqueue(s, n);
+      prop_courier_enqueue(s, n);
     }
   }
 }
@@ -1710,7 +1733,7 @@ prop_clean(prop_t *p)
     s = prop_check_canonical_subs_descending(p);
     if(s != NULL) {
 #ifdef PROP_SUB_RECORD_SOURCE
-      trace(TRACE_NO_PROP, TRACE_ERROR, "prop",
+      tracelog(TRACE_NO_PROP, TRACE_ERROR, "prop",
             "Refusing to clean prop %s because a decendant (%s) have "
             "canonical sub %s:%d",
             prop_get_DN(p, 1),
@@ -1723,6 +1746,7 @@ prop_clean(prop_t *p)
     break;
 
   case PROP_ZOMBIE:
+  case PROP_PROXY:
     return 1;
 
   case PROP_VOID:
@@ -1815,7 +1839,6 @@ prop_make(const char *name, int noalloc, prop_t *parent)
   return hp;
 }
 
-
 /**
  *
  */
@@ -1825,6 +1848,9 @@ prop_create0(prop_t *parent, const char *name, prop_sub_t *skipme, int noalloc)
   prop_t *hp;
 
   assert(parent->hp_type != PROP_ZOMBIE);
+
+  if(parent->hp_type == PROP_PROXY)
+    return prop_proxy_create(parent, name);
 
   prop_make_dir(parent, skipme, "prop_create()");
 
@@ -2208,6 +2234,11 @@ prop_destroy0(prop_t *p)
   case PROP_VOID:
   case PROP_CSTRING:
     break;
+  case PROP_PROXY:
+    assert(p->hp_originator == NULL);
+    prop_proxy_destroy(p);
+    p->hp_type = PROP_ZOMBIE;
+    goto finale;
   }
 
   p->hp_type = PROP_ZOMBIE;
@@ -2255,6 +2286,7 @@ prop_destroy0(prop_t *p)
       parent->hp_selected = NULL;
   }
 
+ finale:
   if(!(p->hp_flags & PROP_NAME_NOT_ALLOCATED))
     free((void *)p->hp_name);
   p->hp_name = NULL;
@@ -2509,6 +2541,12 @@ prop_req_move0(prop_t *p, prop_t *before, prop_sub_t *skipme)
   if(p == before)
     return;
 
+  if(p->hp_type == PROP_PROXY) {
+    assert(skipme == NULL);
+    prop_proxy_req_move(p, before);
+    return;
+  }
+
   if(TAILQ_NEXT(p, hp_parent_link) != before) {
     parent = p->hp_parent;
     prop_notify_child2(p, parent, before, PROP_REQ_MOVE_CHILD, skipme, 0);
@@ -2532,8 +2570,8 @@ prop_req_move(prop_t *p, prop_t *before)
  *
  */
 static prop_t *
-prop_subfind(prop_t *p, const char **name, int follow_symlinks, int allow_indexing,
-	     prop_t **origin_chain)
+prop_subfind(prop_t *p, const char **name, int follow_symlinks,
+             int allow_indexing, prop_t **origin_chain)
 {
   prop_t *c;
   int ocnum = 0;
@@ -2549,6 +2587,8 @@ prop_subfind(prop_t *p, const char **name, int follow_symlinks, int allow_indexi
 
       if(p->hp_type != PROP_VOID) {
 	/* We don't want subscriptions to overwrite real values */
+        if(origin_chain)
+          origin_chain[0] = NULL;
 	return NULL;
       }
 
@@ -2566,9 +2606,11 @@ prop_subfind(prop_t *p, const char **name, int follow_symlinks, int allow_indexi
 	  break;
 	i--;
       }
-      if(c == NULL)
+      if(c == NULL) {
+        if(origin_chain)
+          origin_chain[0] = NULL;
 	return NULL;
-
+      }
     } else {
 
       TAILQ_FOREACH(c, &p->hp_childs, hp_parent_link) {
@@ -2682,7 +2724,38 @@ prop_get_by_name(const char **name, int follow_symlinks, ...)
 
   name++;
   hts_mutex_lock(&prop_mutex);
-  p = prop_subfind(p, name, follow_symlinks, 1, NULL);
+  if(p->hp_type == PROP_PROXY) {
+    int len = 0;
+    if(p->hp_proxy_pfx != NULL)
+      while(p->hp_proxy_pfx[len] != NULL)
+        len++;
+
+    while(name[len] != NULL)
+      len++;
+    char **vec = malloc((1 + len) * sizeof(char *));
+
+    len = 0;
+    if(p->hp_proxy_pfx != NULL) {
+      while(p->hp_proxy_pfx[len] != NULL) {
+        vec[len] = strdup(p->hp_proxy_pfx[len]);
+        len++;
+      }
+    }
+
+    for(int i = 0 ; name[i] != NULL; i++)
+      vec[len++] = strdup(name[i]);
+    vec[len] = NULL;
+
+    p = prop_proxy_make(p->hp_proxy_ppc, p->hp_proxy_id, NULL, vec);
+
+    if(follow_symlinks)
+      p->hp_flags |= PROP_PROXY_FOLLOW_SYMLINK;
+
+  } else {
+
+    p = prop_subfind(p, name, follow_symlinks, 1, NULL);
+
+  }
 
   p = prop_ref_inc(p);
 
@@ -2708,8 +2781,8 @@ gen_add_flags(prop_t *c, prop_t *p)
 prop_sub_t *
 prop_subscribe_ex(const char *file, int line, int flags, ...)
 #else
-prop_sub_t *
-prop_subscribe(int flags, ...)
+  prop_sub_t *
+  prop_subscribe(int flags, ...)
 #endif
 {
   prop_t *p, *value, *canonical, *c;
@@ -2735,20 +2808,30 @@ prop_subscribe(int flags, ...)
   prop_t *origin_chain[16];
   origin_chain[0] = NULL;
 
+  struct prop_proxy_connection *ppc = NULL;
+
   LIST_INIT(&proproots);
 
   do {
     tag = va_arg(ap, int);
     switch(tag) {
     case PROP_TAG_NAME_VECTOR:
-      name = va_arg(ap,  const char **);
+      if(name != NULL)
+        (void)va_arg(ap, const char **);
+      else
+        name = va_arg(ap,  const char **);
       break;
 
     case PROP_TAG_NAMESTR:
-      do {
+      if(name != NULL) {
+        (void)va_arg(ap, const char *);
+      } else {
 	const char *s, *s0 = va_arg(ap, const char *);
-	int segments = 1, ptr = 0, len;
+        int segments = 1, ptr = 0, len;
 	char **nv;
+
+        if(s0 == NULL)
+          break;
 
 	for(s = s0; *s != 0; s++)
 	  if(*s == '.')
@@ -2774,7 +2857,7 @@ prop_subscribe(int flags, ...)
 	memcpy(nv[ptr], s0, len);
 	nv[ptr++][len] = 0;
 	nv[ptr] = NULL;
-      } while(0);
+      }
       break;
 
     case PROP_TAG_CALLBACK:
@@ -2788,7 +2871,6 @@ prop_subscribe(int flags, ...)
       trampoline = NULL;
       opaque = va_arg(ap, void *);
       user_int = va_arg(ap, int);
-      flags |= PROP_SUB_USER_INT;
       break;
 
     case PROP_TAG_CALLBACK_STRING:
@@ -2891,8 +2973,13 @@ prop_subscribe(int flags, ...)
     pr = LIST_FIRST(&proproots);
 
     canonical = value = pr ? pr->p : NULL;
+
     if(dolock)
       hts_mutex_lock(&prop_mutex);
+
+    if(value != NULL && value->hp_type == PROP_PROXY) {
+      ppc = value->hp_proxy_ppc;
+    }
 
   } else {
 
@@ -2906,14 +2993,19 @@ prop_subscribe(int flags, ...)
     if(dolock)
       hts_mutex_lock(&prop_mutex);
 
-    if(p != NULL) {
+    if(p == NULL) {
+      canonical = value = NULL;
+
+    } else if(p->hp_type == PROP_PROXY) {
+      ppc = p->hp_proxy_ppc;
+      canonical = value = p;
+
+    } else {
       /* Canonical name is the resolved props without following symlinks */
       canonical = prop_subfind(p, name, 0, 0, NULL);
-      
+
       /* ... and value will follow links */
       value     = prop_subfind(p, name, 1, 0, origin_chain);
-    } else {
-      canonical = value = NULL;
     }
   }
 
@@ -2926,10 +3018,10 @@ prop_subscribe(int flags, ...)
     }
   }
 
-  if(value && value->hp_type == PROP_ZOMBIE)
+  if(value != NULL && value->hp_type == PROP_ZOMBIE)
     value = NULL;
 
-  if(canonical && canonical->hp_type == PROP_ZOMBIE)
+  if(canonical != NULL && canonical->hp_type == PROP_ZOMBIE)
     canonical = NULL;
 
 
@@ -2999,87 +3091,99 @@ prop_subscribe(int flags, ...)
   s->hps_lockmgr(s->hps_lock, PROP_LOCK_RETAIN);
 
   s->hps_canonical_prop = canonical;
-  if(canonical != NULL) {
-    LIST_INSERT_HEAD(&canonical->hp_canonical_subscriptions, s, 
-		     hps_canonical_prop_link);
-
-    if(s->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR &&
-       (canonical->hp_flags & PROP_MONITORED) == 0) {
-      canonical->hp_flags |= PROP_MONITORED;
-
-      LIST_FOREACH(t, &canonical->hp_value_subscriptions, hps_value_prop_link) {
-	if(!(t->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR))
-	  break;
-      }
-      if(t != NULL) {
-	// monitor was enabled but there are already subscribers
-	activate_on_canonical = 1;
-      }
-    }
-
-    if(s->hps_flags & PROP_SUB_MULTI)
-      prop_set_multi(canonical);
-  }
-
   s->hps_value_prop = value;
-  if(value != NULL) {
 
-    LIST_INSERT_HEAD(&value->hp_value_subscriptions, s, 
-		     hps_value_prop_link);
+  if(ppc != NULL) {
 
+    // Subscribe via external proxy
+    s->hps_proxy = 1;
+    prop_proxy_subscribe(ppc, s, value, name);
 
-    if(notify_now) {
+  } else {
+    s->hps_proxy = 0;
 
-      prop_build_notify_value(s, direct, "prop_subscribe()", 
-			      s->hps_value_prop, NULL, 0);
+    if(canonical != NULL) {
+      LIST_INSERT_HEAD(&canonical->hp_canonical_subscriptions, s,
+                       hps_canonical_prop_link);
 
-      if(value->hp_type == PROP_DIR && !(s->hps_flags & PROP_SUB_MULTI)) {
+      if(s->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR &&
+         (canonical->hp_flags & PROP_MONITORED) == 0) {
+        canonical->hp_flags |= PROP_MONITORED;
 
-	if(value->hp_selected == NULL && direct) {
-
-	  int cnt = 0;
-	  TAILQ_FOREACH(c, &value->hp_childs, hp_parent_link)
-	    cnt++;
-	
-	  prop_vec_t *pv = prop_vec_create(cnt);
-	  TAILQ_FOREACH(c, &value->hp_childs, hp_parent_link)
-	    pv = prop_vec_append(pv, c);
-
-	  prop_build_notify_childv(s, pv, PROP_ADD_CHILD_VECTOR_DIRECT,
-				   NULL, 1);
-	  prop_vec_release(pv);
-
-	} else {
-	  TAILQ_FOREACH(c, &value->hp_childs, hp_parent_link)
-	    prop_build_notify_child(s, c, PROP_ADD_CHILD, direct,
-				    gen_add_flags(c, value));
-	}
+        LIST_FOREACH(t, &canonical->hp_value_subscriptions,
+                     hps_value_prop_link) {
+          if(!(t->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR))
+            break;
+        }
+        if(t != NULL) {
+          // monitor was enabled but there are already subscribers
+          activate_on_canonical = 1;
+        }
       }
+
+      if(s->hps_flags & PROP_SUB_MULTI)
+        prop_set_multi(canonical);
     }
-  
-    /* If we have any subscribers monitoring for subscriptions, notify them */
-    if(!(s->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR) && 
-       value->hp_flags & PROP_MONITORED)
-      prop_send_subscription_monitor_active(value);
-  }
 
-  if(activate_on_canonical)
-    prop_send_subscription_monitor_active(canonical);
+    if(value != NULL) {
 
-  if(canonical == NULL && 
-     s->hps_flags & (PROP_SUB_TRACK_DESTROY | PROP_SUB_TRACK_DESTROY_EXP)) {
+      LIST_INSERT_HEAD(&value->hp_value_subscriptions, s, 
+                       hps_value_prop_link);
 
-    if(direct) {
-      prop_callback_t *cb = s->hps_callback;
-      prop_trampoline_t *pt = s->hps_trampoline;
-      if(pt != NULL)
-	pt(s, PROP_DESTROYED, s, s->hps_user_int);
-      else
-	cb(s->hps_opaque, PROP_DESTROYED, s, s->hps_user_int);
-      s = NULL;
 
-    } else {
-      prop_notify_destroyed(s);
+      if(notify_now) {
+
+        prop_build_notify_value(s, direct, "prop_subscribe()", 
+                                s->hps_value_prop, NULL, 0);
+
+        if(value->hp_type == PROP_DIR && !(s->hps_flags & PROP_SUB_MULTI)) {
+
+          if(value->hp_selected == NULL && direct) {
+
+            int cnt = 0;
+            TAILQ_FOREACH(c, &value->hp_childs, hp_parent_link)
+              cnt++;
+	
+            prop_vec_t *pv = prop_vec_create(cnt);
+            TAILQ_FOREACH(c, &value->hp_childs, hp_parent_link)
+              pv = prop_vec_append(pv, c);
+
+            prop_build_notify_childv(s, pv, PROP_ADD_CHILD_VECTOR_DIRECT,
+                                     NULL, 1);
+            prop_vec_release(pv);
+
+          } else {
+            TAILQ_FOREACH(c, &value->hp_childs, hp_parent_link)
+              prop_build_notify_child(s, c, PROP_ADD_CHILD, direct,
+                                      gen_add_flags(c, value));
+          }
+        }
+      }
+
+      /* If we have any subscribers monitoring for subscriptions, notify them */
+      if(!(s->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR) &&
+         value->hp_flags & PROP_MONITORED)
+        prop_send_subscription_monitor_active(value);
+    }
+
+    if(activate_on_canonical)
+      prop_send_subscription_monitor_active(canonical);
+
+    if(canonical == NULL &&
+       s->hps_flags & (PROP_SUB_TRACK_DESTROY | PROP_SUB_TRACK_DESTROY_EXP)) {
+
+      if(direct) {
+        prop_callback_t *cb = s->hps_callback;
+        prop_trampoline_t *pt = s->hps_trampoline;
+        if(pt != NULL)
+          pt(s, PROP_DESTROYED, s, s->hps_user_int);
+        else
+          cb(s->hps_opaque, PROP_DESTROYED, s, s->hps_user_int);
+        s = NULL;
+
+      } else {
+        prop_notify_destroyed(s);
+      }
     }
   }
   if(dolock)
@@ -3111,51 +3215,56 @@ prop_unsubscribe0(prop_sub_t *s)
   s->hps_dispatch = NULL;
 #endif
 
-  if(s->hps_value_prop != NULL) {
-    LIST_REMOVE(s, hps_value_prop_link);
-    s->hps_value_prop = NULL;
-  }
-
-  if(s->hps_multiple_origins) {
-    prop_originator_tracking_t *pot, *next;
-    for(pot = s->hps_pots; pot != NULL; pot = next) {
-      next = pot->pot_next;
-      prop_ref_dec_locked(pot->pot_p);
-      pool_put(pot_pool, pot);
-    }
+  if(s->hps_proxy) {
+    prop_proxy_unsubscribe(s);
   } else {
-    prop_ref_dec_locked(s->hps_origin);
-  }
 
-  if(s->hps_canonical_prop != NULL) {
-    LIST_REMOVE(s, hps_canonical_prop_link);
-
-    if(s->hps_flags & (PROP_SUB_SUBSCRIPTION_MONITOR | PROP_SUB_MULTI)) {
-
-      prop_sub_t *t;
-
-      assert(s->hps_canonical_prop->hp_flags & 
-	     (PROP_MONITORED | PROP_MULTI_SUB));
-      
-      int mon = 0;
-      int multi = 0;
-
-      LIST_FOREACH(t, &s->hps_canonical_prop->hp_canonical_subscriptions,
-		   hps_canonical_prop_link) {
-	if(t->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR)
-	  mon = 1;
-
-	if(t->hps_flags & PROP_SUB_MULTI)
-	  multi = 1;
+    if(s->hps_multiple_origins) {
+      prop_originator_tracking_t *pot, *next;
+      for(pot = s->hps_pots; pot != NULL; pot = next) {
+        next = pot->pot_next;
+        prop_ref_dec_locked(pot->pot_p);
+        pool_put(pot_pool, pot);
       }
-
-      if(!mon)
-	s->hps_canonical_prop->hp_flags &= ~PROP_MONITORED;
-
-      if(!multi)
-	prop_clr_multi(s->hps_canonical_prop);
+    } else {
+      prop_ref_dec_locked(s->hps_origin);
     }
-    s->hps_canonical_prop = NULL;
+
+    if(s->hps_value_prop != NULL) {
+      LIST_REMOVE(s, hps_value_prop_link);
+      s->hps_value_prop = NULL;
+    }
+
+    if(s->hps_canonical_prop != NULL) {
+      LIST_REMOVE(s, hps_canonical_prop_link);
+
+      if(s->hps_flags & (PROP_SUB_SUBSCRIPTION_MONITOR | PROP_SUB_MULTI)) {
+
+        prop_sub_t *t;
+
+        assert(s->hps_canonical_prop->hp_flags &
+               (PROP_MONITORED | PROP_MULTI_SUB));
+
+        int mon = 0;
+        int multi = 0;
+
+        LIST_FOREACH(t, &s->hps_canonical_prop->hp_canonical_subscriptions,
+                     hps_canonical_prop_link) {
+          if(t->hps_flags & PROP_SUB_SUBSCRIPTION_MONITOR)
+            mon = 1;
+
+          if(t->hps_flags & PROP_SUB_MULTI)
+            multi = 1;
+        }
+
+        if(!mon)
+          s->hps_canonical_prop->hp_flags &= ~PROP_MONITORED;
+
+        if(!multi)
+          prop_clr_multi(s->hps_canonical_prop);
+      }
+      s->hps_canonical_prop = NULL;
+    }
   }
   prop_sub_ref_dec_locked(s);
 }
@@ -3249,6 +3358,11 @@ prop_set_string_exl(prop_t *p, prop_sub_t *skipme, const char *str,
   if(p->hp_type == PROP_ZOMBIE)
     return;
 
+  if(p->hp_type == PROP_PROXY) {
+    prop_proxy_set_string(p, str, type);
+    return;
+  }
+
   if(p->hp_type != PROP_RSTRING) {
 
     if(prop_clean(p))
@@ -3293,10 +3407,16 @@ prop_set_string_ex(prop_t *p, prop_sub_t *skipme, const char *str,
  *
  */
 static void
-prop_set_rstring_exl(prop_t *p, prop_sub_t *skipme, rstr_t *rstr)
+prop_set_rstring_exl(prop_t *p, prop_sub_t *skipme, rstr_t *rstr,
+                     prop_str_type_t type)
 {
   if(p->hp_type == PROP_ZOMBIE)
     return;
+
+  if(p->hp_type == PROP_PROXY) {
+    prop_proxy_set_string(p, rstr_get(rstr), type);
+    return;
+  }
 
   if(p->hp_type != PROP_RSTRING) {
 
@@ -3310,8 +3430,7 @@ prop_set_rstring_exl(prop_t *p, prop_sub_t *skipme, rstr_t *rstr)
   }
   p->hp_rstring = rstr_dup(rstr);
   p->hp_type = PROP_RSTRING;
-  p->hp_rstrtype = 0;
-
+  p->hp_rstrtype = type;
   prop_notify_value(p, skipme, "prop_set_rstring()", 0);
 }
 
@@ -3321,7 +3440,8 @@ prop_set_rstring_exl(prop_t *p, prop_sub_t *skipme, rstr_t *rstr)
  *
  */
 void
-prop_set_rstring_ex(prop_t *p, prop_sub_t *skipme, rstr_t *rstr)
+prop_set_rstring_ex(prop_t *p, prop_sub_t *skipme, rstr_t *rstr,
+                    prop_str_type_t type)
 {
   if(p == NULL)
     return;
@@ -3332,7 +3452,7 @@ prop_set_rstring_ex(prop_t *p, prop_sub_t *skipme, rstr_t *rstr)
   }
 
   hts_mutex_lock(&prop_mutex);
-  prop_set_rstring_exl(p, skipme, rstr);
+  prop_set_rstring_exl(p, skipme, rstr, type);
   hts_mutex_unlock(&prop_mutex);
 }
 
@@ -3343,7 +3463,11 @@ prop_set_rstring_ex(prop_t *p, prop_sub_t *skipme, rstr_t *rstr)
 static void
 prop_set_cstring_exl(prop_t *p, prop_sub_t *skipme, const char *cstr)
 {
-  if(p->hp_type == PROP_ZOMBIE) {
+  if(p->hp_type == PROP_ZOMBIE)
+    return;
+
+  if(p->hp_type == PROP_PROXY) {
+    prop_proxy_set_string(p, cstr, PROP_STR_UTF8);
     return;
   }
 
@@ -3523,6 +3647,12 @@ static void
 prop_set_float_exl(prop_t *p, prop_sub_t *skipme, float v, int how)
 {
   int forceupdate = !!how;
+
+  if(p != NULL && p->hp_type == PROP_PROXY) {
+    prop_proxy_set_float(p, v);
+    return;
+  }
+
   if((p = prop_get_float_locked(p, &forceupdate)) != NULL) {
 
     if(forceupdate || p->hp_float != v) {
@@ -3622,6 +3752,11 @@ prop_set_int_exl(prop_t *p, prop_sub_t *skipme, int v)
   if(p->hp_type == PROP_ZOMBIE)
     return;
 
+  if(p->hp_type == PROP_PROXY) {
+    prop_proxy_set_int(p, v);
+    return;
+  }
+
   if(p->hp_type != PROP_INT) {
 
     if(p->hp_type == PROP_FLOAT) {
@@ -3674,6 +3809,12 @@ prop_add_int_ex(prop_t *p, prop_sub_t *skipme, int v)
 
   hts_mutex_lock(&prop_mutex);
 
+  if(p->hp_type == PROP_PROXY) {
+    prop_proxy_add_int(p, v);
+    hts_mutex_unlock(&prop_mutex);
+    return;
+  }
+
   if(p->hp_type == PROP_ZOMBIE) {
     hts_mutex_unlock(&prop_mutex);
     return;
@@ -3720,6 +3861,12 @@ prop_toggle_int_ex(prop_t *p, prop_sub_t *skipme)
     return;
 
   hts_mutex_lock(&prop_mutex);
+
+  if(p->hp_type == PROP_PROXY) {
+    prop_proxy_toggle_int(p);
+    hts_mutex_unlock(&prop_mutex);
+    return;
+  }
 
   if(p->hp_type == PROP_ZOMBIE) {
     hts_mutex_unlock(&prop_mutex);
@@ -3805,6 +3952,11 @@ prop_set_void_exl(prop_t *p, prop_sub_t *skipme)
   if(p->hp_type == PROP_ZOMBIE)
     return;
 
+  if(p->hp_type == PROP_PROXY) {
+    prop_proxy_set_void(p);
+    return;
+  }
+
   if(p->hp_type != PROP_VOID) {
 
     if(prop_clean(p))
@@ -3879,7 +4031,7 @@ prop_copy_ex(prop_t *dst, prop_sub_t *skipme, prop_t *src)
       prop_set_float_exl(dst, skipme, src->hp_float, 0);
       break;
     case PROP_RSTRING:
-      prop_set_rstring_exl(dst, skipme, src->hp_rstring);
+      prop_set_rstring_exl(dst, skipme, src->hp_rstring, 0);
       break;
     case PROP_CSTRING:
       prop_set_cstring_exl(dst, skipme, src->hp_cstring);
@@ -4414,7 +4566,7 @@ prop_link0(prop_t *src, prop_t *dst, prop_sub_t *skipme, int hard, int debug)
         prop_sub_ref_dec_locked(s);
         pool_put(notify_pool, n);
       } else {
-        courier_enqueue(s, n);
+        prop_courier_enqueue(s, n);
       }
     } else {
       // Already updated by the new linkage
@@ -4445,7 +4597,17 @@ prop_link_ex(prop_t *src, prop_t *dst, prop_sub_t *skipme, int hard, int debug)
     return;
 
   hts_mutex_lock(&prop_mutex);
-  prop_link0(src, dst, skipme, hard, debug);
+
+
+  if(src->hp_type == PROP_PROXY && dst->hp_type == PROP_PROXY) {
+    assert(skipme == NULL);
+    prop_proxy_link(src, dst);
+  } else if(src->hp_type == PROP_PROXY || dst->hp_type == PROP_PROXY) {
+    printf("Linking a proxied property with a non-proxied one is mind-boggling difficult, giving up\n");
+  } else {
+    prop_link0(src, dst, skipme, hard, debug);
+  }
+  
   hts_mutex_unlock(&prop_mutex);
 }
 
@@ -4462,6 +4624,8 @@ prop_unlink_ex(prop_t *p, prop_sub_t *skipme)
     return;
 
   hts_mutex_lock(&prop_mutex);
+
+  assert(p->hp_type != PROP_PROXY);
 
   if(p->hp_type == PROP_ZOMBIE) {
     hts_mutex_unlock(&prop_mutex);
@@ -4487,6 +4651,24 @@ prop_follow(prop_t *p)
     p = p->hp_originator;
   
   p = prop_ref_inc(p);
+  hts_mutex_unlock(&prop_mutex);
+  return p;
+}
+
+
+/**
+ *
+ */
+prop_t *
+prop_get_prop(prop_t *p)
+{
+  hts_mutex_lock(&prop_mutex);
+
+  if(p->hp_type == PROP_PROP) {
+    p = prop_ref_inc(p->hp_prop);
+  } else {
+    p = prop_ref_inc(p);
+  }
   hts_mutex_unlock(&prop_mutex);
   return p;
 }
@@ -4605,6 +4787,43 @@ prop_suggest_focus(prop_t *p)
   hts_mutex_lock(&prop_mutex);
   prop_suggest_focus0(p);
   hts_mutex_unlock(&prop_mutex);
+}
+
+
+/**
+ *
+ */
+prop_t *
+prop_findv(prop_t *p, char **names)
+{
+  hts_mutex_lock(&prop_mutex);
+
+  while(p->hp_originator != NULL)
+    p = p->hp_originator;
+
+  prop_t *c = p;
+
+  for(int i = 0; names[i] != NULL; i++) {
+    const char *n = names[i];
+
+    if(p->hp_type != PROP_DIR) {
+      c = NULL;
+      break;
+    }
+
+    TAILQ_FOREACH(c, &p->hp_childs, hp_parent_link)
+      if(c->hp_name != NULL && !strcmp(c->hp_name, n))
+	break;
+    if(c == NULL)
+      break;
+
+    while(c->hp_originator != NULL)
+      c = c->hp_originator;
+    p = c;
+  }
+  c = prop_ref_inc(c);
+  hts_mutex_unlock(&prop_mutex);
+  return c;
 }
 
 
@@ -4884,7 +5103,7 @@ void
 prop_courier_destroy(prop_courier_t *pc)
 {
   if(pc->pc_refcount != 0) {
-    trace(TRACE_NO_PROP, TRACE_ERROR, "prop",
+    tracelog(TRACE_NO_PROP, TRACE_ERROR, "prop",
 	  "Refcnt is %d on courier '%s' destroy", pc->pc_refcount,
           pc->pc_name);
 
@@ -5102,7 +5321,7 @@ prop_seti(prop_sub_t *skipme, prop_t *p, va_list ap)
     if(rstr == NULL)
       prop_set_void_exl(p, skipme);
     else {
-      prop_set_rstring_exl(p, skipme, rstr);
+      prop_set_rstring_exl(p, skipme, rstr, 0);
       if(ev == PROP_ADOPT_RSTRING)
         rstr_release(rstr);
     }
@@ -5288,7 +5507,11 @@ prop_get_name_of_childs(prop_t *p)
 void
 prop_want_more_childs0(prop_sub_t *s)
 {
-  prop_send_event(s->hps_value_prop, PROP_WANT_MORE_CHILDS);
+  if(s->hps_proxy) {
+    printf("prop_want_more_childs0 on proxy sub\n");
+  } else {
+    prop_send_event(s->hps_value_prop, PROP_WANT_MORE_CHILDS);
+  }
 }
 
 
@@ -5475,7 +5698,11 @@ prop_print_tree0(prop_t *p, int indent, int flags)
   case PROP_VOID:
     fprintf(stderr, "<void>\n");
     break;
-    
+
+  case PROP_PROXY:
+    fprintf(stderr, "<proxy>\n");
+    break;
+
   case PROP_ZOMBIE:
     fprintf(stderr, "<zombie, ref=%d>\n", atomic_get(&p->hp_refcount));
     break;

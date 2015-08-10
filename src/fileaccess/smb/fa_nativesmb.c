@@ -56,7 +56,7 @@
 
 #define SMBTRACE(x, ...) do {                                  \
     if(gconf.enable_smb_debug)                                 \
-      trace(0, TRACE_DEBUG, "SMB", x, ##__VA_ARGS__);          \
+      tracelog(0, TRACE_DEBUG, "SMB", x, ##__VA_ARGS__);          \
   } while(0)
 
 LIST_HEAD(cifs_connection_list, cifs_connection);
@@ -402,7 +402,7 @@ smbv1_init_t2_header(cifs_connection_t *cc, TRANS2_req_t *t2, int cmd,
 static int
 nbt_read(cifs_connection_t *cc, void **bufp, int *lenp)
 {
-  char data[4];
+  uint8_t data[4];
   int len = 0;
   char *buf;
 

@@ -677,6 +677,11 @@ typedef struct glw_class {
   /**
    *
    */
+  void (*gc_set_hidden)(struct glw *w, int v, glw_style_t *gs);
+
+  /**
+   *
+   */
   void (*gc_freeze)(struct glw *w);
 
   /**
@@ -711,6 +716,7 @@ typedef struct glw_program glw_program_t;
 typedef struct glw_root {
   prop_t *gr_prop_ui;
   prop_t *gr_prop_nav;
+  prop_t *gr_prop_core;
 
   void (*gr_prop_dispatcher)(prop_courier_t *pc, int timeout);
   int gr_prop_maxtime;
@@ -757,6 +763,7 @@ typedef struct glw_root {
 
   prop_t *gr_prop_width;
   prop_t *gr_prop_height;
+  prop_t *gr_prop_aspect;
 
   float gr_mouse_x;
   float gr_mouse_y;
@@ -861,7 +868,7 @@ typedef struct glw_root {
    */
   glw_backend_root_t gr_be;
   void (*gr_be_render_unlocked)(struct glw_root *gr);
-
+  struct pixmap *(*gr_br_read_pixels)(struct glw_root *gr);
   /**
    * Settings
    */
@@ -1056,8 +1063,6 @@ typedef struct glw {
   TAILQ_ENTRY(glw) glw_parent_link;
   struct glw_queue glw_childs;
 
-  TAILQ_ENTRY(glw) glw_render_link;
-
   struct glw *glw_selected;
   struct glw *glw_focused;
 
@@ -1138,7 +1143,6 @@ typedef struct glw {
 #define GLW2_AUTOFADE               0x200
 #define GLW2_EXPEDITE_SUBSCRIPTIONS 0x400
 #define GLW2_AUTOMARGIN             0x800
-#define GLW2_REVERSE_RENDER         0x1000
 #define GLW2_NO_INITIAL_TRANS       0x2000
 #define GLW2_FOCUS_ON_CLICK         0x4000
 #define GLW2_AUTOREFOCUSABLE        0x8000
@@ -1236,6 +1240,8 @@ void glw_set_width(glw_t *w, int v, glw_style_t *origin);
 void glw_set_height(glw_t *w, int v, glw_style_t *origin);
 
 void glw_set_align(glw_t *w, int v, glw_style_t *origin);
+
+void glw_set_hidden(glw_t *w, int v, glw_style_t *origin);
 
 void glw_set_divider(glw_t *w, int v);
 
@@ -1491,6 +1497,9 @@ void glw_set_constraints(glw_t *w, int x, int y, float weight,
 
 void glw_conf_constraints(glw_t *w, int x, int y, float weight,
 			  int conf);
+
+void glw_mod_constraints(glw_t *w, int x, int y, float weight, int flags,
+                         int modflags);
 
 void glw_copy_constraints(glw_t *w, glw_t *src);
 

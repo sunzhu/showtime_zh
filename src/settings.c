@@ -304,7 +304,8 @@ settings_create_action(prop_t *parent, prop_t *title,
   setting_t *s = setting_create_leaf(parent, title, "action", "action", flags);
   s->s_sub = prop_subscribe(PROP_SUB_NO_INITIAL_UPDATE,
 			    PROP_TAG_CALLBACK, cb, opaque,
-			    PROP_TAG_ROOT, s->s_val,
+			    PROP_TAG_NAMED_ROOT, s->s_root, "node",
+                            PROP_TAG_NAME("node", "eventSink"),
 			    PROP_TAG_COURIER, pc,
 			    NULL);
   return s;
@@ -680,7 +681,7 @@ setting_create(int type, prop_t *model, int flags, ...)
 
 
   case SETTING_ACTION:
-    s->s_val = prop_create_r(s->s_root, "action");
+    s->s_val = prop_create_r(s->s_root, "eventSink");
     break;
 
   case SETTING_SEPARATOR:
@@ -1282,6 +1283,13 @@ settings_init(void)
   // Developer settings, only available via its URI
 
   init_dev_settings();
+
+  // About
+
+  settings_add_url(NULL,
+		   _p("About"), "about", NULL, NULL, "page:about",
+		   0);
+
 }
 
 

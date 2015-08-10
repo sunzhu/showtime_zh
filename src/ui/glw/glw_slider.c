@@ -322,6 +322,7 @@ pointer_event(glw_t *w, const glw_pointer_event_t *gpe)
     return 0;
   }
   update_value(s, v, how);
+  glw_need_refresh(s->w.glw_root, 0);
   return 0;
 }
 
@@ -423,7 +424,6 @@ prop_callback(void *opaque, prop_event_t event, ...)
   glw_slider_t *sl = opaque;
   glw_root_t *gr;
   float v;
-  prop_t *p;
   int how = 0;
   int grabbed;
 
@@ -441,26 +441,26 @@ prop_callback(void *opaque, prop_event_t event, ...)
       gr->gr_pointer_grab = NULL;
 
     v = 0;
-    p = va_arg(ap, prop_t *);
     break;
 
   case PROP_SET_FLOAT:
     v = va_arg(ap, double);
-    p = va_arg(ap, prop_t *);
     how = va_arg(ap, int);
     break;
 
   case PROP_SET_INT:
     v = va_arg(ap, int);
-    p = va_arg(ap, prop_t *);
     break;
+
+  case PROP_VALUE_PROP:
+    prop_ref_dec(sl->p);
+    sl->p = prop_ref_inc(va_arg(ap, prop_t *));
+    return;
 
   default:
     return;
   }
-  prop_ref_dec(sl->p);
-  sl->p = prop_ref_inc(p);
-  
+
   switch(how) {
   case PROP_SET_NORMAL:
     if(sl->tentative_only)
@@ -479,6 +479,7 @@ prop_callback(void *opaque, prop_event_t event, ...)
 
   v = GLW_RESCALE(v, sl->min, sl->max);
   sl->value = GLW_MAX(0, GLW_MIN(1.0, v));
+  glw_need_refresh(sl->w.glw_root, 0);
   if(sl->interpolate)
     sl->interpolate--;
 }
@@ -524,7 +525,7 @@ bind_to_property(glw_t *w, prop_t *p, const char **pname,
   glw_slider_t *s = (glw_slider_t *)w;
   slider_unbind(s);
 
-  s->sub = prop_subscribe(PROP_SUB_DIRECT_UPDATE,
+  s->sub = prop_subscribe(PROP_SUB_DIRECT_UPDATE | PROP_SUB_SEND_VALUE_PROP,
 			  PROP_TAG_NAME_VECTOR, pname,
 			  PROP_TAG_CALLBACK, prop_callback, s,
 			  PROP_TAG_COURIER, w->glw_root->gr_courier, 
@@ -533,7 +534,8 @@ bind_to_property(glw_t *w, prop_t *p, const char **pname,
 			  PROP_TAG_NAMED_ROOT, args, "args",
 			  PROP_TAG_NAMED_ROOT, clone, "clone",
 			  PROP_TAG_ROOT, w->glw_root->gr_prop_ui,
-			  PROP_TAG_ROOT, w->glw_root->gr_prop_nav,
+			  PROP_TAG_NAMED_ROOT, w->glw_root->gr_prop_nav, "nav",
+                          PROP_TAG_NAMED_ROOT, w->glw_root->gr_prop_core, "core",
 			  NULL);
 }
 

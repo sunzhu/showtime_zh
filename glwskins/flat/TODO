@@ -1,0 +1,42 @@
+
+Fix search view
+
+Add scroll bar to list view
+
+Rework  $view.currentPageClone <- focusedClone();
+
+All list items
+
+Item menu for other items
+
+playdecks for audio playback
+
+screen saver
+
+polish top-level popups
+
+News
+
+Grid items
+
+Images
+
+Fix gravity of log view
+
+---------------
+-- Polish -----
+---------------
+
+Local network view
+
+Improve upgrade view
+
+
+
+---------------
+-- questions
+---------------
+
+what to do with itemviews (the headweb things)?
+  Add a video page?  Copy stuff from video_details?
+

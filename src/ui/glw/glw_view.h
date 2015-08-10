@@ -32,12 +32,13 @@
  * 
  */
 typedef enum {
-  TOKEN_START,                 // 
-  TOKEN_END,                   // 
+  TOKEN_START,                 //
+  TOKEN_END,                   //
   TOKEN_HASH,                  // #
   TOKEN_ASSIGNMENT,            // =
   TOKEN_COND_ASSIGNMENT,       // ?=
   TOKEN_DEBUG_ASSIGNMENT,      // _=_
+  TOKEN_LINK_ASSIGNMENT,       // <-
   TOKEN_END_OF_EXPR,           // ; (end of expression)
   TOKEN_SEPARATOR,             // ,
   TOKEN_BLOCK_OPEN,            // {
@@ -218,7 +219,14 @@ typedef struct glw_view_eval_context {
   errorinfo_t *ei;
   token_t *alloc;
   struct glw *w;
-  struct prop *prop, *prop_parent, *prop_viewx, *prop_args, *prop_clone;
+
+  struct prop *prop_self;
+  struct prop *prop_parent;
+  struct prop *prop_view;
+  struct prop *prop_args;
+  struct prop *prop_clone;
+  struct prop *prop_event;
+
   struct glw_root *gr;
   const struct glw_rctx *rc;
   token_t *rpn;
@@ -273,6 +281,8 @@ typedef struct token_attrib {
 	     struct token *t);
   int attrib;
   void *fn;
+  int flags;
+#define GLW_ATTRIB_FLAG_NO_SUBSCRIPTION 0x1
 } token_attrib_t;
 
 

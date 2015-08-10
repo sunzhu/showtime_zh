@@ -76,6 +76,8 @@ char **strvec_split(const char *str, char ch);
 
 void strvec_free(char **s);
 
+int strvec_len(char **s);
+
 void strappend(char **strp, const char *src);
 
 int hex2binl(uint8_t *buf, size_t buflen, const char *str, int maxlen);
@@ -140,5 +142,7 @@ char *find_str(const char *s, int len, const char *needle);
 void mystrlower(char *s);
 
 void rgbstr_to_floatvec(const char *s, float *out);
+
+int pattern_match(const char *str, const char *pat);
 
 #endif

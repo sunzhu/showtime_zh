@@ -107,14 +107,14 @@ void trace_init(void);
 
 void trace_fini(void);
 
-void trace(int flags, int level, const char *subsys, const char *fmt, ...);
+void tracelog(int flags, int level, const char *subsys, const char *fmt, ...);
 
 void tracev(int flags, int level, const char *subsys, const char *fmt, va_list ap);
 
 void trace_arch(int level, const char *prefix, const char *buf);
 
 #define TRACE(level, subsys, fmt, ...) \
-  trace(0, level, subsys, fmt, ##__VA_ARGS__)
+  tracelog(0, level, subsys, fmt, ##__VA_ARGS__)
 
 
 void hexdump(const char *pfx, const void *data, int len);
@@ -295,7 +295,7 @@ typedef struct gconf {
   uint32_t log_server_ipv4;
   int log_server_port;
 
-  int showtime_shell_fd;
+  int shell_fd;
 
   char proxy_host[64];
   uint16_t proxy_port;
@@ -309,6 +309,8 @@ typedef struct gconf {
   char lang[32];
 
   char device_type[64];
+
+  const char *remote_ui;
 
 } gconf_t;
 
@@ -325,7 +327,6 @@ typedef struct inithelper {
     INIT_GROUP_NET,
     INIT_GROUP_API,
     INIT_GROUP_IPC,
-    INIT_GROUP_STATIC_APPS,
     INIT_GROUP_ASYNCIO,
     INIT_GROUP_GRAPHICS,
   } group;
