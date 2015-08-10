@@ -1,0 +1,26 @@
+#include "skin://theme.view"
+
+widget(container_z, {
+
+  ListItemBevel();
+  style: "ListItemOuter";
+
+  focusable: true;
+  onEvent(activate, select($self.action,
+                           event($self.action),
+                           deliverEvent($self.eventSink)));
+
+
+  widget(container_x, {
+    style: "ListItem";
+
+    widget(dummy, {
+      style: "ListItemIcon";
+    });
+
+    widget(label, {
+      caption: $self.metadata.title;
+      style: "ActionLabel";
+    });
+  });
+});

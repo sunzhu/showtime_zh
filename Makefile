@@ -1,5 +1,5 @@
 #
-#  Showtime mediacenter
+#  Movian
 #  Copyright (C) 2007-2011 Andreas Öman
 #
 #  This program is free software: you can redistribute it and/or modify
@@ -29,10 +29,10 @@ ALLDEPS=${BUILDDIR}/config.mak Makefile src/arch/${OS}/${OS}.mk
 
 ALLDEPS += ${STAMPS}
 
-OPTFLAGS ?= -O2
+OPTFLAGS ?= -O${OPTLEVEL}
 
-PROG=${BUILDDIR}/showtime
-LIB=${BUILDDIR}/libshowtime
+PROG=${BUILDDIR}/movian
+LIB=${BUILDDIR}/libmovian
 
 include ${BUILDDIR}/config.mak
 
@@ -50,7 +50,7 @@ LDFLAGS += ${PGFLAGS}
 ##############################################################
 # Core
 ##############################################################
-SRCS += src/showtime.c \
+SRCS += src/main.c \
 	src/trace.c \
 	src/task.c \
 	src/runcontrol.c \
@@ -64,7 +64,6 @@ SRCS += src/showtime.c \
 	src/settings.c \
 	src/service.c \
 	src/notifications.c \
-	src/keymapper.c \
 	src/plugins.c \
 	src/upgrade.c \
 	src/blobcache_file.c \
@@ -79,6 +78,7 @@ SRCS += src/showtime.c \
 	src/prop/prop_reorder.c \
 	src/prop/prop_linkselected.c \
 	src/prop/prop_window.c \
+	src/prop/prop_proxy.c \
 	src/metadata/playinfo.c \
 	src/db/kvstore.c \
 
@@ -165,7 +165,7 @@ SRCS-$(CONFIG_METADATA) += src/api/lastfm.c \
 			   src/api/tvdb.c \
 
 
-BUNDLES-$(CONFIG_METADATA) += resources/metadb
+BUNDLES-$(CONFIG_METADATA) += res/metadb
 
 
 ##############################################################
@@ -194,7 +194,7 @@ ${BUILDDIR}/ext/sqlite/sqlite3.o : CFLAGS = -O2 ${SQLITE_CFLAGS_cfg} \
 
 SRCS-$(CONFIG_SQLITE_VFS) += src/db/vfs.c
 
-BUNDLES-$(CONFIG_KVSTORE) += resources/kvstore
+BUNDLES-$(CONFIG_KVSTORE) += res/kvstore
 
 ##############################################################
 # HTSMSG
@@ -244,7 +244,7 @@ SRCS-$(CONFIG_RAR)             += src/fileaccess/fa_rar.c
 SRCS-$(CONFIG_SID)             += src/fileaccess/fa_sidfile.c \
 				  ext/audio/sid.c
 
-BUNDLES += resources/fileaccess
+BUNDLES += res/fileaccess
 
 ##############################################################
 # Service Discovery
@@ -264,8 +264,11 @@ ${BUILDDIR}/src/sd/avahi.o : CFLAGS = $(CFLAGS_AVAHI) -Wall -Werror  ${OPTFLAGS}
 SRCS += 		src/api/xmlrpc.c \
 			src/api/soap.c \
 
-SRCS-$(CONFIG_HTTPSERVER) += src/api/httpcontrol.c
-SRCS-$(CONFIG_HTTPSERVER) += src/api/stpp.c
+SRCS-$(CONFIG_HTTPSERVER) += \
+	src/api/httpcontrol.c \
+	src/api/screenshot.c \
+	src/api/stpp.c \
+
 SRCS-$(CONFIG_AIRPLAY) += src/api/airplay.c
 
 ##############################################################
@@ -274,6 +277,7 @@ SRCS-$(CONFIG_AIRPLAY) += src/api/airplay.c
 SRCS += src/networking/net_common.c \
 	src/networking/http.c \
 	src/networking/asyncio_http.c \
+	src/networking/websocket.c \
 
 SRCS-$(CONFIG_FTPSERVER) += src/networking/ftp_server.c
 
@@ -368,7 +372,7 @@ SRCS-$(CONFIG_BITTORRENT) += \
 ##############################################################
 SRCS-$(CONFIG_HTSP)  += src/backend/htsp/htsp.c
 
-BUNDLES-$(CONFIG_HTSP) += resources/tvheadend
+BUNDLES-$(CONFIG_HTSP) += res/tvheadend
 
 ##############################################################
 # TV
@@ -381,12 +385,6 @@ SRCS-$(CONFIG_HLS) += \
 # Icecast
 ##############################################################
 SRCS-$(CONFIG_ICECAST)  += src/backend/icecast/icecast.c \
-
-##############################################################
-# Spotify
-##############################################################
-SRCS-${CONFIG_SPOTIFY} += src/backend/spotify/spotify.c
-BUNDLES-$(CONFIG_SPOTIFY) += resources/spotify
 
 ##############################################################
 # GLW user interface
@@ -428,7 +426,6 @@ SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
 			src/ui/glw/glw_bloom.c \
 			src/ui/glw/glw_cube.c \
 			src/ui/glw/glw_displacement.c \
-			src/ui/glw/glw_coverflow.c \
 			src/ui/glw/glw_mirror.c \
 			src/ui/glw/glw_video_common.c \
 			src/ui/glw/glw_video_overlay.c \
@@ -556,7 +553,7 @@ ${BUILDDIR}/ext/dvd/libdvdread/%.o : CFLAGS = ${OPTFLAGS} \
  -DHAVE_DVDCSS_DVDCSS_H -DDVDNAV_COMPILE -Wno-strict-aliasing  -Iext/dvd 
 
 ${BUILDDIR}/ext/dvd/dvdnav/%.o : CFLAGS = ${OPTFLAGS} \
- -DVERSION=\"showtime\" -DDVDNAV_COMPILE -Wno-strict-aliasing -Iext/dvd \
+ -DVERSION=\"movian\" -DDVDNAV_COMPILE -Wno-strict-aliasing -Iext/dvd \
  -Iext/dvd/dvdnav
 
 

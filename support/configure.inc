@@ -15,9 +15,10 @@ TOPDIR=`pwd`
 BUILD=${CONFIGURE_POSTFIX}
 TMPDIR=${TOPDIR}/tmp
 DOWNLOADCACHE=${TOPDIR}/.downloadcache
-GLW_DEFAULT_SKIN="default"
+GLW_DEFAULT_SKIN="flat"
 DEFAULT_LOGTARGET=""
 APPNAME="Movian"
+OPTLEVEL=2
 
 CONFIG_LIST="
  libasound
@@ -39,8 +40,6 @@ CONFIG_LIST="
  glw_backend_opengl_es
  gu
  libogc
- spotify
- libspotify_load_runtime
  lirc
  stdin
  release
@@ -222,6 +221,7 @@ common_help(){
   echo "  --extra-cflags           Extra cflags"
   echo "  --extra-ldflags          Extra ldflags"
   echo "  --downloadcache          Where to download files during build [$DOWNLOADCACHE]"
+  echo " --optlevel=LEVEL          Optimization level [$OPTLEVEL]"
   echo ""
   echo "Platform specific options:"
 }
@@ -263,6 +263,8 @@ common_opt(){
   ;;
 
   --appname=*) APPNAME="$2"
+  ;;
+  --optlevel=*) OPTLEVEL="$2"
   ;;
   *)
   die_invalid_opt $1
@@ -322,6 +324,7 @@ APPNAMEUSER=${APPNAME}
 TOPDIR=$TOPDIR
 OS=$OS
 CONFIGURE_POSTFIX=$CONFIGURE_POSTFIX
+OPTLEVEL=${OPTLEVEL}
 CFLAGS_cfg += ${EXTRA_CFLAGS}
 LDFLAGS_cfg += ${EXTRA_LDFLAGS}
 EOF
@@ -499,24 +502,6 @@ freetype_setup()
     add_stamp freetype
 }
 
-
-
-#
-#
-#
-libspotify_setup() {
-     download_file https://developer.spotify.com/download/libspotify/libspotify-$1-release.tar.gz libspotifytarball
-     tar -x -C "${BUILDDIR}" -f "$libspotifytarball"
-     P=${BUILDDIR}/libspotify-$1-release
-     echo >>${CONFIG_H} "#define LIBSPOTIFY_PATH \"${P}\""
-     echo >>${CONFIG_MAK} "LIBSPOTIFY_PATH=${P}"
-     echo >>${CONFIG_MAK} "CFLAGS_cfg += -I$P/include"
-     support/spotifysyms.sh "$P/include/libspotify/api.h" "$P/include/libspotify/apifunctions.h"
-     enable spotify
-     enable libspotify_load_runtime
-}
-
-
 #
 # Do final common stuff
 #
@@ -557,23 +542,23 @@ EOF
     fi
 
     # Fonts
-    echo >>${CONFIG_MAK} "BUNDLES+=resources/fonts"
+    echo >>${CONFIG_MAK} "BUNDLES+=res/fonts"
     
     # SVG icons
-    echo >>${CONFIG_MAK} "BUNDLES+=resources/svg"
+    echo >>${CONFIG_MAK} "BUNDLES+=res/svg"
 
     # Languages
     echo >>${CONFIG_MAK} "BUNDLES+=lang"
 
     # Static web resources
-    echo >>${CONFIG_MAK} "BUNDLES+=resources/static"
+    echo >>${CONFIG_MAK} "BUNDLES+=res/static"
 
     # Static ecmascript resources
-    echo >>${CONFIG_MAK} "BUNDLES+=resources/ecmascript"
+    echo >>${CONFIG_MAK} "BUNDLES+=res/ecmascript"
 
     # Test signal audio samples
     if enabled audiotest; then
-	echo >>${CONFIG_MAK} "BUNDLES+=resources/speaker_positions"
+	echo >>${CONFIG_MAK} "BUNDLES+=res/speaker_positions"
     fi
 
     # sqlite
@@ -593,7 +578,7 @@ EOF
     if enabled release; then
 	echo >>${CONFIG_MAK} "CFLAGS_dbg = -DNDEBUG -D_NDEBUG"
     else
-	echo >>${CONFIG_MAK} "CFLAGS_dbg = -DJS_GC_ZEAL -DDEBUG=1"
+	echo >>${CONFIG_MAK} "CFLAGS_dbg = -DDEBUG=1"
     fi
 
     cat >> ${CONFIG_MAK} << EOF 

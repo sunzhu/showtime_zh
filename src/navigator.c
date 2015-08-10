@@ -36,6 +36,7 @@
 #include "misc/str.h"
 #include "db/kvstore.h"
 #include "htsmsg/htsmsg_store.h"
+#include "prop/prop_linkselected.h"
 
 TAILQ_HEAD(nav_page_queue, nav_page);
 LIST_HEAD(bookmark_list, bookmark);
@@ -43,6 +44,7 @@ LIST_HEAD(navigator_list, navigator);
 
 static prop_t *bookmark_root;
 static prop_t *bookmark_nodes;
+static prop_t *all_navigators;
 
 static void bookmarks_init(void);
 static void bookmark_add(const char *title, const char *url, const char *type,
@@ -191,17 +193,17 @@ nav_update_bookmarked(void)
  *
  */
 static navigator_t *
-nav_create(prop_t *prop)
+nav_create(void)
 {
   hts_mutex_lock(&nav_mutex);
   navigator_t *nav = calloc(1, sizeof(navigator_t));
 
   LIST_INSERT_HEAD(&navigators, nav, nav_link);
 
-  nav->nav_prop_root = prop;
-
   TAILQ_INIT(&nav->nav_pages);
   TAILQ_INIT(&nav->nav_history);
+
+  nav->nav_prop_root = prop_create(all_navigators, NULL);
 
   nav->nav_prop_pages       = prop_create(nav->nav_prop_root, "pages");
   nav->nav_prop_curpage     = prop_create(nav->nav_prop_root, "currentpage");
@@ -257,7 +259,9 @@ nav_create(prop_t *prop)
 prop_t *
 nav_spawn(void)
 {
-  return nav_create(prop_create_root("nav"))->nav_prop_root;
+  prop_t *p = nav_create()->nav_prop_root;
+  prop_select(p);
+  return p;
 }
 
 
@@ -268,6 +272,11 @@ void
 nav_init(void)
 {
   bookmarks_init();
+
+  prop_t *navs = prop_create(prop_get_global(), "navigators");
+
+  all_navigators = prop_create(navs, "nodes");
+  prop_linkselected_create(all_navigators, navs, "current", NULL);
 }
 
 
@@ -553,7 +562,7 @@ nav_page_icon_set(void *opaque, rstr_t *str)
 static void
 nav_page_setup_prop(nav_page_t *np, const char *view)
 {
-  np->np_prop_root = prop_create_root("page");
+  np->np_prop_root = prop_create_root(NULL);
 
   kv_prop_bind_create(prop_create(np->np_prop_root, "persistent"),
 		      np->np_url);
@@ -582,7 +591,7 @@ nav_page_setup_prop(nav_page_t *np, const char *view)
   // XXX Change this into event-style subscription
   np->np_close_sub = 
     prop_subscribe(0,
-		   PROP_TAG_ROOT, np->np_prop_root,
+		   PROP_TAG_NAMED_ROOT, np->np_prop_root, "page",
 		   PROP_TAG_NAME("page", "close"),
 		   PROP_TAG_CALLBACK_INT, nav_page_close_set, np,
 		   PROP_TAG_MUTEX, &nav_mutex,
@@ -593,7 +602,7 @@ nav_page_setup_prop(nav_page_t *np, const char *view)
 
   np->np_direct_close_sub = 
     prop_subscribe(PROP_SUB_NO_INITIAL_UPDATE,
-		   PROP_TAG_ROOT, np->np_prop_root,
+		   PROP_TAG_NAMED_ROOT, np->np_prop_root, "page",
 		   PROP_TAG_NAME("page", "directClose"),
 		   PROP_TAG_CALLBACK_INT, nav_page_direct_close_set, np,
 		   PROP_TAG_MUTEX, &nav_mutex,
@@ -601,7 +610,7 @@ nav_page_setup_prop(nav_page_t *np, const char *view)
 
   np->np_eventsink_sub = 
     prop_subscribe(0,
-		   PROP_TAG_ROOT, np->np_prop_root,
+		   PROP_TAG_NAMED_ROOT, np->np_prop_root, "page",
 		   PROP_TAG_NAME("page", "eventSink"),
 		   PROP_TAG_CALLBACK_EVENT, page_eventsink, np,
 		   PROP_TAG_MUTEX, &nav_mutex,
@@ -622,7 +631,7 @@ nav_page_setup_prop(nav_page_t *np, const char *view)
   np->np_title_sub =
     prop_subscribe(0,
 		   PROP_TAG_NAME("page", "model", "metadata", "title"),
-		   PROP_TAG_ROOT, np->np_prop_root,
+		   PROP_TAG_NAMED_ROOT, np->np_prop_root, "page",
 		   PROP_TAG_CALLBACK_RSTR, nav_page_title_set, np,
 		   PROP_TAG_MUTEX, &nav_mutex,
 		   NULL);
@@ -630,7 +639,7 @@ nav_page_setup_prop(nav_page_t *np, const char *view)
   np->np_icon_sub =
     prop_subscribe(0,
 		   PROP_TAG_NAME("page", "model", "metadata", "logo"),
-		   PROP_TAG_ROOT, np->np_prop_root,
+		   PROP_TAG_NAMED_ROOT, np->np_prop_root, "page",
 		   PROP_TAG_CALLBACK_RSTR, nav_page_icon_set, np,
 		   PROP_TAG_MUTEX, &nav_mutex,
 		   NULL);

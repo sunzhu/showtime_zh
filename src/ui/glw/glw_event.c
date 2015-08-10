@@ -22,7 +22,7 @@
 #include "event.h"
 #include "glw.h"
 #include "glw_event.h"
-
+#include "misc/str.h"
 
 /**
  *
@@ -31,6 +31,17 @@ typedef struct glw_event_external {
   glw_event_map_t map;
   event_t *e;
 } glw_event_external_t;
+
+
+/**
+ *
+ */
+void
+glw_event_map_destroy(glw_root_t *gr, glw_event_map_t *gem)
+{
+  rstr_release(gem->gem_action);
+  gem->gem_dtor(gr, gem);
+}
 
 
 /**
@@ -61,7 +72,7 @@ glw_event_map_external_fire(glw_t *w, glw_event_map_t *gem, event_t *src)
 glw_event_map_t *
 glw_event_map_external_create(event_t *e)
 {
-  glw_event_external_t *gee = malloc(sizeof(glw_event_external_t));
+  glw_event_external_t *gee = calloc(1, sizeof(glw_event_external_t));
   e->e_flags |= EVENT_MAPPED;
   gee->e = e;
   gee->map.gem_dtor = glw_event_map_external_dtor;
@@ -118,7 +129,7 @@ glw_event_map_playTrack_fire(glw_t *w, glw_event_map_t *gem, event_t *src)
 glw_event_map_t *
 glw_event_map_playTrack_create(prop_t *track, prop_t *source, int mode)
 {
-  glw_event_playTrack_t *g = malloc(sizeof(glw_event_playTrack_t));
+  glw_event_playTrack_t *g = calloc(1, sizeof(glw_event_playTrack_t));
 
   g->track  = prop_ref_inc(track);
   g->source = prop_ref_inc(source);
@@ -179,7 +190,7 @@ glw_event_map_propref_fire(glw_t *w, glw_event_map_t *gem, event_t *src)
 glw_event_map_t *
 glw_event_map_propref_create(prop_t *prop, prop_t *target)
 {
-  glw_event_propref_t *g = malloc(sizeof(glw_event_propref_t));
+  glw_event_propref_t *g = calloc(1, sizeof(glw_event_propref_t));
 
   g->prop   = prop_ref_inc(prop);
   g->target = prop_ref_inc(target);
@@ -240,7 +251,7 @@ glw_event_map_deliverEvent_fire(glw_t *w, glw_event_map_t *gem, event_t *src)
 glw_event_map_t *
 glw_event_map_deliverEvent_create(prop_t *target, rstr_t *action)
 {
-  glw_event_deliverEvent_t *de = malloc(sizeof(glw_event_deliverEvent_t));
+  glw_event_deliverEvent_t *de = calloc(1, sizeof(glw_event_deliverEvent_t));
   
   de->target = prop_ref_inc(target);
   de->action = rstr_dup(action);
@@ -261,9 +272,9 @@ glw_event_map_add(glw_t *w, glw_event_map_t *gem)
   glw_event_map_t *o;
 
   LIST_FOREACH(o, &w->glw_event_maps, gem_link) {
-    if(o->gem_action == gem->gem_action) {
+    if(!strcmp(rstr_get(o->gem_action), rstr_get(gem->gem_action))) {
       LIST_REMOVE(o, gem_link);
-      o->gem_dtor(w->glw_root, o);
+      glw_event_map_destroy(w->glw_root, o);
       break;
     }
   }
@@ -275,14 +286,14 @@ glw_event_map_add(glw_t *w, glw_event_map_t *gem)
  *
  */
 void
-glw_event_map_remove_by_action(glw_t *w, action_type_t action)
+glw_event_map_remove_by_action(glw_t *w, const char *action)
 {
   glw_event_map_t *o;
 
   LIST_FOREACH(o, &w->glw_event_maps, gem_link) {
-    if(o->gem_action == action) {
+    if(!strcmp(rstr_get(o->gem_action), action)) {
       LIST_REMOVE(o, gem_link);
-      o->gem_dtor(w->glw_root, o);
+      glw_event_map_destroy(w->glw_root, o);
       break;
     }
   }
@@ -407,7 +418,7 @@ glw_event_map_t *
 glw_event_map_internal_create(const char *target, action_type_t event,
 			      int uc)
 {
-  glw_event_internal_t *g = malloc(sizeof(glw_event_internal_t));
+  glw_event_internal_t *g = calloc(1, sizeof(glw_event_internal_t));
   
   g->target = target ? strdup(target) : NULL;
   g->event  = event;
@@ -418,7 +429,6 @@ glw_event_map_internal_create(const char *target, action_type_t event,
   return &g->map;
 }
 
-
 /**
  *
  */
@@ -427,14 +437,43 @@ glw_event_map_intercept(glw_t *w, event_t *e)
 {
   glw_event_map_t *gem;
 
-  if(e->e_flags & EVENT_MAPPED)
-    return 0; /* Avoid recursion */
-
   LIST_FOREACH(gem, &w->glw_event_maps, gem_link) {
+    const char *str;
 
-    if((gem->gem_action == GLW_EVENT_KEYCODE &&
-        event_is_type(e, EVENT_KEYDESC)) ||
-       event_is_action(e, gem->gem_action)) {
+
+    switch(e->e_type) {
+    case EVENT_ACTION_VECTOR:
+      {
+        event_action_vector_t *eav = (event_action_vector_t *)e;
+        for(int i = 0; i < eav->num; i++) {
+          if(pattern_match(action_code2str(eav->actions[i]),
+                           rstr_get(gem->gem_action))) {
+            gem->gem_fire(w, gem, e);
+            return 1;
+          }
+        }
+      }
+      continue;
+
+    case EVENT_DYNAMIC_ACTION:
+      {
+        event_payload_t *ep = (event_payload_t *)e;
+        str = ep->payload;
+      }
+      break;
+
+    case EVENT_PROP_ACTION:
+      {
+        event_prop_action_t *epa = (event_prop_action_t *)e;
+        str = rstr_get(epa->action);
+      }
+      break;
+
+    default:
+      continue;
+    }
+
+    if(pattern_match(str, rstr_get(gem->gem_action))) {
       gem->gem_fire(w, gem, e);
       return 1;
     }
@@ -447,12 +486,12 @@ glw_event_map_intercept(glw_t *w, event_t *e)
  *
  */
 int
-glw_event_glw_action(glw_t *w, int action)
+glw_event_glw_action(glw_t *w, const char *action)
 {
   glw_event_map_t *gem;
 
   LIST_FOREACH(gem, &w->glw_event_maps, gem_link) {
-    if(gem->gem_action == action) {
+    if(!strcmp(rstr_get(gem->gem_action), action)) {
       gem->gem_fire(w, gem, NULL);
       return 1;
     }

@@ -173,33 +173,58 @@ es_prop_get_value_duk(duk_context *ctx)
 
   switch(p->hp_type) {
   case PROP_CSTRING:
-    duk_push_string(ctx, p->hp_cstring);
+    {
+      const char *s = p->hp_cstring;
+      hts_mutex_unlock(&prop_mutex);
+      duk_push_string(ctx, s);
+    }
     break;
+
   case PROP_RSTRING:
-    duk_push_string(ctx, rstr_get(p->hp_rstring));
+    {
+      rstr_t *r = rstr_dup(p->hp_rstring);
+      hts_mutex_unlock(&prop_mutex);
+      duk_push_string(ctx, rstr_get(r));
+      rstr_release(r);
+    }
     break;
   case PROP_URI:
-    duk_push_string(ctx, rstr_get(p->hp_uri_title));
+    {
+      rstr_t *r = rstr_dup(p->hp_uri_title);
+      hts_mutex_unlock(&prop_mutex);
+      duk_push_string(ctx, rstr_get(r));
+      rstr_release(r);
+    }
     break;
   case PROP_FLOAT:
-    duk_push_number(ctx, p->hp_float);
+    {
+      const float v = p->hp_float;
+      hts_mutex_unlock(&prop_mutex);
+      duk_push_number(ctx, v);
+    }
     break;
   case PROP_INT:
-    duk_push_int(ctx, p->hp_int);
+    {
+      const int v = p->hp_int;
+      hts_mutex_unlock(&prop_mutex);
+      duk_push_int(ctx, v);
+    }
     break;
   case PROP_VOID:
+    hts_mutex_unlock(&prop_mutex);
     duk_push_null(ctx);
     break;
   case PROP_DIR:
     snprintf(tmp, sizeof(tmp), "[prop directory '%s']", p->hp_name);
+    hts_mutex_unlock(&prop_mutex);
     duk_push_string(ctx, tmp);
     break;
   default:
     snprintf(tmp, sizeof(tmp), "[prop internal type %d]", p->hp_type);
+    hts_mutex_unlock(&prop_mutex);
     duk_push_string(ctx, tmp);
     break;
   }
-  hts_mutex_unlock(&prop_mutex);
   return 1;
 }
 
@@ -240,8 +265,9 @@ es_prop_get_child_duk(duk_context *ctx)
   }
 
   if(p != NULL) {
-    es_push_native_obj(ctx, &es_native_prop, prop_ref_inc(p));
+    p = prop_ref_inc(p);
     hts_mutex_unlock(&prop_mutex);
+    es_push_native_obj(ctx, &es_native_prop, p);
     return 1;
   }
   hts_mutex_unlock(&prop_mutex);
@@ -262,19 +288,34 @@ es_prop_enum_duk(duk_context *ctx)
   hts_mutex_lock(&prop_mutex);
 
 
-  if(p->hp_type == PROP_DIR) {
-    prop_t *c;
-    int idx = 0;
-    TAILQ_FOREACH(c, &p->hp_childs, hp_parent_link) {
-      if(c->hp_name)
-        duk_push_string(ctx, c->hp_name);
-      else
-        duk_push_int(ctx, idx);
-
-      duk_put_prop_index(ctx, -2, idx++);
-    }
+  if(p->hp_type != PROP_DIR) {
+    hts_mutex_unlock(&prop_mutex);
+    return 1;
   }
+
+  prop_t *c;
+  int i;
+  int cnt = 0;
+
+  TAILQ_FOREACH(c, &p->hp_childs, hp_parent_link)
+    cnt++;
+  char **names = malloc(sizeof(char *) * cnt);
+
+  i = 0;
+  TAILQ_FOREACH(c, &p->hp_childs, hp_parent_link)
+    names[i++] = c->hp_name ? strdup(c->hp_name) : NULL;
+
   hts_mutex_unlock(&prop_mutex);
+
+  for(int i = 0; i < cnt; i++) {
+    if(names[i])
+      duk_push_string(ctx, c->hp_name);
+    else
+      duk_push_int(ctx, i);
+    free(names[i]);
+    duk_put_prop_index(ctx, -2, i);
+  }
+  free(names);
   return 1;
 }
 
@@ -442,13 +483,11 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
 
   switch(event) {
   case PROP_SET_DIR:
-    (void)va_arg(ap, prop_t *);
     duk_push_string(ctx, "dir");
     nargs = 1;
     break;
 
   case PROP_SET_VOID:
-    (void)va_arg(ap, prop_t *);
     duk_push_string(ctx, "set");
     duk_push_null(ctx);
     nargs = 2;
@@ -456,7 +495,6 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
 
   case PROP_SET_RSTRING:
     r = va_arg(ap, const rstr_t *);
-    (void)va_arg(ap, prop_t *);
     duk_push_string(ctx, "set");
     duk_push_string(ctx, rstr_get(r));
     nargs = 2;
@@ -464,7 +502,6 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
 
   case PROP_SET_CSTRING:
     c = va_arg(ap, const char *);
-    (void)va_arg(ap, prop_t *);
     duk_push_string(ctx, "set");
     duk_push_string(ctx, c);
     nargs = 2;
@@ -473,7 +510,6 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
   case PROP_SET_URI:
     r = va_arg(ap, const rstr_t *);
     r2 = va_arg(ap, const rstr_t *);
-    (void)va_arg(ap, prop_t *);
     duk_push_string(ctx, "uri");
     duk_push_string(ctx, rstr_get(r));
     duk_push_string(ctx, rstr_get(r2));
@@ -482,7 +518,6 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
 
   case PROP_SET_INT:
     i = va_arg(ap, int);
-    (void)va_arg(ap, prop_t *);
     duk_push_string(ctx, "set");
     duk_push_int(ctx, i);
     nargs = 2;
@@ -490,7 +525,6 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
 
   case PROP_SET_FLOAT:
     d = va_arg(ap, double);
-    (void)va_arg(ap, prop_t *);
     duk_push_string(ctx, "set");
     duk_push_number(ctx, d);
     nargs = 2;
@@ -532,20 +566,20 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
       duk_push_string(ctx, "action");
       duk_push_string(ctx, ep->payload);
 
-    } else if(e->e_type_x == EVENT_ACTION_VECTOR) {
+    } else if(e->e_type == EVENT_ACTION_VECTOR) {
       const event_action_vector_t *eav = (const event_action_vector_t *)e;
       assert(eav->num > 0);
       nargs = 2;
       duk_push_string(ctx, "action");
       duk_push_string(ctx, action_code2str(eav->actions[0]));
 
-    } else if(e->e_type_x == EVENT_UNICODE) {
+    } else if(e->e_type == EVENT_UNICODE) {
       const event_int_t *eu = (const event_int_t *)e;
       nargs = 2;
       duk_push_string(ctx, "unicode");
       duk_push_int(ctx, eu->val);
 
-    } else if(e->e_type_x == EVENT_PROPREF) {
+    } else if(e->e_type == EVENT_PROPREF) {
       event_prop_t *ep = (event_prop_t *)e;
       nargs = 2;
       duk_push_string(ctx, "propref");

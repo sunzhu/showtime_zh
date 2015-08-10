@@ -6,7 +6,7 @@ widget(backdrop, {
   autoRefocusable: true;
   focusable: true;
   focusOnClick: true;
-  onEvent(activate, { createChild($page.model.nodes); });
+  onEvent(activate, { createChild($self.model.nodes); });
   
   alphaSelf: iir(isFocused() * 1, 8) + isHovered() * 0.1;
 
@@ -17,7 +17,7 @@ widget(backdrop, {
     widget(icon, {
       align: left;
       color: select(isFocused(), 1.0, 0.6);
-      source: "dataroot://resources/svg/Add.svg";
+      source: "dataroot://res/svg/Add.svg";
       shadow: true;
     });
     

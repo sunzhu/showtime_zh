@@ -111,7 +111,7 @@ audio_init(void)
     store = htsmsg_create_map();
 
   prop_t *asettings =
-    settings_add_dir(NULL, _p("Audio settings"), NULL, NULL,
+    settings_add_dir(NULL, _p("Audio settings"), "sound", NULL,
                      _p("Setup audio output"),
                      "settings:audio");
 
@@ -314,8 +314,46 @@ audio_setup_spdif_muxer(audio_decoder_t *ad, AVCodec *codec)
 
 
 /**
- * Return 1 if packet should be retained (more data to be extracted)
  *
+ */
+static void
+update_abitrate(media_pipe_t *mp, media_queue_t *mq,
+		int size, audio_decoder_t *ad)
+{
+  int i;
+  int64_t sum;
+
+  ad->ad_frame_size[ad->ad_frame_size_ptr] = size;
+  ad->ad_frame_size_ptr = (ad->ad_frame_size_ptr + 1) & AD_FRAME_SIZE_MASK;
+
+  int d = ad->ad_estimated_duration;
+  if(d == 0) {
+
+    ad->ad_last_pts = ad->ad_saved_pts;
+    ad->ad_saved_pts = ad->ad_pts;
+
+    if(ad->ad_pts != PTS_UNSET && ad->ad_last_pts != PTS_UNSET) {
+      int64_t d64 = ad->ad_pts - ad->ad_last_pts;
+      if(d64 > 100 && d64 < 500000)
+        d = d64;
+    }
+  }
+
+  if(d == 0 || (ad->ad_frame_size_ptr & 7) != 0)
+    return;
+
+  sum = 0;
+  for(i = 0; i < AD_FRAME_SIZE_LEN; i++)
+    sum += ad->ad_frame_size[i];
+
+  sum = 8000000LL * sum / AD_FRAME_SIZE_LEN / d;
+  prop_set_int(mq->mq_prop_bitrate, sum / 1000);
+}
+
+
+
+/**
+ * Return 1 if packet should be retained (more data to be extracted)
  */
 static int
 audio_process_audio(audio_decoder_t *ad, media_buf_t *mb)
@@ -352,6 +390,8 @@ audio_process_audio(audio_decoder_t *ad, media_buf_t *mb)
       r = mb->mb_size;
       got_frame = 1;
 
+      update_abitrate(mp, mq, mb->mb_size, ad);
+
     } else {
 
       media_codec_t *mc = mb->mb_cw;
@@ -387,8 +427,10 @@ audio_process_audio(audio_decoder_t *ad, media_buf_t *mb)
 
       if(ad->ad_spdif_muxer != NULL) {
 	mb->mb_pkt.stream_index = 0;
-	ad->ad_pts = mb->mb_pts;
+        ad->ad_pts = mb->mb_pts;
 	ad->ad_epoch = mb->mb_epoch;
+
+        update_abitrate(mp, mq, mb->mb_size, ad);
 
 	mb->mb_pts = AV_NOPTS_VALUE;
 	mb->mb_dts = AV_NOPTS_VALUE;
@@ -425,6 +467,7 @@ audio_process_audio(audio_decoder_t *ad, media_buf_t *mb)
       r = avcodec_decode_audio4(ctx, frame, &got_frame, &mb->mb_pkt);
       if(r < 0)
 	return 0;
+      update_abitrate(mp, mq, r, ad);
 
       if(frame->sample_rate == 0) {
 	frame->sample_rate = ctx->sample_rate;
@@ -456,9 +499,7 @@ audio_process_audio(audio_decoder_t *ad, media_buf_t *mb)
 	}
       }
 
-      if(mp->mp_stats)
-	mp_set_mq_meta(mq, ctx->codec, ctx);
-
+      mp_set_mq_meta(mq, ctx->codec, ctx);
     }
 
     if(mb->mb_pts != PTS_UNSET) {
@@ -546,13 +587,15 @@ audio_process_audio(audio_decoder_t *ad, media_buf_t *mb)
 	  ac->ac_set_volume(ad, ad->ad_vol_scale);
 
       }
+      ad->ad_estimated_duration =
+        1000000LL * frame->nb_samples / frame->sample_rate;
+
       if(ad->ad_avr != NULL) {
 	avresample_convert(ad->ad_avr, NULL, 0, 0,
 			   frame->data, frame->linesize[0],
 			   frame->nb_samples);
       } else {
-	int delay = 1000000LL * frame->nb_samples / frame->sample_rate;
-	usleep(delay);
+	usleep(ad->ad_estimated_duration);
       }
     }
   }
@@ -655,6 +698,8 @@ audio_decode_thread(void *aux)
           hts_cond_wait(&mq->mq_avail, &mp->mp_mutex);
           continue;
         }
+
+        update_abitrate(mp, mq, mb->mb_size, ad);
       }
 
     } else {

@@ -3,11 +3,11 @@ onEvent(ChangeView, deliverEvent($clone.settings.options, "Cycle"));
 multiopt($view.path,
 	 $clone.settings,
 	 _("View"),
-	 $page.persistent.glwUserView,
+	 $self.persistent.glwUserView,
 
-	 vectorize($global.glw.views.standard.home),
-	 link(_("Tiled"), "home_tiles.view"),
-	 link(_("List"), "home_clist.view"));
+	 vectorize($core.glw.views.standard.home),
+	 makeUri(_("Tiled"), "home_tiles.view"),
+	 makeUri(_("List"), "home_clist.view"));
 
 widget(loader, {
   noInitialTransform: true;

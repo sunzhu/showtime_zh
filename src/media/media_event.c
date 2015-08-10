@@ -180,7 +180,6 @@ mp_seek_by_propchange(void *opaque, prop_event_t event, ...)
     break;
   case PROP_SET_FLOAT:
     t = va_arg(ap, double) * 1000000.0;
-    (void)va_arg(ap, prop_t *);
     how = va_arg(ap, int);
     break;
   default:
@@ -219,7 +218,7 @@ mp_enqueue_event_locked(media_pipe_t *mp, event_t *e)
   int64_t d;
   int dedup_event = 0;
 
-  switch(e->e_type_x) {
+  switch(e->e_type) {
   case EVENT_SELECT_AUDIO_TRACK:
     if(mp_track_mgr_select_track(&mp->mp_audio_track_mgr, est))
       return;
@@ -260,7 +259,7 @@ mp_enqueue_event_locked(media_pipe_t *mp, event_t *e)
   if(dedup_event) {
     event_t *e2;
     TAILQ_FOREACH(e2, &mp->mp_eq, e_link)
-      if(e2->e_type_x == e->e_type_x)
+      if(e2->e_type == e->e_type)
         break;
 
     if(e2 != NULL) {
@@ -295,8 +294,6 @@ mp_enqueue_event_locked(media_pipe_t *mp, event_t *e)
   } else if(event_is_action(e, ACTION_SEEK_FORWARD)) {
     mp_direct_seek(mp, mp->mp_seek_base + 1000000 *
                    video_settings.seek_fwd_step);
-  } else if(event_is_action(e, ACTION_SHOW_MEDIA_STATS)) {
-    prop_toggle_int(mp->mp_prop_stats);
   } else if(event_is_action(e, ACTION_SHUFFLE)) {
     prop_toggle_int(mp->mp_prop_shuffle);
   } else if(event_is_action(e, ACTION_REPEAT)) {

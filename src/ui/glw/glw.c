@@ -23,8 +23,6 @@
 #include <errno.h>
 #include <assert.h>
 
-#include "keymapper.h"
-
 #include "arch/threads.h"
 #include "text/text.h"
 
@@ -36,6 +34,8 @@
 #include "glw_event.h"
 #include "glw_style.h"
 #include "glw_navigation.h"
+
+#include "api/screenshot.h"
 
 static void glw_focus_init_widget(glw_t *w, float weight);
 static void glw_focus_leave(glw_t *w);
@@ -76,9 +76,9 @@ glw_update_sizes(glw_root_t *gr)
 {
   int val;
   int bs1 = gr->gr_height / 35; // 35 is just something
-  int bs2 = gr->gr_width  / 65; // 65 is another value
+  //  int bs2 = gr->gr_width  / 65; // 65 is another value
 
-  int base_size = MIN(bs1, bs2);
+  int base_size = bs1; // MIN(bs1, bs2);
 
   val = GLW_CLAMP(base_size + glw_settings.gs_size +
                   gr->gr_skin_scale_adjustment, 8, 40);
@@ -144,6 +144,9 @@ glw_init3(glw_root_t *gr,
   const char *skin = gconf.skin;
   prop_t *p;
 
+  if(gr->gr_prop_core == NULL)
+    gr->gr_prop_core = prop_get_global();
+
   gr->gr_prop_dispatcher = dispatcher;
   gr->gr_courier = courier;
 
@@ -155,14 +158,6 @@ glw_init3(glw_root_t *gr,
 
   if(prop_set_parent(gr->gr_prop_ui, p))
     abort();
-
-  p = prop_create(prop_get_global(), "navigators");
-
-  if(prop_set_parent(gr->gr_prop_nav, p))
-    abort();
-
-  prop_link(gr->gr_prop_nav, prop_create(p, "current"));
-
 
   if(skin == NULL) {
     snprintf(skinbuf, sizeof(skinbuf),
@@ -194,6 +189,7 @@ glw_init3(glw_root_t *gr,
   gr->gr_screensaver_active = prop_create(gr->gr_prop_ui, "screensaverActive");
   gr->gr_prop_width         = prop_create(gr->gr_prop_ui, "width");
   gr->gr_prop_height        = prop_create(gr->gr_prop_ui, "height");
+  gr->gr_prop_aspect        = prop_create(gr->gr_prop_ui, "aspect");
 
   prop_set_int(gr->gr_screensaver_active, 0);
 
@@ -541,6 +537,7 @@ glw_prepare_frame(glw_root_t *gr, int flags)
   prop_set_int(gr->gr_screensaver_active, glw_screensaver_is_active(gr));
   prop_set_int(gr->gr_prop_width, gr->gr_width);
   prop_set_int(gr->gr_prop_height, gr->gr_height);
+  prop_set_float(gr->gr_prop_aspect, (float)gr->gr_width / gr->gr_height);
 
   if(gr->gr_prop_dispatcher != NULL)
     gr->gr_prop_dispatcher(gr->gr_courier, gr->gr_prop_maxtime);
@@ -678,7 +675,7 @@ glw_destroy(glw_t *w)
 
   while((gem = LIST_FIRST(&w->glw_event_maps)) != NULL) {
     LIST_REMOVE(gem, gem_link);
-    gem->gem_dtor(gr, gem);
+    glw_event_map_destroy(gr, gem);
   }
 
   free(w->glw_matrix);
@@ -984,7 +981,7 @@ glw_path_modify(glw_t *w, int set, int clr, glw_t *stop)
 
     if((old_flags ^ w->glw_flags) & GLW_IN_FOCUS_PATH)
       glw_event_glw_action(w, w->glw_flags & GLW_IN_FOCUS_PATH ?
-                           GLW_EVENT_GAINED_FOCUS : GLW_EVENT_LOST_FOCUS);
+                           "GainedFocus" : "LostFocus");
   }
 }
 
@@ -1627,7 +1624,7 @@ glw_focus_child(glw_t *w)
 int
 glw_root_event_handler(glw_root_t *gr, event_t *e)
 {
-  if(e->e_type_x == EVENT_KEYDESC)
+  if(e->e_type == EVENT_KEYDESC)
     return 0;
 
   if(event_is_action(e, ACTION_ENABLE_SCREENSAVER)) {
@@ -1641,7 +1638,7 @@ glw_root_event_handler(glw_root_t *gr, event_t *e)
 	    event_is_type(e, EVENT_OPENURL)) {
 
     prop_t *p = prop_get_by_name(PNVEC("nav", "eventSink"), 0,
-                                 PROP_TAG_ROOT, gr->gr_prop_nav,
+                                 PROP_TAG_NAMED_ROOT, gr->gr_prop_nav, "nav",
                                  NULL);
     prop_send_ext_event(p, e);
     prop_ref_dec(p);
@@ -1683,7 +1680,6 @@ glw_event_to_widget(glw_t *w, event_t *e)
   // Then ascend all the way up to root
 
   while(w != NULL) {
-
     w->glw_flags &= ~GLW_FLOATING_FOCUS; // Correct ??
 
     if(glw_event_map_intercept(w, e))
@@ -1755,7 +1751,6 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
 	switch(gpe->type) {
 
 	case GLW_POINTER_RIGHT_PRESS:
-          glw_focus_set(gr, w, GLW_FOCUS_SET_INTERACTIVE, "RightPress");
           e = event_create_action(ACTION_ITEMMENU);
           glw_event_to_widget(w, e);
           event_release(e);
@@ -1977,6 +1972,24 @@ glw_kill_screensaver(glw_root_t *gr)
   return r;
 }
 
+
+/**
+ *
+ */
+static void
+glw_screenshot(glw_root_t *gr)
+{
+  if(gr->gr_br_read_pixels == NULL) {
+    screenshot_deliver(NULL);
+    return;
+  }
+
+  pixmap_t *pm = gr->gr_br_read_pixels(gr);
+  screenshot_deliver(pm);
+  pixmap_release(pm);
+}
+
+
 /**
  *
  */
@@ -1987,22 +2000,21 @@ glw_dispatch_event(glw_root_t *gr, event_t *e)
 
   runcontrol_activity();
 
-  if(e->e_type_x == EVENT_REPAINT_UI) {
+  if(e->e_type == EVENT_REPAINT_UI) {
     glw_text_flush(gr);
     return;
   }
 
-  if(e->e_type_x == EVENT_KEYDESC) {
-    event_t *e2;
+  if(e->e_type == EVENT_MAKE_SCREENSHOT) {
+    glw_screenshot(gr);
+    return;
+  }
+
+  if(e->e_type == EVENT_KEYDESC) {
 
     if(glw_event(gr, e))
       return; // Was consumed
 
-    const event_payload_t *ep = (const event_payload_t *)e;
-    e2 = keymapper_resolve(ep->payload);
-
-    if(e2 != NULL)
-      glw_inject_event(gr, e2);
     return;
   }
 
@@ -2118,11 +2130,11 @@ glw_inject_event(glw_root_t *gr, event_t *e)
       event_is_action(e, ACTION_RELOAD_DATA) ||
       event_is_type(e, EVENT_OPENURL))) {
     p = prop_get_by_name(PNVEC("nav", "eventSink"), 0,
-			 PROP_TAG_ROOT, gr->gr_prop_nav,
+			 PROP_TAG_NAMED_ROOT, gr->gr_prop_nav, "nav",
 			 NULL);
   } else {
     p = prop_get_by_name(PNVEC("ui", "eventSink"), 0,
-			 PROP_TAG_ROOT, gr->gr_prop_ui,
+			 PROP_TAG_NAMED_ROOT, gr->gr_prop_ui, "nav",
 			 NULL);
   }
   prop_send_ext_event(p, e);
@@ -2206,57 +2218,74 @@ glw_conf_constraints(glw_t *w, int x, int y, float weight, int conf)
  *
  */
 void
-glw_set_constraints(glw_t *w, int x, int y, float weight, int flags)
+glw_mod_constraints(glw_t *w, int x, int y, float weight, int flags,
+                    int modflags)
 {
   int ch = 0;
   const int fc = w->glw_flags ^ flags;
-  if(!(w->glw_flags & GLW_CONSTRAINT_CONF_X)) {
-    if(fc & GLW_CONSTRAINT_X) {
-      ch = 1;
-      w->glw_flags =
-	(w->glw_flags & ~GLW_CONSTRAINT_X) | (flags & GLW_CONSTRAINT_X);
-    }
-    if(w->glw_flags & GLW_CONSTRAINT_X && w->glw_req_size_x != x) {
-      w->glw_req_size_x = x;
-      ch = 1;
-    }
-  }
-
-  if(!(w->glw_flags & GLW_CONSTRAINT_CONF_Y)) {
-    if(fc & GLW_CONSTRAINT_Y) {
-      ch = 1;
-      w->glw_flags =
-	(w->glw_flags & ~GLW_CONSTRAINT_Y) | (flags & GLW_CONSTRAINT_Y);
-    }
-    if(w->glw_flags & GLW_CONSTRAINT_Y && w->glw_req_size_y != y) {
-      w->glw_req_size_y = y;
-      ch = 1;
+  if(modflags & GLW_CONSTRAINT_X) {
+    if(!(w->glw_flags & GLW_CONSTRAINT_CONF_X)) {
+      if(fc & GLW_CONSTRAINT_X) {
+        ch = 1;
+        w->glw_flags =
+          (w->glw_flags & ~GLW_CONSTRAINT_X) | (flags & GLW_CONSTRAINT_X);
+      }
+      if(w->glw_flags & GLW_CONSTRAINT_X && w->glw_req_size_x != x) {
+        w->glw_req_size_x = x;
+        ch = 1;
+      }
     }
   }
 
-  if(!(w->glw_flags & GLW_CONSTRAINT_CONF_W)) {
-    if(fc & GLW_CONSTRAINT_W) {
-      ch = 1;
-      w->glw_flags =
-	(w->glw_flags & ~GLW_CONSTRAINT_W) | (flags & GLW_CONSTRAINT_W);
-    }
-    if(w->glw_flags & GLW_CONSTRAINT_W && w->glw_req_weight != weight) {
-      w->glw_req_weight = weight;
-      ch = 1;
+  if(modflags & GLW_CONSTRAINT_Y) {
+    if(!(w->glw_flags & GLW_CONSTRAINT_CONF_Y)) {
+      if(fc & GLW_CONSTRAINT_Y) {
+        ch = 1;
+        w->glw_flags =
+          (w->glw_flags & ~GLW_CONSTRAINT_Y) | (flags & GLW_CONSTRAINT_Y);
+      }
+      if(w->glw_flags & GLW_CONSTRAINT_Y && w->glw_req_size_y != y) {
+        w->glw_req_size_y = y;
+        ch = 1;
+      }
     }
   }
 
-  if(!(w->glw_flags & GLW_CONSTRAINT_CONF_D)) {
-    if(fc & GLW_CONSTRAINT_D) {
-      ch = 1;
-      w->glw_flags =
-	(w->glw_flags & ~GLW_CONSTRAINT_D) | (flags & GLW_CONSTRAINT_D);
+  if(modflags & GLW_CONSTRAINT_W) {
+    if(!(w->glw_flags & GLW_CONSTRAINT_CONF_W)) {
+      if(fc & GLW_CONSTRAINT_W) {
+        ch = 1;
+        w->glw_flags =
+          (w->glw_flags & ~GLW_CONSTRAINT_W) | (flags & GLW_CONSTRAINT_W);
+      }
+      if(w->glw_flags & GLW_CONSTRAINT_W && w->glw_req_weight != weight) {
+        w->glw_req_weight = weight;
+        ch = 1;
+      }
     }
   }
+
+  if(modflags & GLW_CONSTRAINT_D) {
+    if(!(w->glw_flags & GLW_CONSTRAINT_CONF_D)) {
+      if(fc & GLW_CONSTRAINT_D) {
+        ch = 1;
+        w->glw_flags =
+          (w->glw_flags & ~GLW_CONSTRAINT_D) | (flags & GLW_CONSTRAINT_D);
+      }
+    }
+  }
+
   if(ch && w->glw_parent != NULL)
     glw_signal0(w->glw_parent, GLW_SIGNAL_CHILD_CONSTRAINTS_CHANGED, w);
 }
 
+
+void
+glw_set_constraints(glw_t *w, int x, int y, float weight,
+                    int flags)
+{
+  glw_mod_constraints(w, x, y, weight, flags, -1);
+}
 
 /**
  *

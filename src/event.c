@@ -42,8 +42,7 @@ event_create(event_type_t type, size_t size)
   e->e_dtor = NULL;
   atomic_set(&e->e_refcount, 1);
   e->e_flags = 0;
-  assert(type > EVENT_OFFSET);
-  e->e_type_x = type;
+  e->e_type = type;
   return e;
 }
 
@@ -409,7 +408,7 @@ event_is_action(event_t *e, action_type_t at)
   int i;
   event_action_vector_t *eav;
 
-  if(e->e_type_x != EVENT_ACTION_VECTOR)
+  if(e->e_type != EVENT_ACTION_VECTOR)
     return 0;
 
   eav = (event_action_vector_t *)e;
@@ -441,6 +440,33 @@ event_create_prop(event_type_t type, prop_t *p)
   event_prop_t *e = event_create(type, sizeof(event_prop_t));
   e->p = prop_ref_inc(p);
   e->h.e_dtor = event_prop_dtor;
+  return &e->h;
+}
+
+
+/**
+ *
+ */
+static void
+event_prop_action_dtor(event_t *e)
+{
+  event_prop_action_t *epa = (event_prop_action_t *)e;
+  prop_ref_dec(epa->p);
+  rstr_release(epa->action);
+}
+
+
+/**
+ *
+ */
+event_t *
+event_create_prop_action(prop_t *p, rstr_t *action)
+{
+  event_prop_action_t *e = event_create(EVENT_PROP_ACTION,
+                                        sizeof(event_prop_action_t));
+  e->p = prop_ref_inc(p);
+  e->action = rstr_dup(action);
+  e->h.e_dtor = event_prop_action_dtor;
   return &e->h;
 }
 
@@ -501,7 +527,7 @@ event_dispatch(event_t *e)
 	    event_is_action(e, ACTION_PLAYQUEUE) ||
 	    event_is_action(e, ACTION_RELOAD_DATA) ||
 	    event_is_type(e, EVENT_OPENURL)) {
-    event_to_prop(prop_get_by_name(PNVEC("global", "navigators", "nav", "eventSink"),
+    event_to_prop(prop_get_by_name(PNVEC("global", "navigators", "current", "eventSink"),
 				   1, NULL), e);
 
   } else if(event_is_action(e, ACTION_VOLUME_UP) ||
@@ -582,7 +608,7 @@ event_from_Fkey(unsigned int keynum, unsigned int mod)
   return event_create_action(a);
 }
 
-
+#if 1
 /**
  *
  */
@@ -597,7 +623,7 @@ event_sprint(const event_t *e)
   if(e == NULL)
     return "(null)";
 
-  switch(e->e_type_x) {
+  switch(e->e_type) {
   case EVENT_DYNAMIC_ACTION:
     return ep->payload;
   case EVENT_ACTION_VECTOR:
@@ -607,8 +633,10 @@ event_sprint(const event_t *e)
                i == 0 ? "" : ", ", action_code2str(eav->actions[i]));
     break;
   default:
-    snprintf(buf, sizeof(buf), "event<%d>", e->e_type_x);
+    snprintf(buf, sizeof(buf), "event<%d>", e->e_type);
     break;
   }
   return buf;
 }
+
+#endif

@@ -26,12 +26,8 @@
 #include "prop/prop.h"
 #include "misc/redblack.h"
 #include "misc/dbl.h"
-
-
-#define STPP_CMD_SUBSCRIBE   1
-#define STPP_CMD_UNSUBSCRIBE 2
-#define STPP_CMD_SET         3
-#define STPP_CMD_NOTIFY      4
+#include "misc/bytestream.h"
+#include "stpp.h"
 
 RB_HEAD(stpp_subscription_tree, stpp_subscription);
 RB_HEAD(stpp_prop_tree, stpp_prop);
@@ -56,7 +52,8 @@ typedef struct stpp_subscription {
   unsigned int ss_id;
   prop_sub_t *ss_sub;
   stpp_t *ss_stpp;
-  struct stpp_prop_list ss_props; // Exported props
+  struct stpp_prop_list ss_dir_props;   // Exported props when in dir mode
+  struct stpp_prop_list ss_value_props; // Exported props when in value mode
 } stpp_subscription_t;
 
 static int
@@ -83,19 +80,27 @@ sp_cmp(const stpp_prop_t *a, const stpp_prop_t *b)
   return a->sp_id - b->sp_id;
 }
 
+static stpp_prop_t *
+sp_get(prop_t *p, stpp_subscription_t *ss)
+{
+  return prop_tag_get(p, ss);
+}
+
+
 
 /**
  *
  */
 static stpp_prop_t *
-stpp_property_export_from_sub(stpp_subscription_t *ss, prop_t *p)
+stpp_property_export_from_sub(stpp_subscription_t *ss, prop_t *p,
+                              struct stpp_prop_list *list)
 {
   stpp_t *stpp = ss->ss_stpp;
   stpp_prop_t *sp = malloc(sizeof(stpp_prop_t));
   sp->sp_id = ++stpp->stpp_prop_tally;
   sp->sp_prop = prop_ref_inc(p);
   sp->sp_sub = ss;
-  LIST_INSERT_HEAD(&ss->ss_props, sp, sp_sub_link);
+  LIST_INSERT_HEAD(list, sp, sp_sub_link);
   if(RB_INSERT_SORTED(&stpp->stpp_props, sp, sp_link, sp_cmp))
     abort();
   prop_tag_set(p, ss, sp);
@@ -144,8 +149,8 @@ stpp_sub_json_add_child(stpp_subscription_t *ss, http_connection_t *hc,
 			prop_t *p, prop_t *before)
 { 
   char buf2[128];
-  unsigned int b = before ? ((stpp_prop_t *)prop_tag_get(before, ss))->sp_id:0;
-  stpp_prop_t *sp = stpp_property_export_from_sub(ss, p);
+  unsigned int b = before ? sp_get(before, ss)->sp_id : 0;
+  stpp_prop_t *sp = stpp_property_export_from_sub(ss, p, &ss->ss_dir_props);
   snprintf(buf2, sizeof(buf2), "[5,%u,%u,[%u]]", ss->ss_id, b, sp->sp_id);
   websocket_send(hc, 1, buf2, strlen(buf2));
 }
@@ -158,7 +163,7 @@ static void
 stpp_sub_json_add_childs(stpp_subscription_t *ss, http_connection_t *hc,
 			 prop_vec_t *pv, prop_t *before)
 { 
-  unsigned int b = before ? ((stpp_prop_t *)prop_tag_get(before, ss))->sp_id:0;
+  unsigned int b = before ? sp_get(before, ss)->sp_id : 0;
   int i;
   htsbuf_queue_t hq;
 
@@ -167,7 +172,7 @@ stpp_sub_json_add_childs(stpp_subscription_t *ss, http_connection_t *hc,
 
   for(i = 0; i < prop_vec_len(pv); i++) {
     prop_t *p = prop_vec_get(pv, i);
-    stpp_prop_t *sp = stpp_property_export_from_sub(ss, p);
+    stpp_prop_t *sp = stpp_property_export_from_sub(ss, p, &ss->ss_dir_props);
     htsbuf_qprintf(&hq, "%s%u", i ? "," : "", sp->sp_id);
   }
   htsbuf_append(&hq, "]]", 1);
@@ -212,10 +217,10 @@ stpp_sub_json_move_child(stpp_subscription_t *ss, http_connection_t *hc,
  *
  */
 static void
-ss_clear_props(stpp_subscription_t *ss)
+ss_clear_props(stpp_subscription_t *ss, struct stpp_prop_list *list)
 {
   stpp_prop_t *sp;
-  while((sp = LIST_FIRST(&ss->ss_props)) != NULL) {
+  while((sp = LIST_FIRST(list)) != NULL) {
     prop_tag_clear(sp->sp_prop, ss);
     stpp_property_unexport_from_sub(ss, sp);
   }
@@ -238,19 +243,19 @@ stpp_sub_json(void *opaque, prop_event_t event, ...)
   prop_vec_t *pv;
   const char *str, *str2;
   va_start(ap, event);
-
+  
   switch(event) {
   case PROP_SET_FLOAT:
     my_double2str(buf, sizeof(buf), va_arg(ap, double));
     snprintf(buf2, sizeof(buf2), "[4,%u,%s]", ss->ss_id, buf);
     websocket_send(hc, 1, buf2, strlen(buf2));
-    ss_clear_props(ss);
+    ss_clear_props(ss, &ss->ss_dir_props);
     break;
 
   case PROP_SET_INT:
     snprintf(buf2, sizeof(buf2), "[4,%u,%d]", ss->ss_id, va_arg(ap, int));
     websocket_send(hc, 1, buf2, strlen(buf2));
-    ss_clear_props(ss);
+    ss_clear_props(ss, &ss->ss_dir_props);
     break;
 
   case PROP_SET_RSTRING:
@@ -264,13 +269,13 @@ stpp_sub_json(void *opaque, prop_event_t event, ...)
     htsbuf_append_and_escape_jsonstr(&hq, str);
     htsbuf_append(&hq, "]", 1);
     websocket_sendq(hc, 1, &hq);
-    ss_clear_props(ss);
+    ss_clear_props(ss, &ss->ss_dir_props);
     break;
 
   case PROP_SET_VOID:
     snprintf(buf2, sizeof(buf2), "[4,%u,null]", ss->ss_id);
     websocket_send(hc, 1, buf2, strlen(buf2));
-    ss_clear_props(ss);
+    ss_clear_props(ss, &ss->ss_dir_props);
     break;
 
   case PROP_SET_URI:
@@ -283,12 +288,13 @@ stpp_sub_json(void *opaque, prop_event_t event, ...)
     htsbuf_append_and_escape_jsonstr(&hq, str2);
     htsbuf_append(&hq, "]]", 2);
     websocket_sendq(hc, 1, &hq);
-    ss_clear_props(ss);
+    ss_clear_props(ss, &ss->ss_dir_props);
     break;
 
   case PROP_SET_DIR:
     snprintf(buf2, sizeof(buf2), "[4,%u,[\"dir\"]]", ss->ss_id);
     websocket_send(hc, 1, buf2, strlen(buf2));
+    ss_clear_props(ss, &ss->ss_dir_props);
     break;
 
   case PROP_ADD_CHILD:
@@ -327,14 +333,192 @@ stpp_sub_json(void *opaque, prop_event_t event, ...)
 
 
 /**
+ * Binary output
+ */
+static void
+stpp_sub_binary(void *opaque, prop_event_t event, ...)
+{
+  stpp_subscription_t *ss = opaque;
+  http_connection_t *hc = ss->ss_stpp->stpp_hc;
+  va_list ap;
+  const char *str;
+  uint8_t *buf;
+  int buflen = 1 + 1 + 4;
+  int len;
+  int flags;
+  prop_t *p, *before;
+  const prop_vec_t *pv;
+  stpp_prop_t *sp;
+  union {
+    float f;
+    int i;
+  } u;
+  va_start(ap, event);
+
+  switch(event) {
+  case PROP_SET_INT:
+    buflen += 4;
+    buf = alloca(buflen);
+    buf[1] = STPP_SET_INT;
+    wr32_le(buf + 6, va_arg(ap, int));
+    ss_clear_props(ss, &ss->ss_dir_props);
+    break;
+
+  case PROP_SET_FLOAT:
+    buflen += 4;
+    buf = alloca(buflen);
+    buf[1] = STPP_SET_FLOAT;
+    u.f = va_arg(ap, double);
+    wr32_le(buf + 6, u.i);
+    ss_clear_props(ss, &ss->ss_dir_props);
+    break;
+
+  case PROP_SET_VOID:
+    buf = alloca(buflen);
+    buf[1] = STPP_SET_VOID;
+    ss_clear_props(ss, &ss->ss_dir_props);
+    break;
+
+  case PROP_SET_DIR:
+    buf = alloca(buflen);
+    buf[1] = STPP_SET_DIR;
+    ss_clear_props(ss, &ss->ss_dir_props);
+    break;
+
+  case PROP_SET_RSTRING:
+    str = rstr_get(va_arg(ap, rstr_t *));
+    if(0)
+    case PROP_SET_CSTRING:
+      str = va_arg(ap, const char *);
+    len = strlen(str);
+    buflen += len + 1;
+    buf = alloca(buflen);
+    buf[1] = STPP_SET_STRING;
+    buf[6] = event == PROP_SET_RSTRING ? va_arg(ap, int) : 0;
+    memcpy(buf + 7, str, len);
+    ss_clear_props(ss, &ss->ss_dir_props);
+    break;
+
+  case PROP_ADD_CHILD:
+    buflen += 4;
+    buf = alloca(buflen);
+    wr32_le(buf + 6,
+            stpp_property_export_from_sub(ss, va_arg(ap, prop_t *),
+                                          &ss->ss_dir_props)->sp_id);
+
+    flags = va_arg(ap, int);
+    if(flags & PROP_ADD_SELECTED)
+      buf[1] = STPP_ADD_CHILD_SELECTED;
+    else
+      buf[1] = STPP_ADD_CHILDS;
+    break;
+
+  case PROP_ADD_CHILD_BEFORE:
+    p = va_arg(ap, prop_t *);
+    before = va_arg(ap, prop_t *);
+
+    buflen += 8;
+    buf = alloca(buflen);
+    wr32_le(buf + 6,  sp_get(before, ss)->sp_id);
+    wr32_le(buf + 10, stpp_property_export_from_sub(ss, p,
+                                                    &ss->ss_dir_props)->sp_id);
+    buf[1] = STPP_ADD_CHILDS;
+    break;
+
+  case PROP_ADD_CHILD_VECTOR:
+    pv = va_arg(ap, const prop_vec_t *);
+    buflen += prop_vec_len(pv) * 4;
+    buf = alloca(buflen);
+    for(int i = 0; i < prop_vec_len(pv); i++) {
+      wr32_le(buf + 6 + i * 4,
+              stpp_property_export_from_sub(ss, prop_vec_get(pv, i),
+                                            &ss->ss_dir_props)->sp_id);
+    }
+    buf[1] = STPP_ADD_CHILDS;
+    break;
+
+  case PROP_ADD_CHILD_VECTOR_BEFORE:
+    pv = va_arg(ap, const prop_vec_t *);
+    before = va_arg(ap, prop_t *);
+
+    buflen += prop_vec_len(pv) * 4 + 4;
+    buf = alloca(buflen);
+    wr32_le(buf + 6,  sp_get(before, ss)->sp_id);
+    for(int i = 0; i < prop_vec_len(pv); i++) {
+      wr32_le(buf + 10 + i * 4,
+              stpp_property_export_from_sub(ss, prop_vec_get(pv, i),
+                                            &ss->ss_dir_props)->sp_id);
+    }
+    buf[1] = STPP_ADD_CHILDS;
+    break;
+
+  case PROP_DEL_CHILD:
+    sp = prop_tag_clear(va_arg(ap, prop_t *), ss);
+    buflen += 4;
+    buf = alloca(buflen);
+    wr32_le(buf + 6, sp->sp_id);
+    buf[1] = STPP_DEL_CHILD;
+    stpp_property_unexport_from_sub(ss, sp);
+    break;
+
+  case PROP_MOVE_CHILD:
+    p = va_arg(ap, prop_t *);
+    before = va_arg(ap, prop_t *);
+
+    buflen += before ? 8 : 4;
+    buf = alloca(buflen);
+
+    wr32_le(buf + 6, sp_get(p, ss)->sp_id);
+    if(before)
+      wr32_le(buf + 10, sp_get(before, ss)->sp_id);
+    buf[1] = STPP_MOVE_CHILD;
+    break;
+
+  case PROP_SELECT_CHILD:
+    buflen += 4;
+    buf = alloca(buflen);
+    wr32_le(buf + 6, sp_get(va_arg(ap, prop_t *), ss)->sp_id);
+    buf[1] = STPP_SELECT_CHILD;
+    break;
+
+  case PROP_VALUE_PROP:
+    p = va_arg(ap, prop_t *);
+
+    if(LIST_FIRST(&ss->ss_value_props) != NULL &&
+       LIST_FIRST(&ss->ss_value_props)->sp_prop == p) {
+      printf("Not sending same prop\n");
+      return;
+    }
+
+    ss_clear_props(ss, &ss->ss_value_props);
+
+    buflen += 4;
+    buf = alloca(buflen);
+
+    wr32_le(buf + 6,
+            stpp_property_export_from_sub(ss, p,
+                                          &ss->ss_value_props)->sp_id);
+    buf[1] = STPP_VALUE_PROP;
+    break;
+
+  default:
+    printf("STPP SUB BINARY cant handle event %d\n", event);
+    return;
+  }
+  buf[0] = STPP_CMD_NOTIFY;
+  wr32_le(buf + 2, ss->ss_id);
+  websocket_send(hc, 2, buf, buflen);
+}
+
+/**
  *
  */
 static void
-stpp_cmd_sub(stpp_t *stpp, unsigned int id, int propref, const char *path)
+stpp_cmd_sub(stpp_t *stpp, unsigned int id, int propref, const char *path,
+             uint16_t flags,
+             char **namevec,
+             void (*notify)(void *opaque, prop_event_t event, ...))
 {
-  if(path == NULL)
-    return;
-
   prop_t *p = resolve_propref(stpp, propref);
   stpp_subscription_t *ss = calloc(1, sizeof(stpp_subscription_t));
 
@@ -347,10 +531,11 @@ stpp_cmd_sub(stpp_t *stpp, unsigned int id, int propref, const char *path)
   }
 
   ss->ss_stpp = stpp;
-  ss->ss_sub = prop_subscribe(PROP_SUB_ALT_PATH,
+  ss->ss_sub = prop_subscribe(PROP_SUB_ALT_PATH | flags,
 			      PROP_TAG_COURIER, asyncio_courier,
 			      PROP_TAG_NAMESTR, path,
-			      PROP_TAG_CALLBACK, stpp_sub_json, ss,
+			      PROP_TAG_NAME_VECTOR, namevec,
+			      PROP_TAG_CALLBACK, notify, ss,
 			      PROP_TAG_ROOT, p,
 			      NULL);
 }
@@ -362,7 +547,8 @@ stpp_cmd_sub(stpp_t *stpp, unsigned int id, int propref, const char *path)
 static void
 ss_destroy(stpp_t *stpp, stpp_subscription_t *ss)
 {
-  ss_clear_props(ss);
+  ss_clear_props(ss, &ss->ss_dir_props);
+  ss_clear_props(ss, &ss->ss_value_props);
   prop_unsubscribe(ss->ss_sub);
   RB_REMOVE(&stpp->stpp_subscriptions, ss, ss_link);
   free(ss);
@@ -421,7 +607,8 @@ stpp_json(stpp_t *stpp, htsmsg_t *m)
     stpp_cmd_sub(stpp,
 		 htsmsg_get_u32_or_default(m, HTSMSG_INDEX(1), 0),
 		 htsmsg_get_u32_or_default(m, HTSMSG_INDEX(2), 0),
-		 htsmsg_get_str(m,            HTSMSG_INDEX(3)));
+		 htsmsg_get_str(m,            HTSMSG_INDEX(3)), 0, NULL,
+                 stpp_sub_json);
     break;
 
   case STPP_CMD_UNSUBSCRIBE:
@@ -438,6 +625,311 @@ stpp_json(stpp_t *stpp, htsmsg_t *m)
   }
 }
 
+
+
+/**
+ *
+ */
+static int
+decode_string_vector(char ***vp, const uint8_t *src, int remain)
+{
+  const uint8_t *s = src;
+  int origlen = remain;
+  *vp = NULL;
+  int comp = 0;
+  while(remain > 0) {
+    remain -= *src + 1;
+    if(*src == 0)
+      break;
+    src += *src + 1;
+    comp++;
+  }
+  assert(remain >= 0);
+  for(int i = 0; i < comp; i++) {
+    int l = *s++;
+    strvec_addpn(vp, (const char *)s, l);
+    s += l;
+  }
+  return origlen - remain;
+}
+
+
+/**
+ *
+ */
+static prop_t *
+decode_propref(stpp_t *stpp, const uint8_t **datap, int *lenp)
+{
+  const uint8_t *data = *datap;
+  int len = *lenp;
+  if(len < 5)
+    return NULL;
+
+  prop_t *p = resolve_propref(stpp, rd32_le(data));
+  if(p == NULL)
+    return NULL;
+  char **strvec = NULL;
+  int x = decode_string_vector(&strvec, data + 4 , len - 4);
+  *datap = data + 4 + x;
+  *lenp  = len  - 4 - x;
+
+  if(strvec == NULL)
+    return prop_ref_inc(p);
+
+  prop_t *p2 = prop_findv(p, strvec);
+  strvec_free(strvec);
+  return p2;
+}
+
+
+/**
+ *
+ */
+static char *
+decode_string(const uint8_t **datap, int *lenp)
+{
+  const uint8_t *data = *datap;
+  int len = *lenp;
+
+  if(len < 1)
+    return NULL;
+  int slen = data[0];
+  int x;
+  if(slen == 0xff) {
+    if(len < 5)
+      return NULL;
+    slen = rd32_le(data + 1);
+    x = 5;
+  } else {
+    x = 1;
+  }
+  data += x;
+  len -= x;
+
+  if(slen > len)
+    return NULL;
+
+  *datap = data + slen;
+  *lenp  = len - slen;
+
+  char *s = malloc(slen + 1);
+  s[slen] = 0;
+  memcpy(s, data, slen);
+  return s;
+}
+
+
+/**
+ *
+ */
+static void
+stpp_binary_event(prop_t *p, event_type_t event,
+                  const uint8_t *data, int len, stpp_t *stpp)
+{
+  event_t *e = NULL;
+  switch(event) {
+  case EVENT_ACTION_VECTOR:
+    {
+      char **strvec = NULL;
+      int x = 0;
+
+      decode_string_vector(&strvec, data, len);
+      while(strvec[x] != NULL)
+        x++;
+
+      action_type_t *atv = alloca(x * sizeof(action_type_t));
+      for(int i = 0; i < x; i++)
+        atv[i] = action_str2code(strvec[i]);
+
+      strvec_free(strvec);
+
+      e = event_create_action_multi(atv, x);
+    }
+    break;
+  case EVENT_OPENURL:
+    {
+      if(len < 1)
+        break;
+      uint8_t flags = data[0];
+      data++;
+      len--;
+
+      event_openurl_args_t args = {0};
+
+      if(flags & 0x01 && (args.url = decode_string(&data, &len)) == NULL)
+        flags = 0;
+
+      if(flags & 0x02 && (args.view = decode_string(&data, &len)) == NULL)
+        flags = 0;
+
+      if(flags & 0x04 &&
+         (args.origin = decode_propref(stpp, &data, &len)) == NULL)
+        flags = 0;
+
+      if(flags & 0x08 &&
+         (args.model = decode_propref(stpp, &data, &len)) == NULL)
+        flags = 0;
+
+      if(flags & 0x10 && (args.how = decode_string(&data, &len)) == NULL)
+        flags = 0;
+
+      if(flags & 0x20 && (args.parent_url = decode_string(&data, &len)) == NULL)
+        flags = 0;
+
+      if(flags)
+        e = event_create_openurl_args(&args);
+
+
+      free((void *)args.url);
+      free((void *)args.view);
+      free((void *)args.how);
+      free((void *)args.parent_url);
+      prop_ref_dec(args.origin);
+      prop_ref_dec(args.model);
+    }
+    break;
+
+  default:
+    TRACE(TRACE_ERROR, "STPP", "Can't handle event type %d", event);
+    return;
+  }
+
+  if(e == NULL)
+    return;
+  prop_send_ext_event(p, e);
+  event_release(e);
+}
+
+/**
+ * Websocket server always pad frame with a zero byte at the end
+ * (Not included in len). So it's safe to just use strings at end
+ * of messages
+ *
+ * Function returns -1 on malformed messages
+ */
+static int
+stpp_binary(stpp_t *stpp, const uint8_t *data, int len)
+{
+  union {
+    float f;
+    int i;
+  } u;
+
+  if(len < 1)
+    return -1;
+  const uint8_t cmd = data[0];
+  data++;
+  len--;
+
+  switch(cmd) {
+  case STPP_CMD_SUBSCRIBE:
+    if(len < 10)
+      return -1;
+
+    char **name = NULL;
+    decode_string_vector(&name, data + 10, len - 10);
+
+    stpp_cmd_sub(stpp, rd32_le(data), rd32_le(data + 4), NULL,
+                 rd16_le(data + 8), name, stpp_sub_binary);
+
+    strvec_free(name);
+    break;
+
+  case STPP_CMD_UNSUBSCRIBE:
+    if(len != 4)
+      return -1;
+    stpp_cmd_unsub(stpp, rd32_le(data));
+    break;
+
+  case STPP_CMD_EVENT:
+    {
+      if(len < 5)
+        return -1;
+      char **name = NULL;
+
+      prop_t *p = resolve_propref(stpp, rd32_le(data));
+      if(p == NULL)
+        return -1;
+
+      data += 4;
+      len -= 4;
+      int x = decode_string_vector(&name, data, len);
+      data += x;
+      len -= x;
+
+      if(len < 1) {
+        strvec_free(name);
+        return -1;
+      }
+
+      prop_t *p2 = prop_findv(p, name);
+      strvec_free(name);
+
+      if(p2 != NULL) {
+        int event = data[0];
+        data++;
+        len--;
+        stpp_binary_event(p2, event, data, len, stpp);
+      }
+      prop_ref_dec(p2);
+    }
+    break;
+
+  case STPP_CMD_SET:
+    {
+      prop_t *p = decode_propref(stpp, &data, &len);
+      if(p == NULL)
+        break;
+
+      if(len > 0) {
+        uint8_t cmd = data[0];
+        data++;
+        len--;
+        switch(cmd) {
+        case STPP_SET_STRING:
+          if(len < 1)
+            break;
+          prop_set_string_ex(p, NULL, (const char *)data + 1, data[0]);
+          break;
+        case STPP_SET_INT:
+          if(len == 4)
+            prop_set_int(p, rd32_le(data));
+          break;
+        case STPP_TOGGLE_INT:
+          prop_toggle_int(p);
+          break;
+        case STPP_SET_VOID:
+          prop_set_void(p);
+          break;
+        case STPP_SET_FLOAT:
+          if(len != 4)
+            break;
+          u.i = rd32_le(data);
+          prop_set_float(p, u.f);
+          break;
+        }
+      }
+      prop_ref_dec(p);
+    }
+    break;
+  case STPP_CMD_REQ_MOVE:
+    {
+      if(len < 4)
+        return -1;
+      prop_t *p = resolve_propref(stpp, rd32_le(data));
+      prop_t *before = NULL;
+      if(len == 8)
+        before = resolve_propref(stpp, rd32_le(data + 4));
+      prop_req_move(p, before);
+    }
+    break;
+
+  default:
+    return -1;
+  }
+  return 0;
+}
+
 /**
  *
  */
@@ -446,14 +938,21 @@ stpp_input(http_connection_t *hc, int opcode,
 	   uint8_t *data, size_t len, void *opaque)
 {
   stpp_t *stpp = opaque;
-  
-  if(opcode != 1)
-    return 0;
+  htsmsg_t *m;
+  switch(opcode) {
+  case 1: // Text frame
+    m = htsmsg_json_deserialize((const char *)data);
+    if(m != NULL) {
+      stpp_json(stpp, m);
+      htsmsg_release(m);
+    }
+    break;
+  case 2: // Binary frame
+    stpp_binary(stpp, data, len);
+    break;
 
-  htsmsg_t *m = htsmsg_json_deserialize((const char *)data);
-  if(m != NULL) {
-    stpp_json(stpp, m);
-    htsmsg_release(m);
+  default:
+    break;
   }
   return 0;
 }
@@ -465,9 +964,6 @@ stpp_input(http_connection_t *hc, int opcode,
 static int
 stpp_init(http_connection_t *hc)
 {
-  if(!gconf.enable_experimental)
-    return 403;
-
   stpp_t *stpp = calloc(1, sizeof(stpp_t));
   stpp->stpp_hc = hc;
   http_set_opaque(hc, stpp);

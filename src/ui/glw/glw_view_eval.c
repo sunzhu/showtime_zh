@@ -453,7 +453,8 @@ token2bool(token_t *t)
 static rstr_t *
 token2rstr(token_t *t)
 {
-  if(t->type == TOKEN_RSTRING || t->type == TOKEN_URI)
+  if(t->type == TOKEN_RSTRING || t->type == TOKEN_URI ||
+     t->type == TOKEN_IDENTIFIER)
     return rstr_dup(t->t_rstring);
   if(t->type == TOKEN_CSTRING)
     return rstr_alloc(t->t_cstring);
@@ -813,7 +814,8 @@ propname_to_array(const char *pname[], const token_t *a)
  *
  */
 static int
-resolve_property_name(glw_view_eval_context_t *ec, token_t *a)
+resolve_property_name(glw_view_eval_context_t *ec, token_t *a,
+                      int follow_symlinks)
 {
   const char *pname[16];
   prop_t *p;
@@ -821,14 +823,16 @@ resolve_property_name(glw_view_eval_context_t *ec, token_t *a)
 
   propname_to_array(pname, a);
 
-  p = prop_get_by_name(pname, !(a->t_flags & TOKEN_F_CANONICAL_PATH),
-		       PROP_TAG_NAMED_ROOT, ec->prop, "self",
+  p = prop_get_by_name(pname, follow_symlinks,
+		       PROP_TAG_NAMED_ROOT, ec->prop_self, "self",
 		       PROP_TAG_NAMED_ROOT, ec->prop_parent, "parent",
-		       PROP_TAG_NAMED_ROOT, ec->prop_viewx, "view",
+		       PROP_TAG_NAMED_ROOT, ec->prop_view, "view",
 		       PROP_TAG_NAMED_ROOT, ec->prop_clone, "clone",
 		       PROP_TAG_NAMED_ROOT, ec->prop_args, "args",
+		       PROP_TAG_NAMED_ROOT, ec->prop_event, "event",
 		       PROP_TAG_ROOT, ec->w->glw_root->gr_prop_ui,
-		       PROP_TAG_ROOT, ec->w->glw_root->gr_prop_nav,
+		       PROP_TAG_NAMED_ROOT, ec->w->glw_root->gr_prop_nav, "nav",
+		       PROP_TAG_NAMED_ROOT, ec->w->glw_root->gr_prop_core, "core",
 		       NULL);
 
   /* Transform TOKEN_PROPERTY_NAME -> TOKEN_PROPERTY */
@@ -852,7 +856,7 @@ resolve_property_name2(glw_view_eval_context_t *ec, token_t *t)
 {
   switch(t->type) {
   case TOKEN_PROPERTY_NAME:
-    if(resolve_property_name(ec, t))
+    if(resolve_property_name(ec, t, !(t->t_flags & TOKEN_F_CANONICAL_PATH)))
       return NULL;
     /* FALLTHRU */
   case TOKEN_PROPERTY_REF:
@@ -870,6 +874,67 @@ resolve_property_name2(glw_view_eval_context_t *ec, token_t *t)
  *
  */
 static int
+eval_link_assign(glw_view_eval_context_t *ec, struct token *self)
+{
+  token_t *right = eval_pop(ec), *left = eval_pop(ec);
+
+  switch(right->type) {
+  case TOKEN_PROPERTY_NAME:
+    if(resolve_property_name(ec, right, 0))
+      return -1;
+    /* FALLTHRU */
+  case TOKEN_PROPERTY_REF:
+    break;
+  default:
+    break;
+  }
+
+  switch(left->type) {
+  case TOKEN_RESOLVED_ATTRIBUTE:
+    return left->t_attrib->set(ec, left->t_attrib, right);
+
+  case TOKEN_UNRESOLVED_ATTRIBUTE:
+    return glw_view_unresolved_attribute_set(ec, rstr_get(left->t_rstring),
+                                             right);
+
+  case TOKEN_PROPERTY_NAME:
+    if(resolve_property_name(ec, left, 0))
+      return -1;
+    break;
+
+  case TOKEN_IDENTIFIER:
+    if(ec->tgtprop == NULL)
+      return glw_view_seterr(ec->ei, self,
+                             "Invalid link assignment outside block");
+
+    prop_t *p = prop_create_r(ec->tgtprop, rstr_get(left->t_rstring));
+
+    rstr_release(left->t_rstring);
+    left->t_rstring = NULL;
+    left->type = TOKEN_PROPERTY_REF;
+    left->t_prop = p;
+    break;
+
+  case TOKEN_PROPERTY_REF:
+    break;
+
+  default:
+    glw_view_seterr(ec->ei, left,
+		    "Link target '%s' is not a property", token2name(left));
+    return -1;
+  }
+
+  if(right->type == TOKEN_PROPERTY_REF)
+    prop_link_ex(right->t_prop, left->t_prop,
+                 NULL, PROP_LINK_NORMAL, 0);
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
 eval_assign(glw_view_eval_context_t *ec, struct token *self, int how)
 {
   token_t *right = eval_pop(ec), *left = eval_pop(ec);
@@ -879,24 +944,18 @@ eval_assign(glw_view_eval_context_t *ec, struct token *self, int how)
     return glw_view_seterr(ec->ei, self, "Invalid assignment");
 
   /* Catch some special cases here */
-  if(right->type == TOKEN_PROPERTY_NAME &&
-     !strcmp(rstr_get(right->t_rstring), "event")) {
-    /* Assignment from $event, if our eval context has an event use it */
-    if(ec->event == NULL || ec->event->e_type_x != EVENT_KEYDESC)
-      return 0;
-    right = eval_alloc(self, ec, TOKEN_RSTRING);
-    const event_payload_t *ep = (const event_payload_t *)ec->event;
-    right->t_rstring = rstr_alloc(ep->payload);
-  } else if(right->type == TOKEN_BLOCK) {
+  if(right->type == TOKEN_BLOCK) {
     glw_view_eval_context_t n;
 
     memset(&n, 0, sizeof(n));
     n.w = ec->w;
-    n.prop = ec->prop;
+    n.prop_self   = ec->prop_self;
     n.prop_parent = ec->prop_parent;
-    n.prop_viewx = ec->prop_viewx;
-    n.prop_clone = ec->prop_clone;
-    n.prop_args = ec->prop_args;
+    n.prop_view   = ec->prop_view;
+    n.prop_clone  = ec->prop_clone;
+    n.prop_args   = ec->prop_args;
+    n.prop_event  = ec->prop_event;
+
     n.ei = ec->ei;
     n.gr = ec->gr;
     n.rc = ec->rc;
@@ -914,6 +973,9 @@ eval_assign(glw_view_eval_context_t *ec, struct token *self, int how)
 	    left->type == TOKEN_PROPERTY_REF) {
 
     if(right->t_prop != left->t_prop) {
+      TRACE(TRACE_INFO, "GLW",
+            "%s:%d: Prop linking via assignment is deprecated",
+            rstr_get(self->file), self->line);
       prop_link_ex(right->t_prop, left->t_prop,
                    NULL, PROP_LINK_NORMAL, how == 2);
       left->t_flags |= TOKEN_F_PROP_LINK;
@@ -922,12 +984,26 @@ eval_assign(glw_view_eval_context_t *ec, struct token *self, int how)
     eval_push(ec, right);
     return 0;
 
-  } else if((right = token_resolve(ec, right)) == NULL) {
-    return -1;
+  } else {
+
+    if(left->type == TOKEN_RESOLVED_ATTRIBUTE &&
+       (left->t_attrib->flags & GLW_ATTRIB_FLAG_NO_SUBSCRIPTION)) {
+
+      if(right->type == TOKEN_PROPERTY_NAME)
+        if(resolve_property_name(ec, right, 0))
+          return -1;
+
+    } else {
+
+      if((right = token_resolve(ec, right)) == NULL) {
+        return -1;
+      }
+    }
   }
 
   if(left->type == TOKEN_PROPERTY_NAME)
-    if(resolve_property_name(ec, left))
+    if(resolve_property_name(ec, left,
+                             !(left->t_flags & TOKEN_F_CANONICAL_PATH)))
       return -1;
 
   // Conditional assignment: rvalue of (void) results in doing nothing
@@ -985,6 +1061,9 @@ eval_assign(glw_view_eval_context_t *ec, struct token *self, int how)
       break;
     case TOKEN_PROPERTY_REF:
       if(right->t_prop != left->t_prop) {
+        TRACE(TRACE_INFO, "GLW",
+              "%s:%d: Prop linking via assignment is deprecated",
+              rstr_get(self->file), self->line);
 	prop_link_ex(right->t_prop, left->t_prop,
                      NULL, PROP_LINK_NORMAL, how == 2);
         left->t_flags |= TOKEN_F_PROP_LINK;
@@ -1030,8 +1109,8 @@ eval_dynamic(glw_t *w, token_t *rpn, struct glw_rctx *rc,
   ec.w = w;
   ec.gr = w->glw_root;
   ec.rc = rc;
-  ec.prop = prop;
-  ec.prop_viewx = view;
+  ec.prop_self = prop;
+  ec.prop_view = view;
   ec.prop_clone = clone;
 
   ec.sublist = &w->glw_prop_subscriptions;
@@ -1156,11 +1235,11 @@ clone_eval(glw_clone_t *c)
     gc->gc_freeze(c->c_w);
 
   memset(&n, 0, sizeof(n));
-  n.prop = c->c_prop;
+  n.prop_self   = c->c_prop;
   n.prop_parent = sc->sc_originating_prop;
-  n.prop_viewx = sc->sc_view_prop;
-  n.prop_clone = c->c_clone_root;
-  n.prop_args = sc->sc_view_args;
+  n.prop_view   = sc->sc_view_prop;
+  n.prop_clone  = c->c_clone_root;
+  n.prop_args   = sc->sc_view_args;
 
   n.gr = c->c_w->glw_root;
 
@@ -1666,6 +1745,7 @@ prop_callback_cloner(void *opaque, prop_event_t event, ...)
   case PROP_SET_STRING:
   case PROP_REQ_MOVE_CHILD:
   case PROP_ADOPT_RSTRING:
+  case PROP_VALUE_PROP:
     break;
 
   }
@@ -1699,6 +1779,7 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
 
   switch(event) {
   case PROP_SET_VOID:
+  case PROP_SET_DIR:
     t = prop_callback_alloc_token(gr, gps, TOKEN_VOID);
     t->t_propsubr = gps;
     rpn = gps->gps_rpn;
@@ -1708,7 +1789,6 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
     t = prop_callback_alloc_token(gr, gps, TOKEN_RSTRING);
     t->t_propsubr = gps;
     t->t_rstring =rstr_dup(va_arg(ap, rstr_t *));
-    (void)va_arg(ap, prop_t *);
     t->t_rstrtype = va_arg(ap, prop_str_type_t);
     rpn = gps->gps_rpn;
     break;
@@ -1731,7 +1811,7 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
     t = prop_callback_alloc_token(gr, gps, TOKEN_FLOAT);
     t->t_propsubr = gps;
     t->t_float = va_arg(ap, double);
-    (void)va_arg(ap, prop_t *);
+    (void)va_arg(ap, prop_t *); // vauleprop
     t->t_float_how = va_arg(ap, int);
     rpn = gps->gps_rpn;
     break;
@@ -1744,7 +1824,6 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
     rpn = gps->gps_rpn;
     break;
 
-  case PROP_SET_DIR:
   case PROP_SET_PROP:
     t = prop_callback_alloc_token(gr, gps, TOKEN_PROPERTY_REF);
     t->t_propsubr = gps;
@@ -1772,6 +1851,7 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
   case PROP_SET_STRING:
   case PROP_REQ_MOVE_CHILD:
   case PROP_ADOPT_RSTRING:
+  case PROP_VALUE_PROP:
     break;
   }
 
@@ -1847,6 +1927,7 @@ prop_callback_counter(void *opaque, prop_event_t event, ...)
   case PROP_SET_STRING:
   case PROP_REQ_MOVE_CHILD:
   case PROP_ADOPT_RSTRING:
+  case PROP_VALUE_PROP:
     break;
   }
 
@@ -1892,7 +1973,6 @@ ve_cb(void *opaque, prop_event_t event, ...)
   case PROP_SET_RSTRING:
     t = prop_callback_alloc_token(gr, gps, TOKEN_RSTRING);
     t->t_rstring =rstr_dup(va_arg(ap, rstr_t *));
-    (void)va_arg(ap, prop_t *);
     t->t_rstrtype = va_arg(ap, prop_str_type_t);
     rpn = gps->gps_rpn;
     break;
@@ -1912,7 +1992,6 @@ ve_cb(void *opaque, prop_event_t event, ...)
   case PROP_SET_FLOAT:
     t = prop_callback_alloc_token(gr, gps, TOKEN_FLOAT);
     t->t_float = va_arg(ap, double);
-    (void)va_arg(ap, prop_t *);
     t->t_float_how = va_arg(ap, int);
     rpn = gps->gps_rpn;
     break;
@@ -1944,6 +2023,7 @@ ve_cb(void *opaque, prop_event_t event, ...)
   case PROP_SET_STRING:
   case PROP_REQ_MOVE_CHILD:
   case PROP_ADOPT_RSTRING:
+  case PROP_VALUE_PROP:
     break;
   }
 
@@ -2162,7 +2242,6 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
     t = prop_callback_alloc_token(gr, gps, TOKEN_RSTRING);
     t->t_propsubr = gps;
     t->t_rstring =rstr_dup(va_arg(ap, rstr_t *));
-    (void)va_arg(ap, prop_t *);
     t->t_rstrtype = va_arg(ap, prop_str_type_t);
     rpn = gps->gps_rpn;
     break;
@@ -2188,7 +2267,6 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
     t = prop_callback_alloc_token(gr, gps, TOKEN_FLOAT);
     t->t_propsubr = gps;
     t->t_float = va_arg(ap, double);
-    (void)va_arg(ap, prop_t *);
     t->t_float_how = va_arg(ap, int);
     rpn = gps->gps_rpn;
     break;
@@ -2261,6 +2339,7 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
   case PROP_SET_STRING:
   case PROP_REQ_MOVE_CHILD:
   case PROP_ADOPT_RSTRING:
+  case PROP_VALUE_PROP:
     break;
 
   }
@@ -2328,8 +2407,8 @@ subscribe_prop(glw_view_eval_context_t *ec, struct token *self, int type)
 
       sc->sc_have_more = 2;
 
-      sc->sc_originating_prop = prop_ref_inc(ec->prop);
-      sc->sc_view_prop        = prop_ref_inc(ec->prop_viewx);
+      sc->sc_originating_prop = prop_ref_inc(ec->prop_self);
+      sc->sc_view_prop        = prop_ref_inc(ec->prop_view);
       sc->sc_view_args        = prop_ref_inc(ec->prop_args);
 
       TAILQ_INIT(&sc->sc_pending);
@@ -2356,8 +2435,8 @@ subscribe_prop(glw_view_eval_context_t *ec, struct token *self, int type)
   }
 
   gps->gps_type = type;
-  gps->gps_prop = prop_ref_inc(ec->prop);
-  gps->gps_prop_view = prop_ref_inc(ec->prop_viewx);
+  gps->gps_prop = prop_ref_inc(ec->prop_self);
+  gps->gps_prop_view = prop_ref_inc(ec->prop_view);
   gps->gps_prop_clone = prop_ref_inc(ec->prop_clone);
 
   gps->gps_file = rstr_dup(self->file);
@@ -2389,13 +2468,15 @@ subscribe_prop(glw_view_eval_context_t *ec, struct token *self, int type)
 		       PROP_TAG_CALLBACK, cb, gps,
 		       PROP_TAG_NAME_VECTOR, propname,
 		       PROP_TAG_COURIER, w->glw_root->gr_courier,
-		       PROP_TAG_NAMED_ROOT, ec->prop, "self",
+		       PROP_TAG_NAMED_ROOT, ec->prop_self, "self",
 		       PROP_TAG_NAMED_ROOT, ec->prop_parent, "parent",
-		       PROP_TAG_NAMED_ROOT, ec->prop_viewx, "view",
+		       PROP_TAG_NAMED_ROOT, ec->prop_view, "view",
 		       PROP_TAG_NAMED_ROOT, ec->prop_args, "args",
 		       PROP_TAG_NAMED_ROOT, ec->prop_clone, "clone",
+		       PROP_TAG_NAMED_ROOT, ec->prop_event, "event",
 		       PROP_TAG_ROOT, w->glw_root->gr_prop_ui,
-		       PROP_TAG_ROOT, w->glw_root->gr_prop_nav,
+		       PROP_TAG_NAMED_ROOT, w->glw_root->gr_prop_nav, "nav",
+		       PROP_TAG_NAMED_ROOT, w->glw_root->gr_prop_core, "core",
 #ifdef PROP_SUB_RECORD_SOURCE
                        PROP_TAG_SOURCE, rstr_get(self->file), self->line,
 #endif
@@ -2608,6 +2689,11 @@ glw_view_eval_rpn0(token_t *t0, glw_view_eval_context_t *ec)
 	return -1;
       break;
 
+    case TOKEN_LINK_ASSIGNMENT:
+      if(eval_link_assign(ec, t))
+	return -1;
+      break;
+
     default:
       fprintf(stderr, "Can not handle token %s\n", token2name(t));
       abort();
@@ -2629,11 +2715,14 @@ glw_view_eval_rpn(token_t *t, glw_view_eval_context_t *pec, int *copyp)
   memset(&ec, 0, sizeof(ec));
   ec.debug = pec->debug;
   ec.ei = pec->ei;
-  ec.prop = pec->prop;
+
+  ec.prop_self  = pec->prop_self;
   ec.prop_parent = pec->prop_parent;
-  ec.prop_viewx = pec->prop_viewx;
-  ec.prop_clone = pec->prop_clone;
-  ec.prop_args = pec->prop_args;
+  ec.prop_view   = pec->prop_view;
+  ec.prop_clone  = pec->prop_clone;
+  ec.prop_args   = pec->prop_args;
+  ec.prop_event  = pec->prop_event;
+
   ec.w = pec->w;
   ec.rpn = t;
   ec.gr = pec->gr;
@@ -2749,11 +2838,13 @@ glwf_widget(glw_view_eval_context_t *ec, struct token *self,
   c = self->t_func_arg;
 
   memset(&n, 0, sizeof(n));
-  n.prop = ec->prop;
+  n.prop_self   = ec->prop_self;
   n.prop_parent = ec->prop_parent;
-  n.prop_viewx = ec->prop_viewx;
-  n.prop_clone = ec->prop_clone;
-  n.prop_args = ec->prop_args;
+  n.prop_view   = ec->prop_view;
+  n.prop_clone  = ec->prop_clone;
+  n.prop_args   = ec->prop_args;
+  n.prop_event  = ec->prop_event;
+
   n.ei = ec->ei;
   n.gr = ec->gr;
   n.rc = ec->rc;
@@ -2763,8 +2854,8 @@ glwf_widget(glw_view_eval_context_t *ec, struct token *self,
     c->gc_freeze(n.w);
 
   if(n.w->glw_class->gc_set_roots != NULL)
-    n.w->glw_class->gc_set_roots(n.w,
-                                 ec->prop, ec->prop_parent, ec->prop_clone);
+    n.w->glw_class->gc_set_roots(n.w, ec->prop_self, ec->prop_parent,
+                                 ec->prop_clone);
 
   n.sublist = &n.w->glw_prop_subscriptions;
 
@@ -2922,16 +3013,18 @@ glwf_style0(glw_view_eval_context_t *ec, struct token *self,
                            "expected block");
 
   memset(&n, 0, sizeof(n));
-  n.prop = ec->prop;
+  n.prop_self   = ec->prop_self;
   n.prop_parent = ec->prop_parent;
-  n.prop_viewx = ec->prop_viewx;
-  n.prop_clone = ec->prop_clone;
-  n.prop_args = ec->prop_args;
+  n.prop_view   = ec->prop_view;
+  n.prop_clone  = ec->prop_clone;
+  n.prop_args   = ec->prop_args;
+  n.prop_event  = ec->prop_event;
+
   n.ei = ec->ei;
   n.gr = ec->gr;
 
   glw_style_t *gs = glw_style_create(ec->w, a->t_rstring,
-                                     self->file, self->line);
+                                     self->file, self->line, inherit);
   n.w = (glw_t *)gs;
   n.sublist = &n.w->glw_prop_subscriptions;
 
@@ -3010,7 +3103,7 @@ glwf_space(glw_view_eval_context_t *ec, struct token *self,
 typedef struct glw_event_map_eval_block {
   glw_event_map_t map;
   token_t *block;
-  prop_t *prop;
+  prop_t *prop_self;
   prop_t *prop_parent;
   prop_t *prop_view;
   prop_t *prop_args;
@@ -3032,11 +3125,17 @@ glw_event_map_eval_block_fire(glw_t *w, glw_event_map_t *gem, event_t *src)
   LIST_INIT(&l);
 
   memset(&n, 0, sizeof(n));
-  n.prop = b->prop;
+  n.prop_self   = b->prop_self;
   n.prop_parent = b->prop_parent;
-  n.prop_viewx = b->prop_view;
-  n.prop_clone = b->prop_clone;
-  n.prop_args = b->prop_args;
+  n.prop_view   = b->prop_view;
+  n.prop_clone  = b->prop_clone;
+  n.prop_args   = b->prop_args;
+
+  if(src != NULL && src->e_type == EVENT_PROP_ACTION) {
+    event_prop_action_t *epa = (event_prop_action_t *)src;
+    n.prop_event = epa->p;
+  }
+
   n.gr = w->glw_root;
   n.rc = NULL;
   n.w = w;
@@ -3060,20 +3159,11 @@ glw_event_map_eval_block_dtor(glw_root_t *gr, glw_event_map_t *gem)
 
   glw_view_free_chain(gr, b->block);
 
-  if(b->prop)
-    prop_ref_dec(b->prop);
-
-  if(b->prop_parent)
-    prop_ref_dec(b->prop_parent);
-
-  if(b->prop_view)
-    prop_ref_dec(b->prop_view);
-
-  if(b->prop_args)
-    prop_ref_dec(b->prop_args);
-
-  if(b->prop_clone)
-    prop_ref_dec(b->prop_clone);
+  prop_ref_dec(b->prop_self);
+  prop_ref_dec(b->prop_parent);
+  prop_ref_dec(b->prop_view);
+  prop_ref_dec(b->prop_args);
+  prop_ref_dec(b->prop_clone);
 
   free(b);
 }
@@ -3087,13 +3177,13 @@ static glw_event_map_t *
 glw_event_map_eval_block_create(glw_view_eval_context_t *ec,
 				struct token *block)
 {
-  glw_event_map_eval_block_t *b = malloc(sizeof(glw_event_map_eval_block_t));
+  glw_event_map_eval_block_t *b = calloc(1, sizeof(glw_event_map_eval_block_t));
 
   b->block = glw_view_clone_chain(ec->gr, block, NULL);
 
-  b->prop        = prop_ref_inc(ec->prop);
+  b->prop_self   = prop_ref_inc(ec->prop_self);
   b->prop_parent = prop_ref_inc(ec->prop_parent);
-  b->prop_view   = prop_ref_inc(ec->prop_viewx);
+  b->prop_view   = prop_ref_inc(ec->prop_view);
   b->prop_clone  = prop_ref_inc(ec->prop_clone);
   b->prop_args   = prop_ref_inc(ec->prop_args);
 
@@ -3115,7 +3205,7 @@ glwf_onEvent(glw_view_eval_context_t *ec, struct token *self,
   token_t *a = argc > 0 ? argv[0] : NULL;  /* Source */
   token_t *b = argc > 1 ? argv[1] : NULL;  /* Target */
   token_t *c = argc > 2 ? argv[2] : NULL;  /* Enabled */
-  int action, enabled;
+  int enabled;
   glw_t *w = ec->w;
   glw_event_map_t *gem;
 
@@ -3126,25 +3216,15 @@ glwf_onEvent(glw_view_eval_context_t *ec, struct token *self,
   if(a == NULL || b == NULL)
     return glw_view_seterr(ec->ei, self, "Missing operands");
 
-  if(a->type != TOKEN_IDENTIFIER)
+  rstr_t *filter = token2rstr(a);
+  if(filter == NULL)
     return glw_view_seterr(ec->ei, a, "Invalid source event type");
 
-  if(!strcmp(rstr_get(a->t_rstring), "KeyCode")) {
-    action = GLW_EVENT_KEYCODE;
-  } else if(!strcmp(rstr_get(a->t_rstring), "GainedFocus")) {
-    action = GLW_EVENT_GAINED_FOCUS;
-  } else if(!strcmp(rstr_get(a->t_rstring), "LostFocus")) {
-    action = GLW_EVENT_LOST_FOCUS;
-  } else {
-    action = action_str2code(rstr_get(a->t_rstring));
-
-    if(action < 0)
-      return glw_view_seterr(ec->ei, a, "Invalid source event type");
-  }
-
   if(c != NULL) {
-    if((c = token_resolve(ec, c)) == NULL)
+    if((c = token_resolve(ec, c)) == NULL) {
+      rstr_release(filter);
       return -1;
+    }
     enabled = token2bool(c);
   } else {
     enabled = 1;
@@ -3169,15 +3249,17 @@ glwf_onEvent(glw_view_eval_context_t *ec, struct token *self,
       goto disable;
 
     default:
+      rstr_release(filter);
       return glw_view_seterr(ec->ei, a, "onEvent: Second arg is invalid");
     }
 
-    gem->gem_action = action;
+    gem->gem_action = filter;
     glw_event_map_add(w, gem);
     return 0;
   }
  disable:
-  glw_event_map_remove_by_action(w, action);
+  glw_event_map_remove_by_action(w, rstr_get(filter));
+  rstr_release(filter);
   return 0;
 }
 
@@ -3543,16 +3625,18 @@ glwf_event(glw_view_eval_context_t *ec, struct token *self,
 	   token_t **argv, unsigned int argc)
 {
   token_t *a, *r;
-  int action;
 
-  a = argv[0];
+  if((a = token_resolve(ec, argv[0])) == NULL)
+    return -1;
 
-  if(a->type != TOKEN_IDENTIFIER ||
-     (action = action_str2code(rstr_get(a->t_rstring))) < 0)
-    return glw_view_seterr(ec->ei, a, "event(): Invalid target event");
-
-  r = eval_alloc(self, ec, TOKEN_EVENT);
-  r->t_gem = glw_event_map_internal_create(NULL, action, 0);
+  const char *action = token_as_string(a);
+  if(action == NULL) {
+    r = eval_alloc(self, ec, TOKEN_VOID);
+  } else {
+    event_t *e = event_create_action_str(action);
+    r = eval_alloc(self, ec, TOKEN_EVENT);
+    r->t_gem = glw_event_map_external_create(e);
+  }
   eval_push(ec, r);
   return 0;
 }
@@ -4459,10 +4543,11 @@ glwf_createchild(glw_view_eval_context_t *ec, struct token *self,
   propname_to_array(propname, a);
 
   p = prop_get_by_name(propname, 1,
-		       PROP_TAG_NAMED_ROOT, ec->prop, "self",
+		       PROP_TAG_NAMED_ROOT, ec->prop_self, "self",
 		       PROP_TAG_NAMED_ROOT, ec->prop_parent, "parent",
 		       PROP_TAG_ROOT, ec->w->glw_root->gr_prop_ui,
-		       PROP_TAG_ROOT, ec->w->glw_root->gr_prop_nav,
+		       PROP_TAG_NAMED_ROOT, ec->w->glw_root->gr_prop_nav, "nav",
+		       PROP_TAG_NAMED_ROOT, ec->w->glw_root->gr_prop_core, "core",
 		       NULL);
 
   if(p != NULL) {
@@ -4485,7 +4570,7 @@ glwf_delete(glw_view_eval_context_t *ec, struct token *self,
 
   switch(a->type) {
   case TOKEN_PROPERTY_NAME:
-    if(resolve_property_name(ec, a))
+    if(resolve_property_name(ec, a, !(a->t_flags & TOKEN_F_CANONICAL_PATH)))
       return -1;
 
   case TOKEN_PROPERTY_REF:
@@ -4709,8 +4794,8 @@ glwf_bind(glw_view_eval_context_t *ec, struct token *self,
 
     if(ec->w->glw_class->gc_bind_to_property != NULL)
       ec->w->glw_class->gc_bind_to_property(ec->w,
-					    ec->prop, propname,
-					    ec->prop_viewx, ec->prop_args,
+					    ec->prop_self, propname,
+					    ec->prop_view, ec->prop_args,
 					    ec->prop_clone);
 
   } else if(a != NULL && a->type == TOKEN_RSTRING) {
@@ -5127,11 +5212,11 @@ glwf_isLink(glw_view_eval_context_t *ec, struct token *self,
 
 
 /**
- * Create a link given two arguments (title + url)
+ * Create a URI given two arguments (title + URI)
  */
 static int
-glwf_link(glw_view_eval_context_t *ec, struct token *self,
-	    token_t **argv, unsigned int argc)
+glwf_makeUri(glw_view_eval_context_t *ec, struct token *self,
+             token_t **argv, unsigned int argc)
 {
   token_t *a, *b, *r;
   if((a = token_resolve(ec, argv[0])) == NULL)
@@ -6565,6 +6650,60 @@ glwf_focus(glw_view_eval_context_t *ec, struct token *self,
 }
 
 
+/**
+ *
+ */
+static int
+glwf_toggle(glw_view_eval_context_t *ec, struct token *self,
+            token_t **argv, unsigned int argc)
+{
+  token_t *a = argv[0];
+
+  if(resolve_property_name(ec, a, 0))
+    return -1;
+
+  if(a->type == TOKEN_PROPERTY_REF)
+    prop_toggle_int(a->t_prop);
+
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
+glwf_eventWithProp(glw_view_eval_context_t *ec, struct token *self,
+                   token_t **argv, unsigned int argc)
+{
+  token_t *a, *b;
+
+  if((a = token_resolve(ec, argv[0])) == NULL)
+    return -1;
+  if((b = resolve_property_name2(ec, argv[1])) == NULL)
+    return -1;
+
+  rstr_t *name = token2rstr(a);
+  if(name == NULL)
+    return glw_view_seterr(ec->ei, a,
+                           "eventWithProp(): First arg is not a string");
+
+  if(b->type != TOKEN_PROPERTY_REF)
+    return glw_view_seterr(ec->ei, b, "eventWithProp(): "
+                           "Second argument is not a property");
+
+  token_t *r = eval_alloc(self, ec, TOKEN_EVENT);
+
+  event_t *ev = event_create_prop_action(b->t_prop, name);
+
+  r->t_gem = glw_event_map_external_create(ev);
+  eval_push(ec, r);
+  rstr_release(name);
+  return 0;
+}
+
+
+
 #ifndef NDEBUG
 /**
  *
@@ -6652,7 +6791,7 @@ static const token_func_t funcvec[] = {
   {"fmt", -1, glwf_fmt},
   {"_pl", 3, glwf_pluralise},
   {"multiopt", -1, glwf_multiopt, glwf_multiopt_ctor, glwf_multiopt_dtor},
-  {"link", 2, glwf_link},
+  {"makeUri", 2, glwf_makeUri},
   {"canSelectNext", 0, glwf_canSelectNext},
   {"canSelectPrevious", 0, glwf_canSelectPrev},
   {"setDefaultFont", 1, glwf_setDefaultFont},
@@ -6664,7 +6803,8 @@ static const token_func_t funcvec[] = {
   {"propName", 1, glwf_propName},
   {"propSelect", 1, glwf_propSelect},
   {"focus", 1, glwf_focus},
-
+  {"toggle", 1, glwf_toggle},
+  {"eventWithProp", 2, glwf_eventWithProp},
 #ifndef NDEBUG
   {"dumpDynamicStatements", 0, glwf_dumpdynamicstatements},
 #endif

@@ -27,6 +27,7 @@
 #include "arch/atomic.h"
 
 struct prop;
+struct rstr;
 
 typedef enum {
 
@@ -129,50 +130,39 @@ typedef enum {
 
 
 
+/**
+ * These numbers are sent over the wire (STPP) so don't change them
+ */
 typedef enum {
-  EVENT_OFFSET = 5000,
-  EVENT_ACTION_VECTOR,
-  EVENT_UNICODE,
-  EVENT_KEYDESC,
-  EVENT_AUDIO_CLOCK,
-  EVENT_VIDEO_CLOCK,
-  EVENT_PLAYQUEUE_JUMP,
-  EVENT_PLAYQUEUE_JUMP_AND_PAUSE,
-  EVENT_TV,            /* TV specific events, see tv.h */
-  EVENT_SEEK,
-  EVENT_DELTA_SEEK_REL,
-  EVENT_EOF,           /* End of file */
-  EVENT_PLAY_URL,
-  EVENT_EXIT,
-  EVENT_DVD_PCI,
-  EVENT_DVD_SELECT_BUTTON,
-  EVENT_DVD_ACTIVATE_BUTTON,  /* "Press" button */
-  EVENT_OPENURL,
-  EVENT_PLAYTRACK,            /* For playqueue */
-
-  EVENT_INTERNAL_PAUSE,       // Carries a string as a reason
-
-  EVENT_CURRENT_TIME,
-
-  EVENT_SELECT_AUDIO_TRACK,
-  EVENT_SELECT_SUBTITLE_TRACK,
-
-  EVENT_PLAYBACK_PRIORITY,   // 0 = best, higher value == less important 
-
-  EVENT_STOP_UI,
-
-  EVENT_HOLD,
-
-  EVENT_REPAINT_UI,
-
-  EVENT_REOPEN,
-
-  EVENT_REDIRECT,
-
-  EVENT_PROPREF,
-
-  EVENT_DYNAMIC_ACTION,
-
+  EVENT_ACTION_VECTOR                 = 1,
+  EVENT_UNICODE                       = 2,
+  EVENT_KEYDESC                       = 3,
+  EVENT_PLAYQUEUE_JUMP                = 4,
+  EVENT_PLAYQUEUE_JUMP_AND_PAUSE      = 5,
+  EVENT_SEEK                          = 6,
+  EVENT_DELTA_SEEK_REL                = 7,
+  EVENT_EOF                           = 8,
+  EVENT_PLAY_URL                      = 9,
+  EVENT_EXIT                          = 10,
+  EVENT_DVD_PCI                       = 11,
+  EVENT_DVD_SELECT_BUTTON             = 12,
+  EVENT_DVD_ACTIVATE_BUTTON           = 13, // "Press" button
+  EVENT_OPENURL                       = 14,
+  EVENT_PLAYTRACK                     = 15, // For playqueue
+  EVENT_INTERNAL_PAUSE                = 16, // Carries a string as a reason
+  EVENT_CURRENT_TIME                  = 17,
+  EVENT_SELECT_AUDIO_TRACK            = 18,
+  EVENT_SELECT_SUBTITLE_TRACK         = 19,
+  EVENT_PLAYBACK_PRIORITY             = 20, // 0 = best
+  EVENT_STOP_UI                       = 21,
+  EVENT_HOLD                          = 22,
+  EVENT_REPAINT_UI                    = 23,
+  EVENT_REOPEN                        = 24,
+  EVENT_REDIRECT                      = 25,
+  EVENT_PROPREF                       = 26,
+  EVENT_DYNAMIC_ACTION                = 27,
+  EVENT_MAKE_SCREENSHOT               = 28,
+  EVENT_PROP_ACTION                   = 29,
 } event_type_t;
 
 
@@ -189,7 +179,7 @@ typedef struct event {
 #define EVENT_MAPPED 0x1
 #define EVENT_KEYPRESS 0x2 // Came from user keypress
   struct prop *e_nav;
-  event_type_t e_type_x;
+  event_type_t e_type;
   void (*e_dtor)(struct event *e);
   TAILQ_ENTRY(event) e_link;
 } event_t;
@@ -287,8 +277,8 @@ typedef struct event_playurl_args {
  */
 typedef struct event_select_track {
   event_t h;
-  int manual;   /* Set iff it was initiated by user, 
-		   otherwise it was suggested by showtime itself */
+  int manual;   /* Set iff it was initiated by user,
+		   otherwise it was suggested automatically */
   char *id;
 } event_select_track_t;
 
@@ -321,6 +311,16 @@ typedef struct event_prop {
   event_t h;
   struct prop *p;
 } event_prop_t;
+
+
+/**
+ *
+ */
+typedef struct event_prop_action {
+  event_t h;
+  struct prop *p;
+  struct rstr *action;
+} event_prop_action_t;
 
 void event_generic_dtor(event_t *e);
 
@@ -364,13 +364,15 @@ event_t *event_create_select_track(const char *id, event_type_t type,
 
 event_t *event_create_prop(event_type_t type, struct prop *p);
 
+event_t *event_create_prop_action(struct prop *p, struct rstr *action);
+
 const char *action_code2str(action_type_t code);
 
 action_type_t action_str2code(const char *str);
 
 int action_update_hold_by_event(int hold, event_t *e);
 
-#define event_is_type(e, et) ((e)->e_type_x == (et))
+#define event_is_type(e, et) ((e)->e_type == (et))
 
 int event_is_action(event_t *e, action_type_t at);
 
@@ -380,6 +382,8 @@ event_t *event_from_Fkey(unsigned int keynum, unsigned int mod);
 
 void event_to_ui(event_t *e);
 
+#if 1
 const char *event_sprint(const event_t *e);
+#endif
 
 #endif /* EVENT_H */

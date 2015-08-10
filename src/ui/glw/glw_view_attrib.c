@@ -605,6 +605,33 @@ glw_set_align(glw_t *w, int v, glw_style_t *origin)
   }
 }
 
+
+/**
+ *
+ */
+void
+glw_set_hidden(glw_t *w, int v, glw_style_t *origin)
+{
+  if(unlikely(w->glw_class->gc_set_hidden != NULL)) {
+    w->glw_class->gc_set_hidden(w, v, origin);
+    return;
+  }
+
+  if(v) {
+    if(w->glw_flags & GLW_HIDDEN)
+      return;
+
+    glw_hide(w);
+  } else {
+    if(!(w->glw_flags & GLW_HIDDEN))
+      return;
+    glw_unhide(w);
+  }
+  glw_need_refresh(w->glw_root, 0);
+  return;
+}
+
+
 /**
  *
  */
@@ -968,19 +995,7 @@ mod_hidden(glw_view_eval_context_t *ec, const token_attrib_t *a,
     return glw_view_seterr(ec->ei, t, "Invalid assignment for attribute %s",
 			    a->name);
 
-  glw_t *w = ec->w;
-
-  if(v) {
-    if(w->glw_flags & GLW_HIDDEN)
-      return 0;
-
-    glw_hide(w);
-  } else {
-    if(!(w->glw_flags & GLW_HIDDEN))
-      return 0;
-    glw_unhide(w);
-  }
-  glw_need_refresh(w->glw_root, 0);
+  glw_set_hidden(ec->w, v, NULL);
   return 0;
 }
 
@@ -1181,7 +1196,9 @@ set_propref(glw_view_eval_context_t *ec, const token_attrib_t *a,
 			   "Attribute '%s' expects a property ref, got %s",
 			   a->name, token2name(t));
 
-  ec->w->glw_class->gc_set_prop(ec->w, a->attrib, t->t_prop);
+  prop_t *p = prop_get_prop(t->t_prop);
+  ec->w->glw_class->gc_set_prop(ec->w, a->attrib, p);
+  prop_ref_dec(p);
   return 0;
 }
 
@@ -1295,7 +1312,6 @@ static const token_attrib_t attribtab[] = {
   {"autofade",              mod_flag, GLW2_AUTOFADE,               mod_flags2},
   {"automargin",            mod_flag, GLW2_AUTOMARGIN,             mod_flags2},
   {"expediteSubscriptions", mod_flag, GLW2_EXPEDITE_SUBSCRIPTIONS, mod_flags2},
-  {"reverseRender",         mod_flag, GLW2_REVERSE_RENDER,         mod_flags2},
   {"navWrap",               mod_flag, GLW2_NAV_WRAP,               mod_flags2},
   {"autoFocusLimit",        mod_flag, GLW2_AUTO_FOCUS_LIMIT,       mod_flags2},
   {"cursor",                mod_flag, GLW2_CURSOR,                 mod_flags2},
@@ -1397,10 +1413,14 @@ static const token_attrib_t attribtab[] = {
   {"effect",          set_transition_effect,  0},
 
   {"args",            set_args,  0},
-  {"parent",          set_propref, GLW_ATTRIB_PROP_PARENT},
-  {"self",            set_propref, GLW_ATTRIB_PROP_SELF},
-  {"model",           set_propref, GLW_ATTRIB_PROP_MODEL},
-  {"origin",          set_propref, GLW_ATTRIB_PROP_ORIGIN},
+  {"parent",          set_propref, GLW_ATTRIB_PROP_PARENT, NULL,
+   GLW_ATTRIB_FLAG_NO_SUBSCRIPTION},
+  {"self",            set_propref, GLW_ATTRIB_PROP_SELF, NULL,
+   GLW_ATTRIB_FLAG_NO_SUBSCRIPTION},
+  {"model",           set_propref, GLW_ATTRIB_PROP_MODEL, NULL,
+   GLW_ATTRIB_FLAG_NO_SUBSCRIPTION},
+  {"origin",          set_propref, GLW_ATTRIB_PROP_ORIGIN, NULL,
+   GLW_ATTRIB_FLAG_NO_SUBSCRIPTION},
 };
 
 
