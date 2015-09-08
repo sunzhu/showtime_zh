@@ -364,14 +364,14 @@ asyncio_dopoll(void)
   if(timeout == INT32_MAX)
     timeout = -1;
 
-  poll(fds, n, timeout);
+  int err = poll(fds, n, timeout);
 
   async_now = arch_get_ts();
 
   for(int i = 0; i < n; i++) {
     af = afds[i];
 
-    if(!(af->af_callback && fds[i].revents))
+    if(af->af_callback == NULL)
       continue;
 
     if(fds[i].revents & POLLHUP) {
@@ -379,23 +379,28 @@ asyncio_dopoll(void)
       continue;
     }
 
-    if(fds[i].revents & POLLERR) {
+    if(fds[i].revents & POLLERR || err < 0) {
       int err;
       socklen_t errlen = sizeof(int);
 
       if(getsockopt(af->af_fd, SOL_SOCKET, SO_ERROR, (void *)&err, &errlen)) {
-        TRACE(TRACE_ERROR, "ASYNCIO", "getsockopt failed for 0x%x -- %d",
-              af->af_fd, errno);
+        TRACE(TRACE_ERROR, "ASYNCIO", "getsockopt failed for 0x%x -- %s",
+              af->af_fd, strerror(errno));
+        af->af_callback(af, af->af_opaque, ASYNCIO_ERROR, ENOBUFS);
       } else {
-        af->af_callback(af, af->af_opaque, ASYNCIO_ERROR, err);
+        if(err) {
+          af->af_callback(af, af->af_opaque, ASYNCIO_ERROR, err);
+          continue;
+        }
       }
-      continue;
     }
 
-    af->af_callback(af,
-                    af->af_opaque,
-                    (fds[i].revents & POLLIN  ? ASYNCIO_READ  : 0) |
-                    (fds[i].revents & POLLOUT ? ASYNCIO_WRITE : 0), 0);
+    const int events =
+      (fds[i].revents & POLLIN  ? ASYNCIO_READ  : 0) |
+      (fds[i].revents & POLLOUT ? ASYNCIO_WRITE : 0);
+
+    if(events)
+      af->af_callback(af, af->af_opaque, events, 0);
 
     if(0) {
       int64_t now = arch_get_ts();

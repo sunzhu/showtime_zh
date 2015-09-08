@@ -33,6 +33,13 @@ widget(container_z, {
     alpha: iir(1 - $ui.fullwindow, 4);
   });
 
+  widget(loader, {
+    zoffset: -999;
+    alpha: iir($nav.currentpage.model.loading, 8);
+    source: selectedElement(vectorize($core.glw.views.standard.loading))
+      ?? "loading.view";
+  });
+
   widget(underscan, {
     widget(container_z, {
 
@@ -66,6 +73,12 @@ widget(container_z, {
             autohide: true;
 	    source: select($ui.logwindow, "log.view", "");
 	  });
+
+          widget(loader, {
+            autohide: true;
+	    source: select($ui.osk.show, "osk.view", "");
+	  });
+
         });
 
         widget(container_y, {
