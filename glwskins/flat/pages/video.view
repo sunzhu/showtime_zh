@@ -11,18 +11,19 @@ delta($ui.fullwindow, isVisible());
 
 $self.directClose = 1;
 $self.close = $self.media.playstatus == "stop";
-$view.osdpage = 0;
+$clone.osdpage = 0;
 
 onEvent(back, {
-  $view.osdpage = select($view.osdpage > 1, 1, 0);
-}, $view.osdpage);
+  $clone.osdpage = translate($clone.osdpage, 1
+                             , 1, 0  // Main -> No OSD
+                             , 6, 3
+                             , 7, 4
+                             );
+}, $clone.osdpage);
 
-onEvent(cancel, {
-  $view.osdpage = select($view.osdpage > 1, 1, 0);
-}, $view.osdpage);
 
 onEvent(MediaStats, {
-  $view.osdpage = select($view.osdpage == 2, 0, 2);
+  $clone.osdpage = select($clone.osdpage == 2, 0, 2);
 });
 
 widget(container_z, {
@@ -48,39 +49,42 @@ widget(container_z, {
     onEvent(down,  deliverEvent($self.media.eventSink, "VolumeDown"));
 
     onEvent(activate, {
-      $view.osdpage = !$view.osdpage;
+      toggle($clone.osdpage);
     });
   });
 
 
   widget(container_y, {
 
-    alpha: iir(translate($view.osdpage, 0,
-                         0, changed($self.media.seektime, 5, true),
+    padding: [4em, 1em];
+
+    alpha: iir(translate($clone.osdpage, 0,
+                         0, $ui.pointerVisible || changed($self.media.seektime, 5, true),
                          1, 1), 4);
+
+    widget(label, {
+      caption: $self.media.metadata.title;
+    });
 
     widget(container_x, {
       height: 8em;
-      padding: [4em, 1em];
 
       filterConstraintX: true;
       spacing: 1em;
-      widget(image, {
-        $view.iconWidth = getWidth();
-        aspectConstraint: true;
-        source: $self.media.metadata.icon;
+      widget(container_y, {
+        width: 10em;
+
+        widget(image, {
+          align: topLeft;
+          height: 6em;
+          source: $self.media.metadata.icon;
+        });
       });
 
 
       widget(container_y, {
         filterConstraintX: true;
         spacing: 3;
-
-        widget(label, {
-          size: 1.5em;
-	  caption: $self.media.metadata.title;
-          shadow: true;
-        });
 
         widget(container_x, {
           spacing: 0.5em;
@@ -105,19 +109,6 @@ widget(container_z, {
                     additive: true;
                   });
                 });
-
-                widget(clip, {
-
-                  clipping: [0, 0,
-                             1 - ($self.media.currenttime /
-                                  $self.media.metadata.duration),
-                             0];
-
-                  widget(quad, {
-                    alpha: 0.9;
-                    additive: true;
-                  });
-                });
               });
             });
 
@@ -125,8 +116,17 @@ widget(container_z, {
               focusable: 0.1;
               bind($self.media.currenttime);
               max: $self.media.metadata.duration;
-              widget(quad, {
-                // Add something clever here
+              widget(icon, {
+                source: "skin://icons/dot.png";
+              });
+              widget(container_y, {
+                space(1);
+                widget(quad, {
+                  height: 3;
+                  alpha: 0.9;
+                  additive: true;
+                });
+                space(1);
               });
             });
           });
@@ -144,18 +144,19 @@ widget(container_z, {
 
   widget(container_y, {
 
-    widget(deck, {
+    widget(loader, {
 
-      space(1);
-
-#import "skin://osd/osd_main.view"
-#import "skin://osd/osd_info.view"
-#import "skin://osd/osd_subs.view"
-#import "skin://osd/osd_settings_subs.view"
-#import "skin://osd/osd_settings_audio.view"
-#import "skin://osd/osd_settings_video.view"
-
-      page: $view.osdpage;
+      source: translate($clone.osdpage,
+                        select($ui.pointerVisible,
+                               "skin://osd/osd_main.view",
+                               ""),
+                        1, "skin://osd/osd_main.view",
+                        2, "skin://osd/osd_info.view",
+                        3, "skin://osd/osd_settings_subs.view",
+                        4, "skin://osd/osd_settings_audio.view",
+                        5, "skin://osd/osd_settings_video.view",
+                        6, "skin://osd/osd_subs.view",
+                        7, "skin://osd/osd_audio.view");
     });
     space(1);
   });

@@ -110,6 +110,19 @@ make_trampoline(const char *title, void *(*func)(void *), void *aux,
   return t;
 }
 
+
+static __thread const char *my_thread_name;
+
+/**
+ *
+ */
+const char *
+hts_thread_name(char *buf, size_t len)
+{
+  return my_thread_name ?: "no-name-set";
+}
+
+
 /**
  *
  */
@@ -121,6 +134,8 @@ thread_trampoline(void *aux)
 
   JNIEnv *jenv = NULL;
   (*JVM)->AttachCurrentThread(JVM, &jenv, NULL);
+
+  my_thread_name = t->title;
 
   r = t->func(t->aux);
 
@@ -154,8 +169,8 @@ hts_thread_create_detached(const char *title, void *(*func)(void *), void *aux,
 		 make_trampoline(title, func, aux, prio));
   pthread_attr_destroy(&attr);
   if(gconf.enable_thread_debug)
-    trace(TRACE_NO_PROP, TRACE_DEBUG,
-          "thread", "Created detached thread: %s", title);
+    tracelog(TRACE_NO_PROP, TRACE_DEBUG,
+             "thread", "Created detached thread: %s", title);
 
 }
 
@@ -171,6 +186,6 @@ hts_thread_create_joinable(const char *title, hts_thread_t *p,
   pthread_attr_destroy(&attr);
 
   if(gconf.enable_thread_debug)
-    trace(TRACE_NO_PROP, TRACE_DEBUG,
-          "thread", "Created thread: %s", title);
+    tracelog(TRACE_NO_PROP, TRACE_DEBUG,
+               "thread", "Created thread: %s", title);
 }
