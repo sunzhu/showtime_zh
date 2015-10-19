@@ -50,7 +50,9 @@
 
 // Beware: If you bump these over 16 remember to fix bitmasks too
 #define NUM_CLIPPLANES 6
-#define NUM_FADERS 6
+
+#define NUM_FADERS 0
+#define NUM_STENCILERS 0
 
 #define GLW_CURSOR_AUTOHIDE_TIME 3000000
 
@@ -84,25 +86,13 @@ TAILQ_HEAD(glw_view_load_request_queue, glw_view_load_request);
 
 // ------------------- Math mode -----------------
 
-// all supported apple devices should support SSE
-#if (defined(__x86_64) || defined(__APPLE__)) && !defined(__llvm__)
-#define ENABLE_GLW_MATH_SSE 0
-#else
-#define ENABLE_GLW_MATH_SSE 0
-#endif
-
-#if ENABLE_GLW_MATH_SSE
-#include <xmmintrin.h>
-typedef __m128 Mtx[4];
-typedef __m128 Vec4;
-typedef __m128 Vec3;
-typedef __m128 Vec2;
-#else
-typedef float Mtx[16];
 typedef float Vec4[4];
 typedef float Vec3[3];
-typedef float Vec2[2];
-#endif
+
+
+typedef struct {
+  Vec4 r[4];
+} Mtx;
 
 // ------------------ Helpers ----------------------------
 
@@ -179,7 +169,6 @@ typedef enum {
   GLW_ATTRIB_SCALING,
   GLW_ATTRIB_TRANSLATION,
   GLW_ATTRIB_ROTATION,
-  GLW_ATTRIB_CLIPPING,
   GLW_ATTRIB_PLANE,
   GLW_ATTRIB_MARGIN,
   GLW_ATTRIB_BORDER,
@@ -246,6 +235,12 @@ typedef enum {
   GLW_POINTER_LEFT_RELEASE,
   GLW_POINTER_RIGHT_PRESS,
   GLW_POINTER_RIGHT_RELEASE,
+
+  GLW_POINTER_TOUCH_START,
+  GLW_POINTER_TOUCH_MOVE,
+  GLW_POINTER_TOUCH_END,
+  GLW_POINTER_TOUCH_CANCEL,
+
   GLW_POINTER_MOTION_UPDATE,  // Updated (mouse did really move)
   GLW_POINTER_MOTION_REFRESH, // GLW Internal refresh (every frame)
   GLW_POINTER_FOCUS_MOTION,
@@ -259,7 +254,7 @@ typedef struct glw_pointer_event {
   float delta_x;
   float delta_y;
   glw_pointer_event_type_t type;
-  int flags;
+  int64_t ts;
 } glw_pointer_event_t;
 
 
@@ -854,6 +849,8 @@ typedef struct glw_root {
   struct glw *gr_pointer_grab;
   struct glw *gr_pointer_hover;
   struct glw *gr_pointer_press;
+  float gr_pointer_press_x;
+  float gr_pointer_press_y;
   struct glw *gr_current_focus;
   struct glw *gr_last_focus;
   int gr_delayed_focus_leave;
@@ -889,31 +886,30 @@ typedef struct glw_root {
    * Rendering
    */
   Vec4 gr_clip[NUM_CLIPPLANES];
+  float gr_clip_alpha_out[NUM_CLIPPLANES];
+  float gr_clip_sharpness_out[NUM_CLIPPLANES];
+
   int gr_active_clippers;
 
+  char gr_need_sw_clip;          /* Set if software clipping is needed
+				    at the moment */
+
+
+#if NUM_STENCILERS > 0
   int16_t gr_stencil_border[4];
   float gr_stencil_edge[4];
   int16_t gr_stencil_width;
   int16_t gr_stencil_height;
   Vec4 gr_stencil[2];
   const struct glw_backend_texture *gr_stencil_texture;
-
+#endif
+  
+#if NUM_FADERS > 0
   Vec4 gr_fader[NUM_FADERS];
   float gr_fader_alpha[NUM_FADERS];
   float gr_fader_blur[NUM_FADERS];
-
   int gr_active_faders;
-
-
-  char gr_need_sw_clip;          /* Set if software clipping is needed
-				    at the moment */
-
-
-  void (*gr_set_hw_clipper)(const struct glw_rctx *rc, int which,
-			    const Vec4 vec);
-  void (*gr_clr_hw_clipper)(int which);
-
-
+#endif
 
   int gr_num_render_jobs;
   int gr_render_jobs_capacity;
@@ -1290,27 +1286,32 @@ int glw_focus_child(glw_t *w);
  * Clipping
  */
 typedef enum {
-  GLW_CLIP_TOP,
-  GLW_CLIP_BOTTOM,
   GLW_CLIP_LEFT,
+  GLW_CLIP_TOP,
   GLW_CLIP_RIGHT,
+  GLW_CLIP_BOTTOM,
 } glw_clip_boundary_t;
 
 int glw_clip_enable(glw_root_t *gr, const glw_rctx_t *rc,
-		    glw_clip_boundary_t gcb, float distance);
+		    glw_clip_boundary_t gcb, float distance,
+                    float alpha_out, float sharpness_out);
 
 void glw_clip_disable(glw_root_t *gr, int which);
 
+#if NUM_FADERS > 0
 int glw_fader_enable(glw_root_t *gr, const glw_rctx_t *rc, const float *plane,
 		     float alphafo, float blurfo);
 
 void glw_fader_disable(glw_root_t *gr, int which);
+#endif
 
+#if NUM_STENCILERS > 0
 void glw_stencil_enable(glw_root_t *gr, const glw_rctx_t *rc,
 			const struct glw_backend_texture *tex,
 			const int16_t *border);
 
 void glw_stencil_disable(glw_root_t *gr);
+#endif
 
 void glw_lp(float *v, glw_root_t *gr, float t, float alpha);
 
@@ -1350,7 +1351,7 @@ const char *glw_get_path(glw_t *w);
 
 void glw_print_tree(glw_t *w);
 
-int glw_widget_unproject(Mtx m, float *xp, float *yp,
+int glw_widget_unproject(const Mtx *m, float *xp, float *yp,
 			 const Vec3 p, const Vec3 dir);
 
 glw_t *glw_create(glw_root_t *gr, const glw_class_t *class,
@@ -1556,7 +1557,7 @@ void glw_reset_screensaver(glw_root_t *gr);
 
 int glw_image_get_details(glw_t *w, char *path, size_t pathlen, float *alpha);
 
-void glw_project_matrix(glw_rect_t *r, const Mtx m, const glw_root_t *gr);
+void glw_project_matrix(glw_rect_t *r, const Mtx *m, const glw_root_t *gr);
 
 void glw_project(glw_rect_t *r, const glw_rctx_t *rc, const glw_root_t *gr);
 

@@ -38,7 +38,7 @@ glw_vtmp_resize(glw_root_t *gr, int num_float)
 }
 
 /**
- * 
+ *
  */
 void
 glw_renderer_init(glw_renderer_t *gr, int num_vertices, int num_triangles,
@@ -74,7 +74,7 @@ glw_renderer_init(glw_renderer_t *gr, int num_vertices, int num_triangles,
  *
  */
 void
-glw_renderer_triangle(glw_renderer_t *gr, int element, 
+glw_renderer_triangle(glw_renderer_t *gr, int element,
 		      uint16_t a, uint16_t b, uint16_t c)
 {
   gr->gr_indices[element * 3 + 0] = a;
@@ -110,7 +110,7 @@ glw_renderer_init_triangle(glw_renderer_t *gr)
 
 
 /**
- * 
+ *
  */
 void
 glw_renderer_free(glw_renderer_t *gr)
@@ -143,7 +143,7 @@ glw_renderer_initialized(glw_renderer_t *gr)
 }
 
 /**
- * 
+ *
  */
 void
 glw_renderer_vtx_pos(glw_renderer_t *gr, int vertex,
@@ -156,7 +156,7 @@ glw_renderer_vtx_pos(glw_renderer_t *gr, int vertex,
 }
 
 /**
- * 
+ *
  */
 void
 glw_renderer_vtx_st(glw_renderer_t *gr, int vertex,
@@ -169,7 +169,7 @@ glw_renderer_vtx_st(glw_renderer_t *gr, int vertex,
 
 
 /**
- * 
+ *
  */
 void
 glw_renderer_vtx_st2(glw_renderer_t *gr, int vertex,
@@ -182,7 +182,7 @@ glw_renderer_vtx_st2(glw_renderer_t *gr, int vertex,
 
 
 /**
- * 
+ *
  */
 void
 glw_renderer_vtx_col(glw_renderer_t *gr, int vertex,
@@ -198,7 +198,7 @@ glw_renderer_vtx_col(glw_renderer_t *gr, int vertex,
 
 
 /**
- * 
+ *
  */
 void
 glw_renderer_vtx_col_reset(glw_renderer_t *gr)
@@ -213,7 +213,7 @@ glw_renderer_vtx_col_reset(glw_renderer_t *gr)
     gr->gr_vertices[i * VERTEX_SIZE + 5] = 1;
     gr->gr_vertices[i * VERTEX_SIZE + 6] = 1;
     gr->gr_vertices[i * VERTEX_SIZE + 7] = 1;
-  }  
+  }
 
   gr->gr_dirty = 1;
   gr->gr_color_attributes = 0;
@@ -249,6 +249,7 @@ emit_triangle(glw_root_t *gr,
 }
 
 
+#if NUM_FADERS > 0
 /**
  * Fade a triangle in eye space
  * This could just as well be done in the vertex shader
@@ -264,11 +265,11 @@ fader(glw_root_t *gr, glw_renderer_cache_t *grc,
 
   Vec4 c1, c2, c3;
   Vec4 v1, v2, v3;
-  
+
   glw_vec4_copy(c1, C1);
   glw_vec4_copy(c2, C2);
   glw_vec4_copy(c3, C3);
-    
+
 
   glw_vec4_copy(v1, V1);
   glw_vec4_copy(v2, V2);
@@ -309,30 +310,54 @@ fader(glw_root_t *gr, glw_renderer_cache_t *grc,
   }
   emit_triangle(gr, v1, v2, v3, c1, c2, c3, T1, T2, T3);
 }
-
-#include "misc/sha.h"
-
-//#define docoloring
-
-#ifdef docoloring
-static float
-random_color(const glw_root_t *gr, int v)
-{
-  
-  sha1_decl(shactx);
-  uint8_t d[20];
-  int w;
-
-  sha1_init(shactx);
-  sha1_update(shactx, (void *)&gr->gr_vtmp_cur, sizeof(int));
-  sha1_update(shactx, (void *)&v, sizeof(int));
-  sha1_final(shactx, d);
-
-  w = d[0] << 8 | d[1];
-  
-  return w / 65536.0;
-}
 #endif
+
+
+
+static void
+clipper(glw_root_t *gr, glw_renderer_cache_t *grc,
+	const Vec4 V1, const Vec4 V2, const Vec4 V3,
+	const Vec4 C1, const Vec4 C2, const Vec4 C3,
+	const Vec4 T1, const Vec4 T2, const Vec4 T3,
+	int plane);
+
+static void
+clip_out(glw_root_t *gr, glw_renderer_cache_t *grc,
+         const Vec4 V1, const Vec4 V2, const Vec4 V3,
+         const Vec4 C1, const Vec4 C2, const Vec4 C3,
+         const Vec4 T1, const Vec4 T2, const Vec4 T3,
+         int plane)
+{
+  Vec4 v1, v2, v3;
+  Vec4 c1, c2, c3;
+  const float alpha_out = gr->gr_clip_alpha_out[plane - 1];
+  const float sharpness_out = gr->gr_clip_sharpness_out[plane - 1];
+  if(alpha_out < 0.01)
+    return;
+
+  glw_vec4_copy(v1, V1);
+  glw_vec4_copy(v2, V2);
+  glw_vec4_copy(v3, V3);
+
+  if(sharpness_out < 1) {
+    grc->grc_blurred = 1;
+
+    glw_vec4_mul_c3(v1, sharpness_out);
+    glw_vec4_mul_c3(v2, sharpness_out);
+    glw_vec4_mul_c3(v3, sharpness_out);
+  }
+
+  glw_vec4_copy(c1, C1);
+  glw_vec4_copy(c2, C2);
+  glw_vec4_copy(c3, C3);
+
+  glw_vec4_mul_c3(c1, alpha_out);
+  glw_vec4_mul_c3(c2, alpha_out);
+  glw_vec4_mul_c3(c3, alpha_out);
+
+  clipper(gr, grc, v1, v2, v3, c1, c2, c3, T1, T2, T3, plane);
+}
+
 
 /**
  * Clip a triangle in eye space
@@ -340,39 +365,17 @@ random_color(const glw_root_t *gr, int v)
 static void
 clipper(glw_root_t *gr, glw_renderer_cache_t *grc,
 	const Vec4 V1, const Vec4 V2, const Vec4 V3,
-#ifdef docoloring
-	const Vec4 c1, const Vec4 c2, const Vec4 c3,
-#else
 	const Vec4 C1, const Vec4 C2, const Vec4 C3,
-#endif
 	const Vec4 T1, const Vec4 T2, const Vec4 T3,
 	int plane)
 {
-#ifdef docoloring
-  Vec4 C1, C2, C3;
-  
-  glw_vec4_copy(C1, glw_vec4_make(
-				  random_color(gr, 0),
-				  random_color(gr, 1),
-				  random_color(gr, 2),
-				  1));
-
-  glw_vec4_copy(C2, glw_vec4_make(
-				  random_color(gr, 3),
-				  random_color(gr, 4),
-				  random_color(gr, 5),
-				  1));
-
-  glw_vec4_copy(C3, glw_vec4_make(
-				  random_color(gr, 6),
-				  random_color(gr, 7),
-				  random_color(gr, 8),
-				  1));
-#endif
-
   while(1) {
     if(plane == NUM_CLIPPLANES) {
+#if NUM_FADERS > 0
       fader(gr, grc, V1, V2, V3, C1, C2, C3, T1, T2, T3, 0);
+#else
+      emit_triangle(gr, V1, V2, V3, C1, C2, C3, T1, T2, T3);
+#endif
       return;
     }
     if(grc->grc_active_clippers & (1 << plane))
@@ -401,7 +404,7 @@ clipper(glw_root_t *gr, glw_renderer_cache_t *grc,
       } else {
 	s13 = D1 / (D1 - D3);
 	s23 = D2 / (D2 - D3);
-	
+
 	glw_vec4_lerp(V13, s13, V1, V3);
 	glw_vec4_lerp(V23, s23, V2, V3);
 
@@ -410,9 +413,11 @@ clipper(glw_root_t *gr, glw_renderer_cache_t *grc,
 
 	glw_vec4_lerp(T13, s13, T1, T3);
 	glw_vec4_lerp(T23, s23, T2, T3);
-	
+
 	clipper(gr, grc, V1,  V2, V23, C1,  C2, C23, T1, T2, T23, plane);
 	clipper(gr, grc, V1, V23, V13, C1, C23, C13, T1, T23, T13, plane);
+
+	clip_out(gr, grc, V23, V3, V13, C23, C3, C13, T23, T3, T13, plane);
       }
 
     } else {
@@ -430,61 +435,75 @@ clipper(glw_root_t *gr, glw_renderer_cache_t *grc,
 	clipper(gr, grc, V1, V12, V23, C1, C12, C23, T1, T12, T23, plane);
 	clipper(gr, grc, V1, V23, V3,  C1, C23, C3,  T1, T23, T3, plane);
 
+	clip_out(gr, grc, V12, V2, V23, C12, C2, C23, T12, T2, T23, plane);
+
       } else {
 	s13 = D1 / (D1 - D3);
 	glw_vec4_lerp(V13, s13, V1, V3);
 	glw_vec4_lerp(C13, s13, C1, C3);
 	glw_vec4_lerp(T13, s13, T1, T3);
-
 	clipper(gr, grc, V1, V12, V13, C1, C12, C13, T1, T12, T13, plane);
+
+	clip_out(gr, grc, V12, V2, V3,  C12, C2,  C3,  T12, T2, T3, plane);
+	clip_out(gr, grc, V12, V3, V13, C12, C3,  C13, T12, T3, T13, plane);
+
       }
 
     }
-  } else {
-    if(D2 >= 0) {
-      s12 = D1 / (D1 - D2);
-      glw_vec4_lerp(V12, s12, V1, V2);
-      glw_vec4_lerp(C12, s12, C1, C2);
-      glw_vec4_lerp(T12, s12, T1, T2);
-      
-      if(D3 >= 0) {
-	s13 = D1 / (D1 - D3);
-	glw_vec4_lerp(V13, s13, V1, V3);
-	glw_vec4_lerp(C13, s13, C1, C3);
-	glw_vec4_lerp(T13, s13, T1, T3);
+  } else if(D2 >= 0) {
+    s12 = D1 / (D1 - D2);
+    glw_vec4_lerp(V12, s12, V1, V2);
+    glw_vec4_lerp(C12, s12, C1, C2);
+    glw_vec4_lerp(T12, s12, T1, T2);
 
-	clipper(gr, grc, V12, V2, V3,  C12, C2, C3,  T12, T2, T3, plane);
-	clipper(gr, grc, V12, V3, V13, C12, C3, C13, T12, T3, T13, plane);
+    if(D3 >= 0) {
+      s13 = D1 / (D1 - D3);
+      glw_vec4_lerp(V13, s13, V1, V3);
+      glw_vec4_lerp(C13, s13, C1, C3);
+      glw_vec4_lerp(T13, s13, T1, T3);
 
-      } else {
-	s23 = D2 / (D2 - D3);
-	glw_vec4_lerp(V23, s23, V2, V3);
-	glw_vec4_lerp(C23, s23, C2, C3);
-	glw_vec4_lerp(T23, s23, T2, T3);
+      clipper(gr, grc, V12, V2, V3,  C12, C2, C3,  T12, T2, T3, plane);
+      clipper(gr, grc, V12, V3, V13, C12, C3, C13, T12, T3, T13, plane);
 
-	clipper(gr, grc, V12, V2, V23, C12, C2, C23, T12, T2, T23, plane);
+      clip_out(gr, grc, V1, V12, V13, C1, C12, C13, T1 ,T12, T13, plane);
 
-      }
     } else {
-      if(D3 >= 0) {
-	s13 = D1 / (D1 - D3);
-	s23 = D2 / (D2 - D3);
-	
-	glw_vec4_lerp(V13, s13, V1, V3);
-	glw_vec4_lerp(V23, s23, V2, V3);
+      s23 = D2 / (D2 - D3);
+      glw_vec4_lerp(V23, s23, V2, V3);
+      glw_vec4_lerp(C23, s23, C2, C3);
+      glw_vec4_lerp(T23, s23, T2, T3);
 
-	glw_vec4_lerp(C13, s13, C1, C3);
-	glw_vec4_lerp(C23, s23, C2, C3);
+      clipper(gr, grc, V12, V2, V23, C12, C2, C23, T12, T2, T23, plane);
 
-	glw_vec4_lerp(T13, s13, T1, T3);
-	glw_vec4_lerp(T23, s23, T2, T3);
+      clip_out(gr, grc, V1, V12, V23, C1, C12, C23, T1, T12, T23, plane);
+      clip_out(gr, grc, V1, V23, V3,  C1, C23, C3,  T1, T23, T3, plane);
 
-	clipper(gr, grc, V13, V23, V3, C13, C23, C3, T13, T23, T3, plane);
-      }
     }
+  } else if(D3 >= 0) {
+    s13 = D1 / (D1 - D3);
+    s23 = D2 / (D2 - D3);
+
+    glw_vec4_lerp(V13, s13, V1, V3);
+    glw_vec4_lerp(V23, s23, V2, V3);
+
+    glw_vec4_lerp(C13, s13, C1, C3);
+    glw_vec4_lerp(C23, s23, C2, C3);
+
+    glw_vec4_lerp(T13, s13, T1, T3);
+    glw_vec4_lerp(T23, s23, T2, T3);
+
+    clipper(gr, grc, V13, V23, V3, C13, C23, C3, T13, T23, T3, plane);
+
+    clip_out(gr, grc, V1, V2, V23,  C1, C2, C23,  T1, T2,  T23, plane);
+    clip_out(gr, grc, V1, V23, V13, C1, C23, C13, T1, T23, T13, plane);
+
+  } else {
+
+    clip_out(gr, grc, V1, V2, V3, C1, C2, C3, T1, T2, T3, plane);
   }
 }
 
+#if NUM_STENCILERS > 0
 
 /**
  * Stenciling
@@ -505,7 +524,7 @@ stenciler(glw_root_t *gr, glw_renderer_cache_t *grc,
 
 
   Vec4 T1, T2, T3;
-  
+
   glw_vec4_copy(T1, t1);
   glw_vec4_copy(T2, t2);
   glw_vec4_copy(T3, t3);
@@ -545,7 +564,7 @@ stenciler(glw_root_t *gr, glw_renderer_cache_t *grc,
   }
 
   Vec4 To1, To2, To3;
-  
+
   glw_vec4_copy(To1, T1);
   glw_vec4_copy(To2, T2);
   glw_vec4_copy(To3, T3);
@@ -603,7 +622,7 @@ stenciler(glw_root_t *gr, glw_renderer_cache_t *grc,
       glw_vec4_set(To2, 2, 0.5 - D2 * a);
     if(D3 < 0)
       glw_vec4_set(To3, 2, 0.5 - D3 * a);
-    
+
     break;
 
   case 3:
@@ -621,7 +640,7 @@ stenciler(glw_root_t *gr, glw_renderer_cache_t *grc,
       glw_vec4_set(To2, 3, 0.5 - D2 * a);
     if(D3 < 0)
       glw_vec4_set(To3, 3, 0.5 - D3 * a);
-    
+
     break;
   default:
     abort();
@@ -700,7 +719,7 @@ stenciler(glw_root_t *gr, glw_renderer_cache_t *grc,
       glw_vec4_lerp(V12, s12, V1, V2);
       glw_vec4_lerp(C12, s12, C1, C2);
       glw_vec4_lerp(T12, s12, T1, T2);
-      
+
       if(D3 >= 0) {
 
 	s13 = D1 / (D1 - D3);
@@ -730,7 +749,7 @@ stenciler(glw_root_t *gr, glw_renderer_cache_t *grc,
       if(D3 >= 0) {
 	s13 = D1 / (D1 - D3);
 	s23 = D2 / (D2 - D3);
-	
+
 	glw_vec4_lerp(V13, s13, V1, V3);
 	glw_vec4_lerp(V23, s23, V2, V3);
 
@@ -751,7 +770,7 @@ stenciler(glw_root_t *gr, glw_renderer_cache_t *grc,
   // outside
   stenciler(gr, grc, V1, V2, V3, C1, C2, C3, To1, To2, To3, plane);
 }
-
+#endif
 
 
 /**
@@ -765,19 +784,22 @@ glw_renderer_tesselate(glw_renderer_t *gr, glw_root_t *root,
   uint16_t *ip = gr->gr_indices;
   const float *a = gr->gr_vertices;
   PMtx pmtx;
-  
+
   root->gr_vtmp_cur = 0;
 
-  memcpy(grc->grc_mtx, rc->rc_mtx, sizeof(Mtx));
+  grc->grc_mtx = rc->rc_mtx;
 
   grc->grc_active_clippers  = root->gr_active_clippers;
+#if NUM_FADERS > 0
   grc->grc_active_faders    = root->gr_active_faders;
+#endif
   grc->grc_blurred = 0;
 
   for(i = 0; i < NUM_CLIPPLANES; i++)
     if((1 << i) & root->gr_active_clippers)
       memcpy(&grc->grc_clip[i], &root->gr_clip[i], sizeof(Vec4));
 
+#if NUM_STENCILERS > 0
   grc->grc_stencil_width = root->gr_stencil_width;
   if(grc->grc_stencil_width) {
     grc->grc_stencil_height = root->gr_stencil_height;
@@ -791,15 +813,19 @@ glw_renderer_tesselate(glw_renderer_t *gr, glw_root_t *root,
     for(i = 0; i < 4; i++)
       grc->grc_stencil_edge[i] = root->gr_stencil_edge[i];
   }
+#endif
 
-  for(i = 0; i < NUM_FADERS; i++)
+#if NUM_FADERS > 0
+  for(i = 0; i < NUM_FADERS; i++) {
     if((1 << i) & root->gr_active_faders) {
       memcpy(&grc->grc_fader[i], &root->gr_fader[i], sizeof(Vec4));
       grc->grc_fader_alpha[i] = root->gr_fader_alpha[i];
       grc->grc_fader_blur[i] = root->gr_fader_blur[i];
     }
+  }
+#endif
 
-  glw_pmtx_mul_prepare(pmtx, rc->rc_mtx);
+  glw_pmtx_mul_prepare(&pmtx, &rc->rc_mtx);
 
   for(i = 0; i < gr->gr_num_triangles; i++) {
     int v1 = *ip++;
@@ -808,10 +834,11 @@ glw_renderer_tesselate(glw_renderer_t *gr, glw_root_t *root,
 
     Vec4 V1, V2, V3;
 
-    glw_pmtx_mul_vec4_i(V1, pmtx, glw_vec4_get(a + v1*VERTEX_SIZE));
-    glw_pmtx_mul_vec4_i(V2, pmtx, glw_vec4_get(a + v2*VERTEX_SIZE));
-    glw_pmtx_mul_vec4_i(V3, pmtx, glw_vec4_get(a + v3*VERTEX_SIZE));
+    glw_pmtx_mul_vec4_i(V1, &pmtx, glw_vec4_get(a + v1*VERTEX_SIZE));
+    glw_pmtx_mul_vec4_i(V2, &pmtx, glw_vec4_get(a + v2*VERTEX_SIZE));
+    glw_pmtx_mul_vec4_i(V3, &pmtx, glw_vec4_get(a + v3*VERTEX_SIZE));
 
+#if NUM_STENCILERS > 0
     stenciler(root, grc,
 	      V1, V2, V3,
 	      glw_vec4_get(a + v1 * VERTEX_SIZE + 4),
@@ -821,6 +848,16 @@ glw_renderer_tesselate(glw_renderer_t *gr, glw_root_t *root,
 	      glw_vec4_get(a + v2 * VERTEX_SIZE + 8),
 	      glw_vec4_get(a + v3 * VERTEX_SIZE + 8),
 	      0);
+#else
+    clipper(root, grc, V1, V2, V3,
+            glw_vec4_get(a + v1 * VERTEX_SIZE + 4),
+            glw_vec4_get(a + v2 * VERTEX_SIZE + 4),
+            glw_vec4_get(a + v3 * VERTEX_SIZE + 4),
+            glw_vec4_get(a + v1 * VERTEX_SIZE + 8),
+            glw_vec4_get(a + v2 * VERTEX_SIZE + 8),
+            glw_vec4_get(a + v3 * VERTEX_SIZE + 8),
+            0);
+#endif
   }
 
   int size = root->gr_vtmp_cur * sizeof(float) * VERTEX_SIZE;
@@ -854,7 +891,7 @@ glw_renderer_clippers_cmp(glw_renderer_cache_t *grc, glw_root_t *root)
 }
 
 
-
+#if NUM_STENCILERS > 0
 /**
  *
  */
@@ -879,8 +916,9 @@ glw_renderer_stencilers_cmp(glw_renderer_cache_t *grc, glw_root_t *root)
   }
   return 0;
 }
+#endif
 
-
+#if NUM_FADERS > 0
 /**
  *
  */
@@ -900,7 +938,7 @@ glw_renderer_faders_cmp(glw_renderer_cache_t *grc, glw_root_t *root)
 	return 1;
   return 0;
 }
-
+#endif
 
 /**
  *
@@ -928,7 +966,7 @@ glw_renderer_get_cache(glw_root_t *root, glw_renderer_t *gr)
  */
 static void
 add_job(glw_root_t *gr,
-        const Mtx m,
+        const Mtx *m,
         const struct glw_backend_texture *t0,
         const struct glw_backend_texture *t1,
         const struct glw_rgb *rgb_mul,
@@ -977,7 +1015,7 @@ add_job(glw_root_t *gr,
     rj->eyespace = 1;
   } else {
     rj->eyespace = 0;
-    glw_mtx_copy(rj->m, m);
+    rj->m = *m;
   }
 
   rj->width  = rc->rc_width;
@@ -1024,7 +1062,7 @@ add_job(glw_root_t *gr,
       gr->gr_vertex_buffer_capacity * 2;
 
     gr->gr_vertex_buffer = realloc(gr->gr_vertex_buffer,
-				     sizeof(float) * VERTEX_SIZE * 
+				     sizeof(float) * VERTEX_SIZE *
 				     gr->gr_vertex_buffer_capacity);
   }
 
@@ -1067,15 +1105,26 @@ glw_renderer_draw(glw_renderer_t *gr, glw_root_t *root,
   int flags =
     gr->gr_color_attributes ? GLW_RENDER_COLOR_ATTRIBUTES : 0;
 
-  if(root->gr_need_sw_clip || root->gr_active_faders ||
-     root->gr_stencil_width) {
+  if(root->gr_need_sw_clip
+#if NUM_FADERS > 0
+     || root->gr_active_faders
+#endif
+#if NUM_STENCILERS > 0
+     || root->gr_stencil_width
+#endif
+     ) {
     glw_renderer_cache_t *grc = glw_renderer_get_cache(root, gr);
 
     if(gr->gr_dirty ||
-       memcmp(grc->grc_mtx, rc->rc_mtx, sizeof(Mtx)) ||
-       glw_renderer_clippers_cmp(grc, root) ||
-       glw_renderer_stencilers_cmp(grc, root) ||
-       glw_renderer_faders_cmp(grc, root)) {
+       memcmp(&grc->grc_mtx, &rc->rc_mtx, sizeof(Mtx)) ||
+       glw_renderer_clippers_cmp(grc, root)
+#if NUM_STENCILERS > 0
+       || glw_renderer_stencilers_cmp(grc, root)
+#endif
+#if NUM_FADERS > 0
+       glw_renderer_faders_cmp(grc, root)
+#endif
+       ) {
       glw_renderer_tesselate(gr, root, rc, grc);
     }
 
@@ -1085,15 +1134,16 @@ glw_renderer_draw(glw_renderer_t *gr, glw_root_t *root,
     if(grc->grc_colored)
       flags |= GLW_RENDER_COLOR_ATTRIBUTES;
 
+#if NUM_STENCILERS > 0
     if(root->gr_stencil_width)
       tex2 = root->gr_stencil_texture;
-
+#endif
     add_job(root, NULL, tex, tex2,
             rgb_mul, rgb_off, alpha, blur,
             grc->grc_vertices, grc->grc_num_vertices,
             NULL, 0, flags, gpa, rc, GLW_DRAW_TRIANGLES, rc->rc_zindex);
   } else {
-    add_job(root, rc->rc_mtx, tex, tex2, rgb_mul, rgb_off, alpha, blur,
+    add_job(root, &rc->rc_mtx, tex, tex2, rgb_mul, rgb_off, alpha, blur,
             gr->gr_vertices, gr->gr_num_vertices,
             gr->gr_indices,  gr->gr_num_triangles,
             flags, gpa, rc, GLW_DRAW_TRIANGLES, rc->rc_zindex);
@@ -1115,7 +1165,7 @@ const static float box_vertices[4][12] = {
 void
 glw_wirebox(glw_root_t *root, const glw_rctx_t *rc)
 {
-  add_job(root, rc->rc_mtx, NULL, NULL, &white, NULL, 1, 0,
+  add_job(root, &rc->rc_mtx, NULL, NULL, &white, NULL, 1, 0,
           &box_vertices[0][0], 4,
           NULL, 0,
           0, NULL, rc, GLW_DRAW_LINE_LOOP, INT16_MAX);
@@ -1138,7 +1188,7 @@ static const float clip_planes[4][3] = {
  */
 int
 glw_clip_enable(glw_root_t *gr, const glw_rctx_t *rc, glw_clip_boundary_t how,
-		float distance)
+		float distance, float alpha_out, float sharpness_out)
 {
   int i;
   Vec4 v4;
@@ -1154,20 +1204,17 @@ glw_clip_enable(glw_root_t *gr, const glw_rctx_t *rc, glw_clip_boundary_t how,
 				  clip_planes[how][2],
 				  1 - (distance * 2)));
 
-  if(gr->gr_set_hw_clipper != NULL) {
-    gr->gr_set_hw_clipper(rc, i, v4);
+  Mtx inv;
 
-  } else {
-    Mtx inv;
+  if(!glw_mtx_invert(&inv, &rc->rc_mtx))
+    return -1;
 
-    if(!glw_mtx_invert(inv, rc->rc_mtx))
-      return -1;
-
-    glw_mtx_trans_mul_vec4(gr->gr_clip[i], inv, v4);
-    gr->gr_need_sw_clip = 1;
-  }
+  glw_mtx_trans_mul_vec4(gr->gr_clip[i], &inv, v4);
+  gr->gr_need_sw_clip = 1;
 
   gr->gr_active_clippers |= (1 << i);
+  gr->gr_clip_alpha_out[i] = alpha_out;
+  gr->gr_clip_sharpness_out[i] = sharpness_out;
   return i;
 }
 
@@ -1183,14 +1230,11 @@ glw_clip_disable(glw_root_t *gr, int which)
     return;
 
   gr->gr_active_clippers &= ~(1 << which);
-
-  if(gr->gr_clr_hw_clipper != NULL)
-    gr->gr_clr_hw_clipper(which);
-  else
-    gr->gr_need_sw_clip = gr->gr_active_clippers;
+  gr->gr_need_sw_clip = gr->gr_active_clippers;
 }
 
 
+#if NUM_STENCILERS > 0
 
 /**
  *
@@ -1203,7 +1247,7 @@ glw_stencil_enable(glw_root_t *gr, const glw_rctx_t *rc,
   Vec4 v4;
   Mtx inv;
 
-  if(!glw_mtx_invert(inv, rc->rc_mtx))
+  if(!glw_mtx_invert(&inv, &rc->rc_mtx))
     return;
 
   gr->gr_stencil_texture = tex;
@@ -1224,9 +1268,9 @@ glw_stencil_enable(glw_root_t *gr, const glw_rctx_t *rc,
   gr->gr_stencil_height = glw_tex_height(tex);
 
   glw_vec4_copy(v4, glw_vec4_make(1, 0, 0, 0));
-  glw_mtx_trans_mul_vec4(gr->gr_stencil[0], inv, v4);
+  glw_mtx_trans_mul_vec4(gr->gr_stencil[0], &inv, v4);
   glw_vec4_copy(v4, glw_vec4_make( 0, -1, 0, 0));
-  glw_mtx_trans_mul_vec4(gr->gr_stencil[1], inv, v4);
+  glw_mtx_trans_mul_vec4(gr->gr_stencil[1], &inv, v4);
 }
 
 
@@ -1240,8 +1284,9 @@ glw_stencil_disable(glw_root_t *gr)
   gr->gr_stencil_width = 0;
   gr->gr_stencil_texture = NULL;
 }
+#endif
 
-
+#if NUM_FADERS > 0
 /**
  *
  */
@@ -1264,11 +1309,11 @@ glw_fader_enable(glw_root_t *gr, const glw_rctx_t *rc, const float *plane,
 				  plane[3]));
 
   Mtx inv;
-  
-  if(!glw_mtx_invert(inv, rc->rc_mtx))
+
+  if(!glw_mtx_invert(&inv, &rc->rc_mtx))
     return -1;
-  
-  glw_mtx_trans_mul_vec4(gr->gr_fader[i], inv, v4);
+
+  glw_mtx_trans_mul_vec4(gr->gr_fader[i], &inv, v4);
   gr->gr_fader_alpha[i] = a;
   gr->gr_fader_blur[i] = b;
 
@@ -1288,7 +1333,7 @@ glw_fader_disable(glw_root_t *gr, int which)
 
   gr->gr_active_faders &= ~(1 << which);
 }
-
+#endif
 
 
 /**

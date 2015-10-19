@@ -60,11 +60,11 @@ load_vp(const char *filename)
   const char *name;
   char url[512];
 
-  snprintf(url, sizeof(url), "%s/src/ui/glw/rsx/%s", 
-	   app_dataroot(), filename);
+  snprintf(url, sizeof(url), "dataroot://res/shaders/rsx/%s", filename);
 
-  if((b = fa_load(url, FA_LOAD_ERRBUF(errmsg, sizeof(errmsg)),
-                   NULL)) == NULL) {
+  if((b = fa_load(url,
+                  FA_LOAD_ERRBUF(errmsg, sizeof(errmsg)),
+                  NULL)) == NULL) {
     TRACE(TRACE_ERROR, "glw", "Unable to load shader %s -- %s\n",
 	  url, log);
     return NULL;
@@ -138,8 +138,7 @@ load_fp(glw_root_t *gr, const char *filename)
   const char *name;
 
   char url[512];
-  snprintf(url, sizeof(url), "%s/src/ui/glw/rsx/%s", 
-	   app_dataroot(), filename);
+  snprintf(url, sizeof(url), "dataroot://res/shaders/rsx/%s", filename);
 
   if((b = fa_load(url, FA_LOAD_ERRBUF(errmsg, sizeof(errmsg)),
                    NULL)) == NULL) {
@@ -354,7 +353,7 @@ rsx_render_unlocked(glw_root_t *gr)
                                            rvp->rvp_u_modelview,
                                            4,
                                            rj->eyespace ? identitymtx :
-                                           rj->m);
+                                           (const float *)&rj->m);
 
     const float alpha = rj->alpha;
 
