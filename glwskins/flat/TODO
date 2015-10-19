@@ -1,7 +1,11 @@
 
-Add scroll bar to list view
+Add scroll bar to list views and multiopts
 
-Rework  $view.currentPageClone <- focusedClone();
+Rework OSD
+
+Rework notifications
+
+Add bookmark button
 
 Item menu for other items
 

@@ -225,8 +225,7 @@ glw_playfield_layout(glw_t *w, const glw_rctx_t *rc)
       glw_need_refresh(w->glw_root, 0);
     }
 
-    if((cd->amount > 0 && cd->amount < 2) ||
-       !w->glw_root->gr_reduce_cpu)
+    if(cd->amount > 0 && cd->amount < 2)
       glw_layout0(c, rc);
 
     if(cd->amount <= 1 && cd->detached)
@@ -299,7 +298,7 @@ glw_playfield_render(glw_t *w, const glw_rctx_t *rc)
       
 	v = GLW_S(v);
       
-	glw_LerpMatrix(rc0.rc_mtx, v, *d->glw_matrix, rc0.rc_mtx);
+	glw_LerpMatrix(&rc0.rc_mtx, v, d->glw_matrix, &rc0.rc_mtx);
       
 	if((dd = TAILQ_FIRST(&d->glw_childs)) != NULL) {
 
