@@ -140,8 +140,6 @@ typedef enum {
   GLW_ATTRIB_CHILD_WIDTH,
   GLW_ATTRIB_CHILD_TILES_X,
   GLW_ATTRIB_CHILD_TILES_Y,
-  GLW_ATTRIB_PAGE,
-  GLW_ATTRIB_PAGE_BY_ID,
   GLW_ATTRIB_ALPHA_EDGES,
   GLW_ATTRIB_PRIORITY,
   GLW_ATTRIB_FILL,
@@ -435,8 +433,6 @@ typedef struct glw_class {
 
   int (*gc_bind_to_id)(struct glw *w, const char *id);
 
-  int (*gc_set_page_id)(struct glw *w, const char *id);
-
   int (*gc_set_float3)(struct glw *w, glw_attribute_t a, const float *vector,
                        glw_style_t *gs);
 
@@ -452,13 +448,14 @@ typedef struct glw_class {
    *
    * See comment above for return values (GLW_SET_*)
    */
-  int (*gc_set_int_unresolved)(struct glw *w, const char *a, int value);
+  int (*gc_set_int_unresolved)(struct glw *w, const char *a, int value,
+                               glw_style_t *gs);
 
-  int (*gc_set_float_unresolved)(struct glw *w, const char *a, float value);
+  int (*gc_set_float_unresolved)(struct glw *w, const char *a, float value,
+                                 glw_style_t *gs);
 
-  int (*gc_set_str_unresolved)(struct glw *w, const char *a, const char *value);
-
-
+  int (*gc_set_rstr_unresolved)(struct glw *w, const char *a, rstr_t *value,
+                                glw_style_t *gs);
 
   /**
    * Ask widget to render itself in the current render context
@@ -727,6 +724,7 @@ typedef struct glw_root {
   pool_t *gr_token_pool;
   pool_t *gr_clone_pool;
   pool_t *gr_style_binding_pool;
+  int gr_gem_id_tally;
 
   int gr_frames;
 
@@ -861,6 +859,8 @@ typedef struct glw_root {
   struct glw *gr_current_cursor;
   void (*gr_cursor_focus_tracker)(struct glw *w, const struct glw_rctx *rc,
                                   struct glw *cursor);
+
+  rstr_t *gr_pending_focus;
 
   /**
    * Backend specifics
@@ -1256,8 +1256,10 @@ void glw_store_matrix(glw_t *w, const glw_rctx_t *rc);
 #define GLW_FOCUS_SET_INTERACTIVE  2
 #define GLW_FOCUS_SET_SUGGESTED    3
 
-void glw_focus_set(glw_root_t *gr, glw_t *w, int how,
-                   const char *whom);
+int glw_focus_set(glw_root_t *gr, glw_t *w, int how,
+                  const char *whom); // Return 1 if we managed to set focus
+
+void glw_focus_check_pending(glw_t *w);
 
 void glw_focus_open_path(glw_t *w);
 
