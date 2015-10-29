@@ -1,33 +1,27 @@
 #import "skin://theme.view"
 
-#define OSD_SETTINGS_MENU(NODES, FIXED_ITEM) {
-widget(container_z, {
+#define OSD_SETTINGS_MENU(NODES, TITLE, ID) {
 
-  style(ListItemOuter, {
-    height: 1.5em;
-  });
 
-  style(ListItemIcon, {
-    hidden: true;
-  });
+  widget(container_y, {
+#import "skin://styles/style_sidebar.view"
+    id: ID;
 
-  height: 8em;
+    widget(label, {
+      height: 3em;
+      align: center;
+      caption: TITLE;
+      size: 1.5em;
+    });
 
-  widget(quad, {
-    color: 0;
-    alpha: 0.8;
-    zoffset: -400;
-  });
-
-  widget(cursor, {
+    onEvent(back, {
+      $clone.osdpage = 1;
+      focus("osd_main");
+    }, $clone.osdpage);
 
     widget(container_x, {
-      padding: [4em, 1em];
       widget(list_y, {
         id: "list";
-        alphaFallOff: 0.3;
-
-        FIXED_ITEM;
 
         cloner(NODES, loader, {
           hidden: !$self.enabled;
@@ -35,7 +29,6 @@ widget(container_z, {
           time: 0.3;
           noInitialTransform: true;
         });
-
       });
       widget(slider_y, {
         bind("list");
@@ -47,19 +40,5 @@ widget(container_z, {
         });
       });
     });
-
-
-    widget(quad, {
-      zoffset: -100;
-      alpha: 0.6 * iir($ui.keyboard, 4);
-      additive: true;
-    });
-
-    widget(quad, {
-      zoffset: -100;
-      alpha: 0.1;
-      additive: true;
-    });
   });
-});
 }
