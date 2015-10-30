@@ -1,35 +1,17 @@
 #import "skin://theme.view"
-
-#define SIDEBAR_ACTION(CAPTION, ICON, EVENT, HIDDEN=false) {
-  widget(container_z, {
-    hidden: HIDDEN;
-    height: 2em;
-    ListItemBevel();
-    ListItemHighlight();
-    focusable: 0.1;
-    onEvent(activate, EVENT);
-
-    widget(container_x, {
-      style: "ListItem";
-
-      widget(icon, {
-        style: "ListItemIcon";
-        source: ICON;
-      });
-
-      widget(label, {
-        filterConstraintX: true;
-        caption: CAPTION;
-        style: "ActionLabel";
-      });
-    });
-  });
-}
+#import "sidebar_include.view"
 
 
 
 widget(container_x, {
-  space(2);
+  widget(dummy, {
+    // A clickable zone that closes sidebar
+    clickable: true;
+    onEvent(activate, {
+      $clone.showSidebar = false;
+    });
+  });
+
   widget(container_z, {
     width: 22em;
     filterConstraintY: true;
@@ -180,38 +162,7 @@ widget(container_x, {
                          navOpen("settings:"),
                          $self.url == "settings:");
 
-          widget(dummy, {
-            height: 1em;
-          });
-
-          SIDEBAR_ACTION(fmt(_("Exit %s"), $core.app.name),
-                         "skin://icons/ic_exit_to_app_48px.svg",
-                         event("Quit"),
-                         !$core.runcontrol.canExit);
-
-          SIDEBAR_ACTION(_("Suspend"),
-                         "skin://icons/ic_power_settings_new_48px.svg",
-                         event("Standby"),
-                         !$core.runcontrol.canStandby);
-
-          widget(dummy, {
-            height: 1em;
-          });
-
-          SIDEBAR_ACTION(select($ui.sysinfo,
-                                _("Hide system info"),
-                                _("Show system info")),
-                         select($ui.sysinfo,
-                                "skin://icons/ic_info_48px.svg",
-                                "skin://icons/ic_info_outline_48px.svg"),
-                         {
-                           toggle($ui.sysinfo);
-                         });
-
-          SIDEBAR_ACTION(_("View log"),
-                         "skin://icons/ic_my_library_books_48px.svg",{
-                           $ui.logwindow = true;
-                         });
+#import "skin://menu/sidebar_common.view"
 
 
         });

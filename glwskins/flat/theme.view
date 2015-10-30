@@ -55,21 +55,42 @@
 }
 
 
-#define ListItemHighlight(ALPHA=0.1 * isHovered() + 0.6 * isNavFocused()) {
+#define ListItemHighlight() {
   widget(quad, {
+    fhpSpill: true;
     zoffset: -10;
     additive: true;
-    alpha: ALPHA;
+    alpha: 0.1 * isHovered() + 0.6 * isNavFocused();
   });
 
 }
 
-#define GridItemHighlight(ALPHA=0.1 * isHovered() + 0.6 * isNavFocused()) {
+#define GridItemHighlight() {
   widget(quad, {
+    fhpSpill: true;
     zoffset: -10;
     additive: true;
-    alpha: ALPHA;
+    alpha: 0.1 * isHovered() + 0.6 * isNavFocused();
   });
 
 }
 
+
+#define ScrollBar(TARGET="scrollable") {
+
+  widget(container_x, {
+    filterConstraintX: true;
+    filterConstraintY: true;
+    padding: [0,1,0.2em,1];
+    space(1);
+    widget(slider_y, {
+      bind(TARGET);
+      width: 0.2em;
+      focusable: canScroll();
+      alpha: iir(canScroll(), 16);
+      widget(quad, {
+	alpha: 0.6 + isHovered();
+      });
+    });
+  });
+}
