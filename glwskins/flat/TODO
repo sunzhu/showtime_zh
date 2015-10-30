@@ -1,27 +1,13 @@
 
-Add scroll bar to list views and multiopts
-
-Rework OSD
-
-Rework notifications
-
-Add bookmark button
-
 Item menu for other items
 
 screen saver
 
 polish top-level popups
 
-Grid items
-
 Images
 
 Fix gravity of log view
-
-Sleep timer
-
-Master volume in sidebar
 
 ---------------
 -- Polish -----
@@ -29,10 +15,4 @@ Master volume in sidebar
 
 Audio playdeck
 
----------------
--- questions
----------------
-
-what to do with itemviews (the headweb things)?
-  Add a video page?  Copy stuff from video_details?
-
+playqueue playdeck
