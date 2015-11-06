@@ -1,41 +1,35 @@
 #import "skin://theme.view"
 #import "skin://styles/style_list.view"
 
-widget(container_y, {
+widget(container_z, {
 
-  widget(container_z, {
+  widget(list_y, {
+    id: "scrollable";
+    navWrap: true;
+    chaseFocus: true;
 
-    zoffset: 10;
-    widget(quad, {
-      color: 0;
-      alpha: 0.2;
-    });
+    clipOffsetTop: 3em;
+    scrollThresholdTop: 3em;
 
-    widget(label, {
-      height: 3em;
-      padding: [4em, 0];
-      align: center;
-      caption: $self.model.metadata.title;
-      size: 1.5em;
-    });
-  });
+    scrollThresholdBottom: $ui.universeBottomHeight;
+    clipOffsetBottom: $ui.universeBottomHeight;
+    clipAlpha: 0.2;
+    clipBlur: 1;
 
-  widget(container_z, {
-
-    widget(list_y, {
-      id: "scrollable";
-      navWrap: true;
-      chaseFocus: true;
-      scrollThreshold: 2em;
-      cloner($self.model.nodes, loader, {
-        time: 0.1;
-        effect: blend;
-        noInitialTransform: true;
-        alt: "skin://items/list/default.view";
+    cloner($self.model.nodes, loader, {
+      time: 0.1;
+      effect: blend;
+      noInitialTransform: true;
+      alt: "skin://items/list/default.view";
         source: "skin://items/list/" + $self.type + ".view";
-      });
     });
-
-    ScrollBar();
   });
+
+  ScrollBar();
+
+  widget(container_y, {
+    align: top;
+    PageHeader();
+  });
+
 });

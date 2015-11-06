@@ -54,8 +54,23 @@ struct prop_concat {
   prop_t *pc_dst;
   prop_sub_t *pc_dstsub;
   int pc_index_tally;
+  int pc_refcount;
 };
 
+/**
+ *
+ */
+static void
+prop_concat_release0(prop_concat_t *pc)
+{
+  pc->pc_refcount--;
+  if(pc->pc_refcount > 0)
+    return;
+
+  prop_ref_dec_locked(pc->pc_dst);
+  prop_unsubscribe0(pc->pc_dstsub);
+  free(pc);
+}
 
 /**
  *
@@ -85,9 +100,11 @@ pcs_destroy(prop_concat_source_t *pcs)
   assert(pcs->pcs_count == 0);
   assert(pcs->pcs_first == NULL);
   TAILQ_REMOVE(&pc->pc_queue, pcs, pcs_link);
+  prop_unsubscribe0(pcs->pcs_srcsub);
   if(pcs->pcs_header != NULL)
     prop_destroy0(pcs->pcs_header);
   free(pcs);
+  prop_concat_release0(pc);
 }
 
 
@@ -101,9 +118,9 @@ add_child(prop_concat_source_t *pcs, prop_concat_t *pc, prop_t *p)
   prop_tag_set(p, pcs, out);
   prop_tag_set(out, pcs, p);
   prop_link0(p, out, NULL, 0, 0);
-  
+
   prop_set_parent0(out, pc->pc_dst, find_next_out(pcs), NULL);
-  
+
   if(pcs->pcs_count == 0) {
     pcs->pcs_first = out;
     if(pcs->pcs_header != NULL)
@@ -111,7 +128,7 @@ add_child(prop_concat_source_t *pcs, prop_concat_t *pc, prop_t *p)
   }
   pcs->pcs_count++;
 }
-	  
+
 
 /**
  *
@@ -125,6 +142,8 @@ src_cb(void *opaque, prop_event_t event, ...)
   prop_vec_t *pv;
   int i;
   va_list ap;
+
+
   va_start(ap, event);
 
   switch(event) {
@@ -143,7 +162,7 @@ src_cb(void *opaque, prop_event_t event, ...)
     before = prop_tag_get(q, pcs);
     assert(before != NULL);
     prop_set_parent0(out, pc->pc_dst, before, NULL);
-    
+
     pcs->pcs_count++;
     break;
 
@@ -203,7 +222,7 @@ src_cb(void *opaque, prop_event_t event, ...)
 /**
  *
  */
-static void 
+static void
 req_move(prop_concat_t *pc, prop_t *p, prop_t *b)
 {
   prop_concat_source_t *ps, *bs;
@@ -228,7 +247,7 @@ req_move(prop_concat_t *pc, prop_t *p, prop_t *b)
         }
 
         bb = prop_tag_get(b, bs);
-        
+
         if(bb != NULL)
           break;
       }
@@ -237,7 +256,7 @@ req_move(prop_concat_t *pc, prop_t *p, prop_t *b)
         prop_req_move0(pp, TAILQ_FIRST(&pp->hp_parent->hp_childs), ps->pcs_srcsub);
         return;
       }
-      
+
       if(bs->pcs_index > ps->pcs_index) {
         prop_req_move0(pp, NULL, ps->pcs_srcsub);
         return;
@@ -268,6 +287,10 @@ dst_cb(void *opaque, prop_event_t event, ...)
     req_move(pc, p1, p2);
     break;
 
+  case PROP_DESTROYED:
+    prop_concat_release0(pc);
+    break;
+
   default:
     break;
   }
@@ -282,15 +305,15 @@ void
 prop_concat_add_source(prop_concat_t *pc, prop_t *src, prop_t *header)
 {
   prop_concat_source_t *pcs = calloc(1, sizeof(prop_concat_source_t));
-  
+
   pcs->pcs_header = header;
   pcs->pcs_pc = pc;
 
   hts_mutex_lock(&prop_mutex);
-
+  pc->pc_refcount++;
   TAILQ_INSERT_TAIL(&pc->pc_queue, pcs, pcs_link);
 
-  pcs->pcs_srcsub = prop_subscribe(PROP_SUB_INTERNAL | PROP_SUB_DONTLOCK | 
+  pcs->pcs_srcsub = prop_subscribe(PROP_SUB_INTERNAL | PROP_SUB_DONTLOCK |
 				   PROP_SUB_TRACK_DESTROY,
 				   PROP_TAG_CALLBACK, src_cb, pcs,
 				   PROP_TAG_ROOT, src,
@@ -306,18 +329,33 @@ prop_concat_add_source(prop_concat_t *pc, prop_t *src, prop_t *header)
  *
  */
 prop_concat_t *
-prop_concat_create(prop_t *dst, int flags)
+prop_concat_create(prop_t *dst)
 {
   prop_concat_t *pc = calloc(1, sizeof(prop_concat_t));
-  
-  pc->pc_dst = flags & PROP_CONCAT_TAKE_DST_OWNERSHIP ?
-    dst : prop_xref_addref(dst);
-  TAILQ_INIT(&pc->pc_queue);
 
-  pc->pc_dstsub = prop_subscribe(PROP_SUB_INTERNAL | PROP_SUB_DONTLOCK,
+  pc->pc_dst = prop_ref_inc(dst);
+  TAILQ_INIT(&pc->pc_queue);
+  pc->pc_refcount = 2; // one for subscription, one for caller
+  hts_mutex_lock(&prop_mutex);
+
+  pc->pc_dstsub = prop_subscribe(PROP_SUB_INTERNAL | PROP_SUB_DONTLOCK |
+                                 PROP_SUB_TRACK_DESTROY,
                                  PROP_TAG_CALLBACK, dst_cb, pc,
                                  PROP_TAG_ROOT, dst,
                                  NULL);
+  hts_mutex_unlock(&prop_mutex);
 
   return pc;
+}
+
+
+/**
+ *
+ */
+void
+prop_concat_release(prop_concat_t *pc)
+{
+  hts_mutex_lock(&prop_mutex);
+  prop_concat_release0(pc);
+  hts_mutex_unlock(&prop_mutex);
 }

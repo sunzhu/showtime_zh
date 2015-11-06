@@ -144,7 +144,6 @@ typedef enum {
   GLW_ATTRIB_PRIORITY,
   GLW_ATTRIB_FILL,
   GLW_ATTRIB_SPACING,
-  GLW_ATTRIB_SCROLL_THRESHOLD,
   GLW_ATTRIB_X_SPACING,
   GLW_ATTRIB_Y_SPACING,
   GLW_ATTRIB_SATURATION,
@@ -159,7 +158,7 @@ typedef enum {
   GLW_ATTRIB_ALPHA_SELF,
   GLW_ATTRIB_SIZE_SCALE,
   GLW_ATTRIB_SIZE,
-  GLW_ATTRIB_MIN_SIZE,
+  GLW_ATTRIB_MAX_WIDTH,
   GLW_ATTRIB_MAX_LINES,
   GLW_ATTRIB_RGB,
   GLW_ATTRIB_COLOR1,
@@ -172,6 +171,7 @@ typedef enum {
   GLW_ATTRIB_BORDER,
   GLW_ATTRIB_PADDING,
   GLW_ATTRIB_FONT,
+  GLW_ATTRIB_TENTATIVE_VALUE,
   GLW_ATTRIB_num,
 } glw_attribute_t;
 
@@ -514,14 +514,6 @@ typedef struct glw_class {
    */
   glw_callback_t *gc_signal_handler;
 
-
-  /**
-   * Custom code for iterating of a widget's children when delivering
-   * pointer events
-   */ 
-  int (*gc_gpe_iterator)(struct glw_root *gr, struct glw *r, 
-			 glw_pointer_event_t *gpe, struct glw **hp,
-			 Vec3 p, Vec3 dir);
 
   /**
    * Get a text representing the widget
@@ -964,6 +956,8 @@ typedef struct glw_root {
 
   void *gr_private;
 
+  uint8_t gr_left_pressed; // For pointer -> touch converter
+  
 } glw_root_t;
 
 
@@ -1390,8 +1384,10 @@ void glw_inject_event(glw_root_t *gr, event_t *e);
 
 void glw_pointer_event(glw_root_t *gr, glw_pointer_event_t *gpe);
 
-int glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe, 
+int glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
 		       glw_t **hp, Vec3 p, Vec3 dir);
+
+int glw_pointer_event_deliver(glw_t *w, glw_pointer_event_t *gpe);
 
 
 glw_t *glw_find_neighbour(glw_t *w, const char *id);

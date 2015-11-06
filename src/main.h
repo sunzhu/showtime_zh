@@ -225,6 +225,7 @@ typedef struct gconf {
   int disable_upnp;
   int disable_upgrades;
   int disable_sd;
+  int convert_pointer_to_touch;
 
   int disable_analytics;
   int enable_bin_replace;
@@ -249,6 +250,7 @@ typedef struct gconf {
   int enable_metadata_debug;
   int enable_upnp_debug;
   int enable_ecmascript_debug;
+  int enable_input_event_debug;
 
   int enable_torrent_debug;
   int enable_torrent_tracker_debug;

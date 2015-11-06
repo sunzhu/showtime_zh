@@ -567,6 +567,16 @@ static __inline__ unsigned long long duk_rdtsc(void) {
 #include <sys/param.h>
 #include <sys/time.h>
 #include <time.h>
+#elif defined(__native_client__)
+#define DUK_USE_DATE_NOW_GETTIMEOFDAY
+#define DUK_USE_DATE_TZO_GMTIME_R
+#define DUK_USE_DATE_PRS_STRPTIME
+#define DUK_USE_DATE_FMT_STRFTIME
+#include <sys/types.h>
+#include <limits.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <time.h>
 #else
 /* Other UNIX, hopefully others */
 #define DUK_USE_DATE_NOW_GETTIMEOFDAY
@@ -1099,6 +1109,11 @@ typedef duk_small_int_t duk_bool_t;
 typedef duk_int_t duk_idx_t;
 #define DUK_IDX_MIN               DUK_INT_MIN
 #define DUK_IDX_MAX               DUK_INT_MAX
+
+/* Unsigned index variant. */
+typedef duk_uint_t duk_uidx_t;
+#define DUK_UIDX_MIN              DUK_UINT_MIN
+#define DUK_UIDX_MAX              DUK_UINT_MAX
 
 /* Array index values, could be exact 32 bits.
  * Currently no need for signed duk_arridx_t.
@@ -2324,7 +2339,7 @@ typedef FILE duk_file;
  * where a speed-size tradeoff exists (e.g. lookup tables).  When it really
  * matters, specific use flags may be appropriate.
  */
-#define DUK_USE_PREFER_SIZE
+#undef DUK_USE_PREFER_SIZE
 
 /* Use a sliding window for lexer; slightly larger footprint, slightly faster. */
 #define DUK_USE_LEXER_SLIDING_WINDOW
@@ -2481,6 +2496,16 @@ typedef FILE duk_file;
 #undef DUK_USE_DEBUGGER_DUMPHEAP
 #if defined(DUK_OPT_DEBUGGER_DUMPHEAP)
 #define DUK_USE_DEBUGGER_DUMPHEAP
+#endif
+
+#define DUK_USE_DEBUGGER_THROW_NOTIFY
+#if defined(DUK_OPT_NO_DEBUGGER_THROW_NOTIFY)
+#undef DUK_USE_DEBUGGER_THROW_NOTIFY
+#endif
+
+#undef DUK_USE_DEBUGGER_PAUSE_UNCAUGHT
+#if defined(DUK_OPT_DEBUGGER_PAUSE_UNCAUGHT)
+#define DUK_USE_DEBUGGER_PAUSE_UNCAUGHT
 #endif
 
 /* Debugger transport read/write torture. */
@@ -3031,7 +3056,9 @@ typedef FILE duk_file;
 #undef DUK_USE_DATE_GET_NOW
 #undef DUK_USE_DATE_PARSE_STRING
 #undef DUK_USE_DATE_PRS_GETDATE
+#undef DUK_USE_EXEC_FUN_LOCAL
 #undef DUK_USE_INTEGER_ME
+#undef DUK_USE_INTERRUPT_DEBUG_FIXUP
 #define DUK_USE_JSON_DECNUMBER_FASTPATH
 #define DUK_USE_JSON_DECSTRING_FASTPATH
 #define DUK_USE_JSON_DEC_RECLIMIT 1000
@@ -3044,6 +3071,7 @@ typedef FILE duk_file;
 #undef DUK_USE_REFZERO_FINALIZER_TORTURE
 #define DUK_USE_REGEXP_COMPILER_RECLIMIT 10000
 #define DUK_USE_REGEXP_EXECUTOR_RECLIMIT 10000
+#define DUK_USE_VERBOSE_PROP_ERRORS
 
 /*
  *  Alternative customization header

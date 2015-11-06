@@ -110,6 +110,7 @@ SRCS-$(CONFIG_HTTPSERVER) += src/prop/prop_http.c
 ##############################################################
 SRCS +=	src/image/image.c \
 	src/image/pixmap.c \
+	src/image/nanosvg.c \
 	src/image/svg.c \
 	src/image/rasterizer_ft.c \
 	src/image/jpeg.c \
@@ -403,6 +404,7 @@ SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
 			src/ui/glw/glw_dummy.c \
 			src/ui/glw/glw_container.c \
 			src/ui/glw/glw_cursor.c \
+			src/ui/glw/glw_scroll.c \
 			src/ui/glw/glw_list.c \
 			src/ui/glw/glw_clist.c \
 			src/ui/glw/glw_array.c \
@@ -435,6 +437,7 @@ SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
 			src/ui/glw/glw_primitives.c \
 			src/ui/glw/glw_math.c \
 			src/ui/glw/glw_underscan.c \
+			src/ui/glw/glw_popup.c \
 
 SRCS-$(CONFIG_GLW_SETTINGS) += 	  src/ui/glw/glw_settings.c
 

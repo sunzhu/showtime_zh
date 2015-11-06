@@ -18,6 +18,7 @@
  *  For more information, contact andreas@lonelycoder.com
  */
 #include "glw.h"
+#include "glw_scroll.h"
 #include "glw_navigation.h"
 
 typedef struct glw_list {
@@ -25,43 +26,20 @@ typedef struct glw_list {
 
   float child_aspect;
 
-  int target_pos;      // This is where we want to go
-  float filtered_pos;  // This is weher we are
-  int rounded_pos;     // Position rounded to pixels
-
-  int total_size;
-  int page_size;
-
   glw_t *scroll_to_me;
   glw_t *suggested;
 
   int suggest_cnt;
 
-  glw_slider_metrics_t metrics;
-
   int16_t saved_height;
   int16_t saved_width;
   int16_t spacing;
-  int16_t scroll_threshold;
 
   int16_t padding[4];
 
-  float alpha_falloff;
-  float blur_falloff;
-
   int chase_focus;
 
-
-  float initial_touch_x;
-  float initial_touch_y;
-  int initial_pos;
-  float last_touch_x;
-  float last_touch_y;
-  int64_t last_touch_time;
-
-  float touch_velocity;
-  float kinetic_scroll;
-
+  glw_scroll_control_t gsc;
 
 } glw_list_t;
 
@@ -73,47 +51,6 @@ typedef struct glw_list_item {
   char inst;
 } glw_list_item_t;
 
-/**
- *
- */
-static void
-glw_list_update_metrics(glw_list_t *l)
-{
-  float v;
-  int do_update = 0;
-
-  l->w.glw_flags &= ~GLW_UPDATE_METRICS;
-
-  v = GLW_MIN(1.0f, (float)l->page_size / l->total_size);
-
-  if(v != l->metrics.knob_size) {
-    do_update = 1;
-    l->metrics.knob_size = v;
-  }
-  
-  v = GLW_MAX(0, (float)l->target_pos / (l->total_size - l->page_size));
-
-  if(v != l->metrics.position) {
-    do_update = 1;
-    l->metrics.position = v;
-  }
-  
-  if(!do_update)
-    return;
-
-  if(l->total_size > l->page_size && !(l->w.glw_flags & GLW_CAN_SCROLL)) {
-    l->w.glw_flags |= GLW_CAN_SCROLL;
-    glw_signal0(&l->w, GLW_SIGNAL_CAN_SCROLL_CHANGED, NULL);
-    
-  } else if(l->total_size <= l->page_size &&
-	    l->w.glw_flags & GLW_CAN_SCROLL) {
-    l->w.glw_flags &= ~GLW_CAN_SCROLL;
-    glw_signal0(&l->w, GLW_SIGNAL_CAN_SCROLL_CHANGED, NULL);
-  }
-
-  glw_signal0(&l->w, GLW_SIGNAL_SLIDER_METRICS, &l->metrics);
-}
-
 
 /**
  *
@@ -123,18 +60,18 @@ glw_list_layout_y(glw_t *w, const glw_rctx_t *rc)
 {
   glw_list_t *l = (glw_list_t *)w;
   glw_t *c;
-  const int bd = l->scroll_threshold;
   int ypos;
 
   glw_rctx_t rc0 = *rc;
 
   glw_reposition(&rc0, l->padding[0], rc->rc_height - l->padding[1],
 		 rc->rc_width - l->padding[2], l->padding[3]);
-  int height0 = rc0.rc_height - bd * 2;
+
+  const int bottom_scroll_pos = rc0.rc_height - l->gsc.scroll_threshold_post;
 
   if(l->saved_height != rc0.rc_height) {
     l->saved_height = rc0.rc_height;
-    l->page_size = rc0.rc_height;
+    l->gsc.page_size = rc0.rc_height;
     l->w.glw_flags |= GLW_UPDATE_METRICS;
 
     if(w->glw_focused != NULL)
@@ -143,7 +80,7 @@ glw_list_layout_y(glw_t *w, const glw_rctx_t *rc)
 
   if(l->scroll_to_me != NULL) {
 
-    ypos = bd;
+    ypos = l->gsc.scroll_threshold_pre;
     TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
       if(c->glw_flags & GLW_HIDDEN)
         continue;
@@ -159,12 +96,15 @@ glw_list_layout_y(glw_t *w, const glw_rctx_t *rc)
 
       if(c == l->scroll_to_me) {
 
-        if(ypos - l->filtered_pos < bd) {
-          l->target_pos = ypos - bd;
+        int screen_pos = ypos - l->gsc.rounded_pos;
+        if(screen_pos < l->gsc.scroll_threshold_pre) {
+          l->gsc.target_pos = ypos - l->gsc.scroll_threshold_pre;
           l->w.glw_flags |= GLW_UPDATE_METRICS;
-        } else if(ypos - l->filtered_pos + height > height0) {
-          l->target_pos = ypos + height - height0;
+          glw_schedule_refresh(w->glw_root, 0);
+        } else if(screen_pos + height > bottom_scroll_pos) {
+          l->gsc.target_pos = ypos + height - bottom_scroll_pos;
           l->w.glw_flags |= GLW_UPDATE_METRICS;
+          glw_schedule_refresh(w->glw_root, 0);
         }
       }
 
@@ -174,37 +114,9 @@ glw_list_layout_y(glw_t *w, const glw_rctx_t *rc)
     l->scroll_to_me = NULL;
   }
 
-  if(w->glw_root->gr_pointer_grab == w) {
+  glw_scroll_layout(&l->gsc, w, rc->rc_height);
 
-    l->filtered_pos = l->target_pos;
-
-    l->filtered_pos = GLW_MAX(0, GLW_MIN(l->filtered_pos,
-                                         l->total_size - l->page_size + bd));
-
-  } else if(l->kinetic_scroll) {
-
-    l->filtered_pos += l->kinetic_scroll;
-    l->target_pos = l->filtered_pos;
-    l->kinetic_scroll *= 0.95;
-
-    l->filtered_pos = GLW_MAX(0, GLW_MIN(l->filtered_pos,
-                                         l->total_size - l->page_size + bd));
-
-  } else {
-
-    l->target_pos = GLW_MAX(0, GLW_MIN(l->target_pos,
-					l->total_size - l->page_size + bd));
-
-    if(fabsf(l->target_pos - l->filtered_pos) > rc->rc_height * 2) {
-      l->filtered_pos = l->target_pos;
-    } else {
-      glw_lp(&l->filtered_pos, w->glw_root, l->target_pos, 0.25);
-    }
-  }
-
-  l->rounded_pos = l->filtered_pos;
-
-  ypos = bd;
+  ypos = l->gsc.scroll_threshold_pre;
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
     if(c->glw_flags & GLW_HIDDEN)
       continue;
@@ -228,21 +140,21 @@ glw_list_layout_y(glw_t *w, const glw_rctx_t *rc)
 
     cd->height = rc0.rc_height;
 
-    if(ypos - l->rounded_pos > -height0 &&
-       ypos - l->rounded_pos <  height0 * 2)
+    if(ypos - l->gsc.rounded_pos > -rc->rc_height &&
+       ypos - l->gsc.rounded_pos <  rc->rc_height * 2)
       glw_layout0(c, &rc0);
 
     ypos += rc0.rc_height;
     ypos += l->spacing;
   }
 
-  if(l->total_size != ypos) {
-    l->total_size = ypos;
+  if(l->gsc.total_size != ypos) {
+    l->gsc.total_size = ypos;
     l->w.glw_flags |= GLW_UPDATE_METRICS;
   }
 
   if(l->w.glw_flags & GLW_UPDATE_METRICS)
-    glw_list_update_metrics(l);
+    glw_scroll_update_metrics(&l->gsc, w);
 }
 
 
@@ -255,34 +167,34 @@ glw_list_layout_x(glw_t *w, const glw_rctx_t *rc)
 {
   glw_list_t *l = (glw_list_t *)w;
   glw_t *c;
-  const int bd = l->scroll_threshold;
-  int xpos = bd;
+  int xpos = l->gsc.scroll_threshold_pre;;
   glw_rctx_t rc0 = *rc;
 
   glw_reposition(&rc0, l->padding[0], rc->rc_height - l->padding[1],
 		 rc->rc_width - l->padding[2], l->padding[3]);
-  int width0 = rc0.rc_width - bd * 2;
+  int width0 = rc0.rc_width -
+    l->gsc.scroll_threshold_pre -
+    l->gsc.scroll_threshold_post;
 
   if(l->saved_width != rc0.rc_width) {
     l->saved_width = rc0.rc_width;
-    l->page_size = rc0.rc_width;
+    l->gsc.page_size = rc0.rc_width;
     l->w.glw_flags |= GLW_UPDATE_METRICS;
 
     if(w->glw_focused != NULL)
       l->scroll_to_me = w->glw_focused;
   }
 
-  
-  l->target_pos = GLW_MAX(0, GLW_MIN(l->target_pos,
-				      l->total_size - l->page_size));
+  l->gsc.target_pos = GLW_MAX(0, GLW_MIN(l->gsc.target_pos,
+                                         l->gsc.total_size - l->gsc.page_size));
 
-  if(fabsf(l->target_pos - l->filtered_pos) > rc->rc_width * 2) {
-    l->filtered_pos = l->target_pos;
+  if(fabsf(l->gsc.target_pos - l->gsc.filtered_pos) > rc->rc_width * 2) {
+    l->gsc.filtered_pos = l->gsc.target_pos;
   } else {
-    glw_lp(&l->filtered_pos, w->glw_root, l->target_pos, 0.25);
+    glw_lp(&l->gsc.filtered_pos, w->glw_root, l->gsc.target_pos, 0.25);
   }
 
-  l->rounded_pos = l->filtered_pos;
+  l->gsc.rounded_pos = l->gsc.filtered_pos;
 
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
     if(c->glw_flags & GLW_HIDDEN)
@@ -301,18 +213,18 @@ glw_list_layout_x(glw_t *w, const glw_rctx_t *rc)
     cd->pos = xpos;
     cd->width = rc0.rc_width;
 
-    if(xpos - l->rounded_pos > -width0 &&
-       xpos - l->rounded_pos <  width0 * 2) {
+    if(xpos - l->gsc.rounded_pos > -width0 &&
+       xpos - l->gsc.rounded_pos <  width0 * 2) {
       glw_layout0(c, &rc0);
     }
 
     if(c == l->scroll_to_me) {
       l->scroll_to_me = NULL;
-      if(xpos - l->rounded_pos < bd) {
-	l->target_pos = xpos - bd;
+      if(xpos - l->gsc.rounded_pos < l->gsc.scroll_threshold_pre) {
+	l->gsc.target_pos = xpos - l->gsc.scroll_threshold_pre;
 	l->w.glw_flags |= GLW_UPDATE_METRICS;
-      } else if(xpos - l->rounded_pos + rc0.rc_width > width0) {
-	l->target_pos = xpos + rc0.rc_width - width0 - bd;
+      } else if(xpos - l->gsc.rounded_pos + rc0.rc_width > width0) {
+	l->gsc.target_pos = xpos + rc0.rc_width - width0;
 	l->w.glw_flags |= GLW_UPDATE_METRICS;
       }
     }
@@ -321,15 +233,15 @@ glw_list_layout_x(glw_t *w, const glw_rctx_t *rc)
     xpos += l->spacing;
   }
 
-  xpos += bd;
+  xpos += l->gsc.scroll_threshold_post;
 
-  if(l->total_size != xpos) {
-    l->total_size = xpos;
+  if(l->gsc.total_size != xpos) {
+    l->gsc.total_size = xpos;
     l->w.glw_flags |= GLW_UPDATE_METRICS;
   }
 
   if(l->w.glw_flags & GLW_UPDATE_METRICS)
-    glw_list_update_metrics(l);
+    glw_scroll_update_metrics(&l->gsc, w);
 }
 
 
@@ -338,14 +250,14 @@ glw_list_layout_x(glw_t *w, const glw_rctx_t *rc)
  */
 static void
 glw_list_y_render_one(glw_list_t *l, glw_t *c, int width, int height,
-                      const glw_rctx_t *rc0, const glw_rctx_t *rc1)
+                      const glw_rctx_t *rc0, const glw_rctx_t *rc1,
+                      int clip_top, int clip_bottom)
 {
   glw_list_item_t *cd = glw_parent_data(c, glw_list_item_t);
 
   int ct, cb;
-  int ft, fb;
   glw_root_t *gr = l->w.glw_root;
-  float y = cd->pos - l->rounded_pos;
+  float y = cd->pos - l->gsc.rounded_pos;
   glw_rctx_t rc2;
 
   if((y + cd->height < 0 || y > height)) {
@@ -355,13 +267,19 @@ glw_list_y_render_one(glw_list_t *l, glw_t *c, int width, int height,
     c->glw_flags &= ~GLW_CLIPPED;
   }
 
-  ct = cb = ft = fb = -1;
+  ct = cb = -1;
 
-  if(y < 0)
-    ct = glw_clip_enable(gr, rc0, GLW_CLIP_TOP, 0, 0, 1);
+  if(y < clip_top) {
+    const float k = (float)clip_top / rc0->rc_height;
+    ct = glw_clip_enable(gr, rc0, GLW_CLIP_TOP, k,
+                         l->gsc.clip_alpha, 1.0f - l->gsc.clip_blur);
+  }
 
-  if(y + cd->height > height)
-    cb = glw_clip_enable(gr, rc0, GLW_CLIP_BOTTOM, 0, 0, 1);
+  if(y + cd->height > rc0->rc_height - clip_bottom) {
+    const float k = (float)clip_bottom / rc0->rc_height;
+    cb = glw_clip_enable(gr, rc0, GLW_CLIP_BOTTOM, k,
+                         l->gsc.clip_alpha, 1.0f - l->gsc.clip_blur);
+  }
 
   rc2 = *rc1;
   glw_reposition(&rc2,
@@ -402,17 +320,17 @@ glw_list_render_y(glw_t *w, const glw_rctx_t *rc)
   if(rc->rc_alpha < 0.01f)
     return;
 
-  glw_Translatef(&rc1, 0, 2.0f * l->rounded_pos / rc0.rc_height, 0);
+  const int clip_top    = l->gsc.clip_offset_pre - 1;
+  const int clip_bottom = l->gsc.clip_offset_post - 1;
+
+  glw_Translatef(&rc1, 0, 2.0f * l->gsc.rounded_pos / rc0.rc_height, 0);
 
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
     if(c->glw_flags & GLW_HIDDEN)
       continue;
-    if(w->glw_focused != c)
-      glw_list_y_render_one(l, c, rc0.rc_width, rc0.rc_height, &rc0, &rc1);
+    glw_list_y_render_one(l, c, rc0.rc_width, rc0.rc_height, &rc0, &rc1,
+                          clip_top, clip_bottom);
   }
-  if(w->glw_focused != NULL)
-    glw_list_y_render_one(l, w->glw_focused, rc0.rc_width, rc0.rc_height,
-                          &rc0, &rc1);
 }
 
 
@@ -447,7 +365,7 @@ glw_list_render_x(glw_t *w, const glw_rctx_t *rc)
 
   rc1 = rc0;
 
-  glw_Translatef(&rc1, -2.0f * l->rounded_pos / width, 0, 0);
+  glw_Translatef(&rc1, -2.0f * l->gsc.rounded_pos / width, 0, 0);
   
   TAILQ_FOREACH(c, &w->glw_childs, glw_parent_link) {
     if(c->glw_flags & GLW_HIDDEN)
@@ -455,7 +373,7 @@ glw_list_render_x(glw_t *w, const glw_rctx_t *rc)
 
     glw_list_item_t *cd = glw_parent_data(c, glw_list_item_t);
 
-    x = cd->pos - l->rounded_pos;
+    x = cd->pos - l->gsc.rounded_pos;
     if(x + cd->width < 0 || x > width) {
       c->glw_flags |= GLW_CLIPPED;
       continue;
@@ -508,8 +426,8 @@ focus_child_when_list_not_focused(glw_list_t *l, glw_t *c)
 static glw_t *
 find_visible_child(glw_list_t *l)
 {
-  const int top = l->target_pos;
-  const int bottom = l->target_pos + l->page_size;
+  const int top = l->gsc.target_pos;
+  const int bottom = l->gsc.target_pos + l->gsc.page_size;
   glw_t *c = l->w.glw_focused;
 
   if(c == NULL)
@@ -542,8 +460,8 @@ find_visible_child(glw_list_t *l)
 static void
 glw_list_scroll(glw_list_t *l, glw_scroll_t *gs)
 {
-  int top = GLW_MAX(gs->value * (l->total_size - l->page_size), 0);
-  l->target_pos = top;
+  int top = GLW_MAX(gs->value * (l->gsc.total_size - l->gsc.page_size), 0);
+  l->gsc.target_pos = top;
 
   if(l->chase_focus == 0)
     return;
@@ -559,82 +477,6 @@ glw_list_scroll(glw_list_t *l, glw_scroll_t *gs)
   }
 }
 
-
-/**
- *
- */
-static int
-handle_pointer_event(glw_t *w, const glw_pointer_event_t *gpe)
-{
-  glw_list_t *l = (glw_list_t *)w;
-  glw_root_t *gr = w->glw_root;
-  int64_t dt;
-  const int grabbed = gr->gr_pointer_grab == w;
-  float v;
-  switch(gpe->type) {
-
-  case GLW_POINTER_SCROLL:
-    l->target_pos += l->page_size * gpe->delta_y;
-    l->w.glw_flags |= GLW_UPDATE_METRICS;
-    glw_schedule_refresh(w->glw_root, 0);
-    return 1;
-
-  case GLW_POINTER_FINE_SCROLL:
-    l->target_pos += gpe->delta_y;
-    l->w.glw_flags |= GLW_UPDATE_METRICS;
-    glw_schedule_refresh(w->glw_root, 0);
-    return 1;
-
-  case GLW_POINTER_TOUCH_START:
-    gr->gr_pointer_grab = w;
-
-    l->initial_pos = l->target_pos;
-    l->initial_touch_x = gpe->x;
-    l->initial_touch_y = gpe->y;
-    l->last_touch_x = gpe->x;
-    l->last_touch_y = gpe->y;
-    l->last_touch_time = gpe->ts;
-    l->touch_velocity = 0;
-    l->kinetic_scroll = 0;
-    return 1;
-
-  case GLW_POINTER_TOUCH_END:
-    if(fabsf(l->touch_velocity) > 10)
-      l->kinetic_scroll = l->touch_velocity;
-
-    if(grabbed)
-      gr->gr_pointer_grab = NULL;
-    return 1;
-
-  case GLW_POINTER_TOUCH_CANCEL:
-    if(grabbed)
-      gr->gr_pointer_grab = NULL;
-    return 1;
-
-  case GLW_POINTER_TOUCH_MOVE:
-    if(!grabbed)
-      return 0;
-
-    l->target_pos = (gpe->y - l->initial_touch_y) * l->page_size * 0.5 +
-      l->initial_pos;
-
-    dt = gpe->ts - l->last_touch_time;
-    if(dt > 100) {
-      v = 1000000.0 * (gpe->y - l->last_touch_y) / dt;
-
-      l->touch_velocity = v * 10;
-    }
-    l->last_touch_time = gpe->ts;
-    l->last_touch_x = gpe->x;
-    l->last_touch_y = gpe->y;
-    break;
-
-    return 0;
-  default:
-    return 0;
-  }
-  return 0;
-}
 
 /**
  * This is a helper to make sure we can show items in list that are not
@@ -694,8 +536,8 @@ glw_list_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 
     if(extra == TAILQ_FIRST(&w->glw_childs) && glw_next_widget(extra) == NULL) {
       // Last item went away, make sure to reset
-      l->target_pos = 0;
-      l->filtered_pos = 0;
+      l->gsc.target_pos = 0;
+      l->gsc.filtered_pos = 0;
       w->glw_flags |= GLW_FLOATING_FOCUS;
       l->suggest_cnt = 1;
     }
@@ -770,12 +612,6 @@ glw_list_set_int(glw_t *w, glw_attribute_t attrib, int value,
     l->spacing = value;
     break;
 
-  case GLW_ATTRIB_SCROLL_THRESHOLD:
-    if(l->scroll_threshold == value)
-      return 0;
-    l->scroll_threshold = value;
-    break;
-
   default:
     return -1;
   }
@@ -789,7 +625,6 @@ static void
 glw_list_y_ctor(glw_t *w)
 {
   glw_list_t *l = (void *)w;
-  
   l->child_aspect = 20;
   l->suggest_cnt = 1;
   w->glw_flags |= GLW_FLOATING_FOCUS;
@@ -857,6 +692,19 @@ glw_list_set_int16_4(glw_t *w, glw_attribute_t attrib, const int16_t *v,
  *
  */
 static int
+glw_list_set_float_unresolved(glw_t *w, const char *a, float value,
+                              glw_style_t *gs)
+{
+  glw_list_t *l = (glw_list_t *)w;
+
+  return glw_scroll_set_float_attributes(&l->gsc, a, value);
+
+}
+
+/**
+ *
+ */
+static int
 glw_list_set_int_unresolved(glw_t *w, const char *a, int value,
                             glw_style_t *gs)
 {
@@ -866,8 +714,19 @@ glw_list_set_int_unresolved(glw_t *w, const char *a, int value,
     l->chase_focus = value;
     return GLW_SET_NO_CHANGE;
   }
-  return GLW_SET_NOT_RESPONDING;
+
+  return glw_scroll_set_int_attributes(&l->gsc, a, value);
 }
+
+
+static int
+handle_pointer_event(struct glw *w, const glw_pointer_event_t *gpe)
+{
+  glw_list_t *l = (glw_list_t *)w;
+  return glw_scroll_handle_pointer_event(&l->gsc, w, gpe);
+}
+
+
 
 
 static glw_class_t glw_list_y = {
@@ -886,6 +745,7 @@ static glw_class_t glw_list_y = {
   .gc_pointer_event = handle_pointer_event,
   .gc_bubble_event = glw_navigate_vertical,
   .gc_set_int_unresolved = glw_list_set_int_unresolved,
+  .gc_set_float_unresolved = glw_list_set_float_unresolved,
 };
 
 GLW_REGISTER_CLASS(glw_list_y);
@@ -906,9 +766,9 @@ static glw_class_t glw_list_x = {
   .gc_signal_handler = glw_list_callback,
   .gc_suggest_focus = glw_list_suggest_focus,
   .gc_set_int16_4 = glw_list_set_int16_4,
-  .gc_pointer_event = handle_pointer_event,
   .gc_bubble_event = glw_navigate_horizontal,
   .gc_set_int_unresolved = glw_list_set_int_unresolved,
+  .gc_set_float_unresolved = glw_list_set_float_unresolved,
 };
 
 GLW_REGISTER_CLASS(glw_list_x);

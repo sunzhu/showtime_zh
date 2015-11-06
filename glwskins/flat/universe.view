@@ -25,11 +25,7 @@ style(PageContainer, {
 widget(container_z, {
   widget(backdrop, {
     zoffset: -1000;
-
     source: "pixmap:gradient:30,30,30:60,60,60";
-//    source: "http://image.tmdb.org/t/p/original/jz1eErpJSx7ToDVDgV9HKFv4hAa.jpg";
-//    source: "http://image.tmdb.org/t/p/original/xyhrCEdB4XRkelfVsqXeUZ6rLHi.jpg";
-//    color: 0.3;
     alpha: iir(1 - $ui.fullwindow, 4);
   });
 
@@ -43,46 +39,46 @@ widget(container_z, {
   widget(underscan, {
     widget(container_z, {
 
-      widget(container_y, {
+      widget(layer, {
+        filterConstraintY: true;
+	alpha: iir(1 - $ui.screensaverActive, 8);
+        widget(playfield, {
+          effect: blend;
+          noInitialTransform: true;
 
-        widget(layer, {
-          filterConstraintY: true;
-	  alpha: iir(1 - $ui.screensaverActive, 8);
-          widget(playfield, {
-            effect: blend;
-            noInitialTransform: true;
+          cloner($nav.pages, container_z, {
 
-            $view.currentPageClone <- focusedClone();
-
-            cloner($nav.pages, container_z, {
-
-              widget(loader, {
-	        time: 0.05;
-                effect: flipVertical;
-	        noInitialTransform: true;
-	        source: "skin://pages/" + $self.model.type + ".view";
-              });
-
+            widget(loader, {
+	      time: 0.05;
+              effect: flipVertical;
+	      noInitialTransform: true;
+	      source: "skin://pages/" + $self.model.type + ".view";
             });
+
           });
-	  cloner($core.popups, loader, {
-	    source: "popups/" + $self.type + ".view";
-	  });
-
-	  widget(loader, {
-            autohide: true;
-	    source: select($ui.logwindow, "log.view", "");
-	  });
-
-          widget(loader, {
-            autohide: true;
-	    source: select($ui.osk.show, "osk.view", "");
-	  });
-
         });
+	cloner($core.popups, loader, {
+	  source: "popups/" + $self.type + ".view";
+	});
 
+	widget(loader, {
+          autohide: true;
+	  source: select($ui.logwindow, "log.view", "");
+	});
+
+        widget(loader, {
+          autohide: true;
+	  source: select($ui.osk.show, "osk.view", "");
+	});
+
+      });
+
+      widget(container_y, {
+        space(1);
         widget(container_y, {
-          autofade: true;
+
+          $ui.universeBottomHeight = getHeight();
+
           expediteSubscriptions: true;
 
           style(playdeckText, {
@@ -92,13 +88,15 @@ widget(container_z, {
           widget(loader, {
             autohide: true;
             source: translate($core.media.current.type, "",
-                              "tracks", "playdecks/tracks.view");
+                              "tracks", "playdecks/tracks.view",
+                              "radio", "playdecks/radio.view"
+                             );
           });
 
           cloner($core.notifications.nodes, container_z, {
             widget(quad, {
               color: 0;
-              alpha: 0.8;
+              alpha: 0.2;
             });
 
             widget(label, {
