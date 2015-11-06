@@ -1812,8 +1812,6 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
     t = prop_callback_alloc_token(gr, gps, TOKEN_FLOAT);
     t->t_propsubr = gps;
     t->t_float = va_arg(ap, double);
-    (void)va_arg(ap, prop_t *); // vauleprop
-    t->t_float_how = va_arg(ap, int);
     rpn = gps->gps_rpn;
     break;
 
@@ -1993,7 +1991,6 @@ ve_cb(void *opaque, prop_event_t event, ...)
   case PROP_SET_FLOAT:
     t = prop_callback_alloc_token(gr, gps, TOKEN_FLOAT);
     t->t_float = va_arg(ap, double);
-    t->t_float_how = va_arg(ap, int);
     rpn = gps->gps_rpn;
     break;
 
@@ -2268,7 +2265,6 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
     t = prop_callback_alloc_token(gr, gps, TOKEN_FLOAT);
     t->t_propsubr = gps;
     t->t_float = va_arg(ap, double);
-    t->t_float_how = va_arg(ap, int);
     rpn = gps->gps_rpn;
     break;
 
@@ -3204,14 +3200,15 @@ glw_event_map_eval_block_create(glw_view_eval_context_t *ec,
 static int
 glwf_onEvent(glw_view_eval_context_t *ec, struct token *self,
 	     token_t **argv, unsigned int argc)
-
 {
   token_t *a = argc > 0 ? argv[0] : NULL;  /* Source */
   token_t *b = argc > 1 ? argv[1] : NULL;  /* Target */
   token_t *c = argc > 2 ? argv[2] : NULL;  /* Enabled */
   token_t *d = argc > 3 ? argv[3] : NULL;  /* Final */
+  token_t *e = argc > 4 ? argv[4] : NULL;  /* Early */
   int enabled = 1;
   int final = 1;
+  int early = 0;
   glw_t *w = ec->w;
   glw_event_map_t *gem;
 
@@ -3232,6 +3229,12 @@ glwf_onEvent(glw_view_eval_context_t *ec, struct token *self,
     if((d = token_resolve(ec, d)) == NULL)
       return -1;
     final = token2bool(d);
+  }
+
+  if(e != NULL) {
+    if((e = token_resolve(ec, e)) == NULL)
+      return -1;
+    early = token2bool(e);
   }
 
   rstr_t *filter = token2rstr(a);
@@ -3268,6 +3271,7 @@ glwf_onEvent(glw_view_eval_context_t *ec, struct token *self,
       self->t_extra_int = ++w->glw_root->gr_gem_id_tally;
 
     gem->gem_id = self->t_extra_int;
+    gem->gem_early = early;
     glw_event_map_add(w, gem);
     return 0;
   }
@@ -5111,7 +5115,6 @@ glwf_trace(glw_view_eval_context_t *ec, struct token *self,
 #endif
 
   switch(b->type) {
-  case TOKEN_URI:
   case TOKEN_RSTRING:
   case TOKEN_IDENTIFIER:
     TRACE(TRACE_DEBUG, "GLW", "%s: %s", prefix, rstr_get(b->t_rstring));
@@ -5127,6 +5130,11 @@ glwf_trace(glw_view_eval_context_t *ec, struct token *self,
     break;
   case TOKEN_VOID:
     TRACE(TRACE_DEBUG, "GLW", "%s: (void)", prefix, b->t_int);
+    break;
+  case TOKEN_URI:
+    TRACE(TRACE_DEBUG, "GLW", "%s: %s (URI)", prefix,
+          rstr_get(b->t_uri_title),
+          rstr_get(b->t_uri));
     break;
   default:
     TRACE(TRACE_DEBUG, "GLW", "%s: %s", prefix, token2name(b));
@@ -5775,110 +5783,6 @@ glwf_getHeight(glw_view_eval_context_t *ec, struct token *self,
     r = eval_alloc(self, ec, TOKEN_INT);
     r->t_int = ec->rc->rc_height;
   }
-  eval_push(ec, r);
-  return 0;
-}
-
-
-/**
- *
- */
-static int
-glwf_preferTentative(glw_view_eval_context_t *ec, struct token *self,
-		     token_t **argv, unsigned int argc)
-{
-  token_t *a = argv[0], *r;
-  int how;
-
-  if((a = token_resolve(ec, a)) == NULL)
-    return -1;
-
-  switch(a->type) {
-  case TOKEN_FLOAT:
-    how = a->t_float_how;
-    break;
-  default:
-    how = 0;
-    break;
-  }
-
-  switch(how) {
-  case PROP_SET_NORMAL:
-    r = self->t_extra ?: a;
-    break;
-
-  case PROP_SET_TENTATIVE:
-    if(self->t_extra != NULL)
-      glw_view_token_free(ec->gr, self->t_extra);
-    self->t_extra = r = glw_view_token_copy(ec->gr, a);
-    break;
-
-  case PROP_SET_COMMIT:
-    if(self->t_extra != NULL)
-      glw_view_token_free(ec->gr, self->t_extra);
-    self->t_extra = NULL;
-    r = a;
-    break;
-  default:
-    abort();
-  }
-
-  ec->dynamic_eval |= GLW_VIEW_EVAL_KEEP;
-  eval_push(ec, r);
-  return 0;
-}
-
-
-/**
- *
- */
-static void
-glwf_freetoken_dtor(glw_root_t *gr, struct token *self)
-{
-  if(self->t_extra != NULL)
-    glw_view_token_free(gr, self->t_extra);
-}
-
-
-
-/**
- *
- */
-static int
-glwf_ignoreTentative(glw_view_eval_context_t *ec, struct token *self,
-		     token_t **argv, unsigned int argc)
-{
-  token_t *a = argv[0], *r;
-  int how;
-
-  if((a = token_resolve(ec, a)) == NULL)
-    return -1;
-
-  switch(a->type) {
-  case TOKEN_FLOAT:
-    how = a->t_float_how;
-    break;
-  default:
-    how = 0;
-    break;
-  }
-
-  switch(how) {
-  case PROP_SET_NORMAL:
-  case PROP_SET_COMMIT:
-    if(self->t_extra != NULL)
-      glw_view_token_free(ec->gr, self->t_extra);
-    self->t_extra = r = glw_view_token_copy(ec->gr, a);
-    break;
-
-  case PROP_SET_TENTATIVE:
-    r = self->t_extra ?: a;
-    break;
-  default:
-    abort();
-  }
-
-  ec->dynamic_eval |= GLW_VIEW_EVAL_KEEP;
   eval_push(ec, r);
   return 0;
 }
@@ -6756,6 +6660,118 @@ glwf_eventWithProp(glw_view_eval_context_t *ec, struct token *self,
 }
 
 
+/**
+ *
+ */
+static void
+glwf_lookup_dtor(glw_root_t *Gr, struct token *self)
+{
+  prop_ref_dec(self->t_extra);
+}
+
+
+/**
+ *
+ */
+static int
+glwf_lookup(glw_view_eval_context_t *ec, struct token *self,
+           token_t **argv, unsigned int argc)
+{
+  token_t *a, *b;
+
+  if((a = resolve_property_name2(ec, argv[0])) == NULL)
+    return -1;
+  if((b = token_resolve(ec, argv[1])) == NULL)
+    return -1;
+
+  if(a->type != TOKEN_PROPERTY_REF)
+    return glw_view_seterr(ec->ei, a, "lookup(): "
+                           "First argument is not a property");
+
+  rstr_t *key = token2rstr(b);
+  if(key == NULL)
+    return glw_view_seterr(ec->ei, b, "lookup(): Second arg is not a string");
+
+  if(self->t_extra == NULL)
+    self->t_extra = prop_create_r(a->t_prop, NULL);
+
+
+  prop_set(self->t_extra, "key", PROP_SET_RSTRING, key);
+
+  token_t *r = eval_alloc(self, ec, TOKEN_PROPERTY_REF);
+  r->t_prop = prop_create_r(self->t_extra, "value");
+  eval_push(ec, r);
+  return 0;
+}
+
+
+
+/**
+ *
+ */
+static int
+glwf_timeAgo(glw_view_eval_context_t *ec, struct token *self,
+             token_t **argv, unsigned int argc)
+{
+  token_t *a;
+
+  if((a = token_resolve(ec, argv[0])) == NULL)
+    return -1;
+
+  int seconds = token2int(ec, a);
+
+  rstr_t *fmt = NULL;
+  int v = 0;
+  if(seconds < 0) {
+    token_t *r = eval_alloc(self, ec, TOKEN_VOID);
+    eval_push(ec, r);
+    return 0;
+  }
+  if(seconds < 60) {
+    fmt = _("Just now");
+  } else if(seconds < 120) {
+    fmt = _("One minute ago");
+  } else if(seconds < 3600) {
+    fmt = _("%d minutes ago");
+    v = seconds / 60;
+  } else if(seconds < 7200) {
+    fmt = _("One hour ago");
+  } else if(seconds < 86400) {
+    fmt = _("%d hours ago");
+    v = seconds / 3600;
+  } else if(seconds < 86400 * 2) {
+    fmt = _("One day ago");
+  } else if(seconds < 86400 * 14) {
+    fmt = _("%d days ago");
+    v = seconds / 86400;
+  } else if(seconds < 86400 * 50) {
+    fmt = _("%d weeks ago");
+    v = seconds / 604800;
+  } else if(seconds < 86400 * 365) {
+    v = seconds / 2592000;
+    if(v == 1)
+      fmt = _("One month ago");
+    else
+      fmt = _("%d months ago");
+  } else {
+    fmt = _("%d years ago");
+    v = seconds / 31556736;
+  }
+
+  char tmp[64];
+  snprintf(tmp, sizeof(tmp), rstr_get(fmt), v);
+  rstr_release(fmt);
+
+  ec->dynamic_eval |= GLW_VIEW_EVAL_LAYOUT;
+  glw_root_t *gr = ec->w->glw_root;
+  glw_schedule_refresh(gr, gr->gr_frame_start + 30 * 1000000);
+  token_t *r = eval_alloc(self, ec, TOKEN_RSTRING);
+  r->t_rstring = rstr_alloc(tmp);
+  eval_push(ec, r);
+  return 0;
+}
+
+
 
 #ifndef NDEBUG
 /**
@@ -6836,8 +6852,6 @@ static const token_func_t funcvec[] = {
   {"getLayer", 0, glwf_getLayer},
   {"getWidth", 0, glwf_getWidth},
   {"getHeight", 0, glwf_getHeight},
-  {"preferTentative", 1, glwf_preferTentative, glwf_null_ctor, glwf_freetoken_dtor},
-  {"ignoreTentative", 1, glwf_ignoreTentative, glwf_null_ctor, glwf_freetoken_dtor},
   {"int", 1,glwf_int},
   {"clamp", 3, glwf_clamp},
   {"join", -1, glwf_join},
@@ -6858,6 +6872,8 @@ static const token_func_t funcvec[] = {
   {"focus", 1, glwf_focus},
   {"toggle", 1, glwf_toggle},
   {"eventWithProp", 2, glwf_eventWithProp},
+  {"timeAgo", 1, glwf_timeAgo},
+  {"lookup", 2, glwf_lookup, glwf_null_ctor, glwf_lookup_dtor},
 #ifndef NDEBUG
   {"dumpDynamicStatements", 0, glwf_dumpdynamicstatements},
 #endif

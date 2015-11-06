@@ -1,12 +1,9 @@
-#import "skin://theme.view"
 
 #define PLAYDECK_BUTTON(ICON, EVENT, ENABLED) {
   widget(container_z, {
     width: 2em;
     onEvent(activate, EVENT);
-    clickable: ENABLED;
-
-    GridItemHighlight2();
+    focusable: ENABLED;
 
     widget(icon, {
       source: ICON;
@@ -15,22 +12,18 @@
   });
 }
 
-widget(container_z, {
+widget(cursor, {
 
-  widget(quad, {
-    color: 0;
-    alpha: 0.2;
-  });
+  widget(container_z, {
 
-  widget(container_y, {
-    height: 2em;
     widget(quad, {
-      height: 1;
       color: 0;
+      alpha: 0.2;
     });
+
     widget(container_x, {
-      filterConstraintY: true;
-      padding: [2em, 0, 2em, 1];
+      height: 2em;
+      padding: [2em, 0];
 
       PLAYDECK_BUTTON("skin://icons/ic_skip_previous_48px.svg",
                       event("PreviousTrack"),
@@ -47,16 +40,14 @@ widget(container_z, {
                       event("NextTrack"),
                       $core.media.current.canSkipForward);
 
-      widget(dummy, {
-        width: 0.5em;
-      });
 
       widget(label, {
-        caption: join(" • ",
-		      $core.media.current.metadata.artist,
-		      $core.media.current.metadata.title);
+	caption: join(" • ",
+		      $core.media.current.metadata.title,
+		      $core.media.current.radioinfo),
         style: "playdeckText";
       });
+
 
       space(1);
 
@@ -68,6 +59,18 @@ widget(container_z, {
           source: $core.media.current.metadata.album_art;
         });
       });
+
     });
+  });
+  widget(quad, {
+    zoffset: -100;
+    alpha: 0.6 * iir($ui.keyboard, 4);
+    additive: true;
+  });
+
+  widget(quad, {
+    zoffset: -100;
+    alpha: 0.1;
+    additive: true;
   });
 });

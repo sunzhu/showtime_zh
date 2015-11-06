@@ -58,7 +58,6 @@
 #define ListItemHighlight() {
   widget(quad, {
     fhpSpill: true;
-    zoffset: -10;
     additive: true;
     alpha: 0.1 * isHovered() + 0.6 * isNavFocused();
   });
@@ -68,11 +67,32 @@
 #define GridItemHighlight() {
   widget(quad, {
     fhpSpill: true;
-    zoffset: -10;
     additive: true;
     alpha: 0.1 * isHovered() + 0.6 * isNavFocused();
   });
+}
 
+
+#define GridItemHighlight2() {
+  widget(quad, {
+    fhpSpill: true;
+    additive: true;
+    alpha: 0.1 * isHovered() + 0.6 * isNavFocused();
+  });
+  widget(container_x, {
+    filterConstraintX: true;
+    fhpSpill: true;
+    alpha: isHovered() * 0.5;
+    widget(quad, {
+      width: 1;
+      color: 0;
+    });
+    space(1);
+    widget(quad, {
+      width: 1;
+      color: 0;
+    });
+  });
 }
 
 
@@ -91,6 +111,33 @@
       widget(quad, {
 	alpha: 0.6 + isHovered();
       });
+    });
+  });
+}
+
+
+#define PageHeader() {
+  widget(container_z, {
+    height: 3em;
+    zoffset: 10;
+    widget(quad, {
+      color: 0;
+      alpha: 0.2;
+    });
+
+    widget(deck, {
+      widget(label, {
+        padding: [4em, 0];
+        align: center;
+        caption: $self.model.metadata.title;
+        size: 1.5em;
+      });
+
+      widget(image, {
+        source: $self.model.metadata.icon;
+      });
+
+      page: select(isVoid($self.model.metadata.icon), 0, 1);
     });
   });
 }

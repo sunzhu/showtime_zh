@@ -46,6 +46,8 @@ $self.directClose = 1;
 $self.close = $self.media.playstatus == "stop";
 $clone.osdpage = 0;
 
+$view.iconPad = select(isVoid($self.media.metadata.icon), 0, 8em);
+
 onEvent(back, {
   $clone.showPlaydeck = 0;
 }, $clone.showPlaydeck && !$clone.osdpage);
@@ -188,7 +190,7 @@ widget(container_z, {
         widget(container_x, {
           id: "playdeck";
           spacing: 1em;
-          padding: [3.5em, 0.1em];
+          padding: [3.5em + $view.iconPad, 0.1em, 3.6em, 0.1em];
 
           PLAYDECK_BUTTON("skin://icons/ic_skip_previous_48px.svg",
                           _("Previous"),
@@ -221,7 +223,7 @@ widget(container_z, {
           PLAYDECK_BUTTON("skin://icons/ic_speaker_48px.svg",
                           _("Audio tracks"),
                           {
-                            $clone.osdpage = 101;
+                            $clone.osdpage = select($clone.osdpage == 101, 0, 101);
                             focus("osd_audio");
                           }, true);
 
@@ -256,16 +258,17 @@ widget(container_z, {
 
       widget(container_x, {
         spacing: 0.5em;
-        padding: [1em, 0];
-
+        padding: [$view.iconPad + 1em, 0, 0, 0];
         widget(icon, {
           source: "skin://icons/ic_pause_48px.svg";
           alpha: iir(select($core.media.current.playstatus == "pause", 1, 0), 4);
 
         });
+
         widget(label, {
           width: 3em;
-          caption: value2duration($self.media.currenttime);
+          caption: value2duration($view.tentativeSeekPosition ??
+                                  $self.media.currenttime);
           align: right;
         });
 
@@ -285,6 +288,8 @@ widget(container_z, {
           });
 
           widget(slider_x, {
+            tentative: $view.tentativeSeekPosition;
+            alwaysGrabKnob: true;
             clickable: true;
             bind($self.media.currenttime);
             max: $self.media.metadata.duration;
@@ -412,5 +417,16 @@ widget(container_z, {
         });
       });
     });
+  });
+
+  widget(container_x, {
+    padding: 1em;
+    widget(image, {
+      alpha: iir($view.showSeekBar, 8);
+      align: bottom;
+      width: 6em;
+      source: $self.media.metadata.icon;
+    });
+    space(1);
   });
 });
