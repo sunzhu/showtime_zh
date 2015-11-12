@@ -71,18 +71,21 @@ static const struct {
   { NSLeftArrowFunctionKey,   NSAlternateKeyMask, ACTION_NAV_BACK },
   { NSRightArrowFunctionKey,  NSAlternateKeyMask, ACTION_NAV_FWD },
 
-  { NSLeftArrowFunctionKey,   NSCommandKeyMask, ACTION_SEEK_BACKWARD },
-  { NSRightArrowFunctionKey,  NSCommandKeyMask, ACTION_SEEK_FORWARD },
+  { NSLeftArrowFunctionKey,   NSControlKeyMask, ACTION_SKIP_BACKWARD },
+  { NSRightArrowFunctionKey,  NSControlKeyMask, ACTION_SKIP_FORWARD },
+  { NSUpArrowFunctionKey,     NSControlKeyMask, ACTION_VOLUME_UP },
+  { NSDownArrowFunctionKey,   NSControlKeyMask, ACTION_VOLUME_DOWN },
 
-  { NSLeftArrowFunctionKey,   NSShiftKeyMask|NSCommandKeyMask, ACTION_SKIP_BACKWARD },
-  { NSRightArrowFunctionKey,  NSShiftKeyMask|NSCommandKeyMask, ACTION_SKIP_FORWARD },
+  { NSLeftArrowFunctionKey,   NSControlKeyMask | NSShiftKeyMask, ACTION_SEEK_BACKWARD },
+  { NSRightArrowFunctionKey,  NSControlKeyMask | NSShiftKeyMask , ACTION_SEEK_FORWARD },
+  { NSDownArrowFunctionKey,   NSControlKeyMask | NSShiftKeyMask, ACTION_VOLUME_MUTE_TOGGLE },
 
   /* only used for fullscreen, in windowed mode we dont get events with
    * NSCommandKeyMask set */
   { '0',                      NSCommandKeyMask, ACTION_ZOOM_UI_RESET },
   { '+',                      NSCommandKeyMask, ACTION_ZOOM_UI_INCR },
   { '-',                      NSCommandKeyMask, ACTION_ZOOM_UI_DECR },
-  { 'f',                      NSCommandKeyMask, ACTION_FULLSCREEN_TOGGLE },
+  { _NSEnterKey,              NSCommandKeyMask, ACTION_FULLSCREEN_TOGGLE },
 
   { _NSBackspaceKey,          0,                ACTION_BS, ACTION_NAV_BACK },
   { _NSEnterKey,              0,                ACTION_ENTER, ACTION_ACTIVATE},
@@ -339,8 +342,9 @@ glw_in_fullwindow(void *opaque, int val)
   unichar cim = [[event charactersIgnoringModifiers] characterAtIndex:0];
   /* only care for some modifier keys */
   int mod = [event modifierFlags] &
-  (NSShiftKeyMask | NSCommandKeyMask |
+  (NSShiftKeyMask | NSCommandKeyMask | NSControlKeyMask |
    NSFunctionKeyMask | NSAlternateKeyMask);
+
   event_t *e = NULL;
   action_type_t av[3];
   int i;

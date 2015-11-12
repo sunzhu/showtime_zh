@@ -731,11 +731,19 @@ static const struct {
 
   { XK_ISO_Left_Tab, ShiftMask,   ACTION_FOCUS_PREV },
 
+
   { XK_Left,         Mod1Mask,    ACTION_NAV_BACK},
   { XK_Right,        Mod1Mask,    ACTION_NAV_FWD},
 
-  { XK_Left,         ShiftMask | ControlMask,   ACTION_SKIP_BACKWARD},
-  { XK_Right,        ShiftMask | ControlMask,   ACTION_SKIP_FORWARD},
+  { XK_Left,         ControlMask,    ACTION_SKIP_BACKWARD},
+  { XK_Right,        ControlMask,    ACTION_SKIP_FORWARD},
+  { XK_Up,           ControlMask,    ACTION_VOLUME_UP},
+  { XK_Down,         ControlMask,    ACTION_VOLUME_DOWN},
+
+  { XK_Down,         ShiftMask | ControlMask,   ACTION_VOLUME_MUTE_TOGGLE},
+  { XK_Left,         ShiftMask | ControlMask,   ACTION_SEEK_BACKWARD},
+  { XK_Right,        ShiftMask | ControlMask,   ACTION_SEEK_FORWARD},
+
 
   { XK_Prior,        0,            ACTION_PAGE_UP,   ACTION_PREV_CHANNEL, ACTION_SKIP_BACKWARD},
   { XK_Next,         0,            ACTION_PAGE_DOWN, ACTION_NEXT_CHANNEL, ACTION_SKIP_FORWARD},
@@ -1279,7 +1287,7 @@ glw_x11_thread(void *aux)
   gx11->settings_mouse_btn =
     setting_create(SETTING_BOOL, glw_settings.gs_settings,
                    SETTINGS_INITIAL_UPDATE,
-                   SETTING_TITLE(_p("Map mouse wheel to up/down")),
+                   SETTING_TITLE(_p("Emulate Up/Down buttons with mouse wheel")),
                    SETTING_HTSMSG("map_mouse_wheel_to_keys",
                                   glw_settings.gs_settings_store, "glw"),
                    SETTING_COURIER(gr->gr_courier),

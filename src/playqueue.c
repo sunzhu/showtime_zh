@@ -892,8 +892,9 @@ playqueue_open(prop_t *page)
 
   model = prop_create_r(page, "model");
 
-  prop_set(model, "type", PROP_SET_STRING, "playqueue");
-  prop_setv(model, "metadata", "title", NULL, PROP_SET_STRING, "playqueue");
+  prop_set(model, "type", PROP_SET_STRING, "directory");
+  prop_setv(model, "metadata", "title", NULL, PROP_ADOPT_RSTRING,
+            _("Playqueue"));
 
   prop_t *nodes = prop_create_r(model, "nodes");
 
@@ -1067,6 +1068,7 @@ player_thread(void *aux)
 	/* Nothing and media queues empty. */
 
 	TRACE(TRACE_DEBUG, "playqueue", "Nothing on queue, waiting");
+        prop_set(playqueue_root, "active", PROP_SET_INT, 0);
 	/* Make sure we no longer claim current playback focus */
 	mp_set_url(mp, NULL, NULL, NULL);
 	mp_shutdown(playqueue_mp);
@@ -1104,6 +1106,7 @@ player_thread(void *aux)
       continue;
     }
 
+    prop_set(playqueue_root, "active", PROP_SET_INT, 1);
     mp_reset(mp);
 
     prop_t *sm = prop_get_by_name(PNVEC("self", "metadata"), 1,
@@ -1149,6 +1152,8 @@ player_thread(void *aux)
     // Unlink $self.media
     prop_unlink(m);
     prop_ref_dec(m);
+
+    prop_set(mp->mp_prop_root, "format", PROP_SET_VOID);
 
     if(e == NULL) {
       TRACE(TRACE_ERROR, "Playqueue", "Unable to play %s -- %s", pqe->pqe_url, errbuf);
