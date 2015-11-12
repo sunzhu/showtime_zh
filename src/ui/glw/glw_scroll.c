@@ -89,6 +89,8 @@ glw_scroll_handle_pointer_event(glw_scroll_control_t *gs,
     gs->last_touch_time = gpe->ts;
     gs->last_touch_x = gpe->x;
     gs->last_touch_y = gpe->y;
+    w->glw_flags |= GLW_UPDATE_METRICS;
+    glw_schedule_refresh(w->glw_root, 0);
     break;
 
   default:
@@ -155,7 +157,7 @@ glw_scroll_update_metrics(glw_scroll_control_t *gsc, glw_t *w)
     gsc->metrics.knob_size = v;
   }
   
-  v = GLW_MAX(0, (float)gsc->target_pos / (gsc->total_size - gsc->page_size));
+  v = GLW_MAX(0, (float)gsc->target_pos / (gsc->total_size - gsc->page_size + gsc->scroll_threshold_post));
 
   if(v != gsc->metrics.position) {
     do_update = 1;

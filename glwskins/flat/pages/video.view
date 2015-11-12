@@ -1,3 +1,4 @@
+#import "skin://theme.view"
 #import "skin://styles/style_list.view"
 
 
@@ -18,17 +19,6 @@
       color: select(isNavFocused(), 0, 1);
       alpha: 0.7 * iir(ENABLED, 8) + 0.3;
     });
-
-    widget(displacement, {
-      padding: [-4em, 0, -4em, -1em];
-      widget(label, {
-        alpha: iir(isNavFocused() || isHovered(), 4);
-        align: bottom;
-        shadow: true;
-        zoffset: 10;
-        caption: TITLE;
-      });
-    });
   });
 }
 
@@ -44,9 +34,12 @@ delta($ui.fullwindow, isVisible());
 
 $self.directClose = 1;
 $self.close = $self.media.playstatus == "stop";
+$self.model.loading = $self.media.loading;
+$self.model.io <- $self.media.io;
+
 $clone.osdpage = 0;
 
-$view.iconPad = select(isVoid($self.media.metadata.icon), 0, 8em);
+$view.iconPad = select(isVoid($self.media.metadata.icon), 0, 7em);
 
 onEvent(back, {
   $clone.showPlaydeck = 0;
@@ -59,6 +52,7 @@ onEvent(back, {
 //---------------------------
 // Handle menu button
 //---------------------------
+
 
 onEvent(menu, {
   $clone.showPlaydeck = 1;
@@ -77,6 +71,7 @@ onEvent(menu, {
 
 
 
+
 // Auto close playdeck after 10 seconds
 /*
 $clone.showPlaydeck ?=
@@ -85,10 +80,10 @@ $clone.showPlaydeck ?=
 
 $view.showSeekBar =
   $ui.pointerVisible ||
-  changed($self.media.seektime, 5, true) ||
   $clone.showPlaydeck ||
+  changed($self.media.seektime, 5, true) ||
+  changed($self.url, 5, true) ||
   $self.media.playstatus == "pause";
-
 
 widget(container_z, {
 
@@ -125,7 +120,6 @@ widget(container_z, {
 
 
     widget(container_y, {
-
       hidden: !$clone.showPlaydeck;
 
       widget(container_x, {
@@ -135,16 +129,20 @@ widget(container_z, {
           // A clickable zone that closes everything
           clickable: true;
           onEvent(activate, {
-            $clone.showPlaydeck = 0;
             $clone.osdpage = 0;
+            $clone.showPlaydeck = 0;
           });
         });
 
 
         widget(displacement, {
           width: 22em;
-          translation: [2 - 2 * iir($clone.osdpage > 0, 4), 0, 0];
+          translation: [0, -2 + 2 * iir($clone.osdpage > 0, 3), 0];
           widget(container_z, {
+
+            onEvent(left, {
+              $clone.osdpage = 0;
+            }, true, false);
 
 
             widget(layer, {
@@ -179,18 +177,23 @@ widget(container_z, {
       // OSD buttons row
 
       widget(container_z, {
-        height: 2.7em;
+        height: 2.2em;
         delta($clone.bottomOsdHeight, isVisible() * getHeight());
 
         widget(quad, {
-          alpha: 0.9;
+          alpha: 0.8;
           color: 0;
         });
 
         widget(container_x, {
           id: "playdeck";
           spacing: 1em;
-          padding: [3.5em + $view.iconPad, 0.1em, 3.6em, 0.1em];
+          padding: [1em + $view.iconPad, 0.1em, 2em, 0.1em];
+
+          PLAYDECK_BUTTON("skin://icons/ic_stop_48px.svg",
+                          _("Stop"),
+                          event("Stop"),
+                          true);
 
           PLAYDECK_BUTTON("skin://icons/ic_skip_previous_48px.svg",
                           _("Previous"),
@@ -210,9 +213,7 @@ widget(container_z, {
                           event("NextTrack"),
                           $core.media.current.canSkipForward);
 
-          widget(dummy, {
-            width: 2em;
-          });
+          space(0.25);
 
           PLAYDECK_BUTTON("skin://icons/ic_subtitles_48px.svg",
                           _("Subtitles"),
@@ -227,6 +228,8 @@ widget(container_z, {
                             focus("osd_audio");
                           }, true);
 
+          space(1);
+
           PLAYDECK_BUTTON("skin://icons/ic_menu_48px.svg",
                           _("Settings"),
                           {
@@ -238,21 +241,21 @@ widget(container_z, {
         });
       });
       widget(dummy, {
+        hidden: !$view.showSeekBar || !$self.media.canSeek;
         height: 2em;
       });
     });
   });
-
   // Seekbar row
 
   widget(container_y, {
-    hidden: !$view.showSeekBar;
+    hidden: !$view.showSeekBar || !$self.media.canSeek;
     align: bottom;
     widget(container_z, {
       delta($clone.bottomOsdHeight, isVisible() * getHeight());
       height: 2em;
       widget(quad, {
-        alpha: 0.9;
+        alpha: 0.8;
         color: 0;
       });
 
@@ -261,7 +264,8 @@ widget(container_z, {
         padding: [$view.iconPad + 1em, 0, 0, 0];
         widget(icon, {
           source: "skin://icons/ic_pause_48px.svg";
-          alpha: iir(select($core.media.current.playstatus == "pause", 1, 0), 4);
+          alpha: iir(select(!$clone.showPlaydeck &&
+                            $core.media.current.playstatus == "pause", 1, 0), 4);
 
         });
 
@@ -288,6 +292,7 @@ widget(container_z, {
           });
 
           widget(slider_x, {
+            knobOverEdges: true;
             tentative: $view.tentativeSeekPosition;
             alwaysGrabKnob: true;
             clickable: true;
@@ -318,15 +323,21 @@ widget(container_z, {
 
   widget(container_y, {
     hidden: $clone.osdpage > 0;
-    padding: [$ui.xmargin, 2.5em];
-
+    padding: [2em, 0.5em];
 
     style(notifications, {
       shadow: true;
     });
 
+    widget(label, {
+      alpha: iir($view.showSeekBar ||
+                 changed($self.media.metadata.title, 5, true) ||
+                 $self.media.error, 8);
 
-    
+      padding: [1.5em, 0];
+      caption: $self.media.metadata.title;
+      size: 2em;
+    });
     widget(container_x, {
       spacing: 0.5em;
       hidden: select($self.media.error, false, true);
@@ -374,23 +385,25 @@ widget(container_z, {
 
     widget(container_x, {
       spacing: 0.5em;
-      hidden: !changed($self.media.audio.current, 5);
+      alpha: iir(changed($self.media.audio.active.url, 5) &&
+                 !isVoid($self.media.audio.active.url), 8);
       widget(icon, {
-        source: "dataroot://res/svg/Sound.svg";
+        source:  "skin://icons/ic_speaker_48px.svg";
       });
-      widget(deck, {
-        effect: flipHorizontal;
-        time: 0.1;
-        cloner($self.media.metadata.audiostreams, label, {
-          style: "notifications";
-	  caption: join(" - ", $self.title, $self.language,
-                        $self.source, $self.longformat ?? $self.format);
-        });
+      widget(label, {
+        style: "notifications";
+	caption: join(" - ",
+                      $self.media.audio.active.title,
+                      $self.media.audio.active.language,
+                      $self.media.audio.active.source,
+                      $self.media.audio.active.longformat ??
+                      $self.media.audio.active.format);
       });
     });
 
     widget(container_x, {
-      hidden: !changed($self.media.ctrl.audiovolume, 2, true) || !$self.media.ctrl.audiovolume;
+      hidden: !changed($self.media.ctrl.audiovolume, 2, true) ||
+        !$self.media.ctrl.audiovolume;
       spacing: 0.5em;
       widget(icon, {
       });
@@ -401,28 +414,31 @@ widget(container_z, {
       });
     });
 
-
     widget(container_x, {
       spacing: 0.5em;
-      hidden: !changed($self.media.subtitle.current, 5);
+      alpha: iir(changed($self.media.subtitle.active.url, 5) &&
+                 !isVoid($self.media.subtitle.active.url), 8);
+
       widget(icon, {
-        source: "dataroot://res/svg/Script.svg";
+        source: "skin://icons/ic_subtitles_48px.svg";
       });
-      widget(deck, {
-        effect: flipHorizontal;
-        time: 0.1;
-        cloner($self.media.metadata.subtitlestreams, label, {
-          style: "notifications";
-	  caption: join(" - ", $self.title, $self.language, $self.source, $self.format);
-        });
+      widget(label, {
+        style: "notifications";
+	caption: join(" - ",
+                      $self.media.subtitle.active.title,
+                      $self.media.subtitle.active.language,
+                      $self.media.subtitle.active.source,
+                      $self.media.subtitle.active.longformat ??
+                      $self.media.subtitle.active.format);
       });
     });
   });
 
+
   widget(container_x, {
     padding: 1em;
     widget(image, {
-      alpha: iir($view.showSeekBar, 8);
+      alpha: iir($view.showSeekBar || changed($self.media.metadata.icon, 5, true), 8);
       align: bottom;
       width: 6em;
       source: $self.media.metadata.icon;

@@ -96,12 +96,13 @@
 }
 
 
-#define ScrollBar(TARGET="scrollable") {
+#define ScrollBar(TARGET, TOP_PAD = 0, BOTTOM_PAD = 0) {
 
   widget(container_x, {
     filterConstraintX: true;
     filterConstraintY: true;
-    padding: [0,1,0,1];
+    padding: [0,TOP_PAD,0,BOTTOM_PAD];
+
     space(1);
     widget(slider_y, {
       bind(TARGET);
@@ -119,7 +120,7 @@
 }
 
 
-#define PageHeader() {
+#define PageHeader(TITLE=$self.model.metadata.title) {
   widget(container_z, {
     height: 3em;
     zoffset: 10;
@@ -132,7 +133,7 @@
       widget(label, {
         padding: [4em, 0];
         align: center;
-        caption: $self.model.metadata.title;
+        caption: TITLE;
         size: 1.5em;
       });
 

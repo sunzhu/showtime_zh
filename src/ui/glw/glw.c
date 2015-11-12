@@ -1273,7 +1273,7 @@ glw_focus_set(glw_root_t *gr, glw_t *w, int how, const char *whom)
   if(w != NULL) {
     glw_need_refresh(gr, 0);
 
-    GLW_TRACE("Focus set to %s:%d bt %s",
+    GLW_TRACE("Focus set to %s:%d by %s",
               rstr_get(w->glw_file), w->glw_line, whom);
 
     gr->gr_last_focus = w;
@@ -1853,7 +1853,7 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
   float x, y;
   glw_pointer_event_t *gpe0 = NULL;
   int r = 0;
-  if(w->glw_flags & (GLW_FOCUS_BLOCKED | GLW_CLIPPED))
+  if(w->glw_flags & (GLW_FOCUS_BLOCKED | GLW_CLIPPED | GLW_HIDDEN))
     return 0;
 
   if(w->glw_matrix != NULL) {
@@ -2575,6 +2575,31 @@ glw_register_class(glw_class_t *gc)
   assert(gc->gc_layout != NULL);
   LIST_INSERT_HEAD(&glw_classes, gc, gc_link);
 }
+
+
+/**
+ *
+ */
+char *
+glw_get_name(glw_t *w)
+{
+  static char buf[1024];
+  snprintf(buf, sizeof(buf), "%s @ %s:%d",
+           w->glw_class->gc_name,
+#ifdef DEBUG
+           rstr_get(w->glw_file),
+           w->glw_line
+#else
+           "?", 0
+#endif
+           );
+  return buf;
+}
+
+
+
+
+
 
 
 #define GET_A_NAME_BUF 1024
