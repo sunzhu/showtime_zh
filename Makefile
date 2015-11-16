@@ -81,6 +81,7 @@ SRCS += src/main.c \
 	src/prop/prop_proxy.c \
 	src/metadata/playinfo.c \
 	src/db/kvstore.c \
+	src/backend/slideshow/slideshow.c \
 
 SRCS +=	src/media/media.c \
 	src/media/media_buf.c \
@@ -139,6 +140,7 @@ SRCS +=	src/misc/ptrvec.c \
 	src/misc/charset_detector.c \
 	src/misc/big5.c \
 	src/misc/cancellable.c \
+	src/misc/lockmgr.c \
 
 SRCS += ext/trex/trex.c
 
@@ -427,6 +429,7 @@ SRCS-$(CONFIG_GLW)   += src/ui/glw/glw.c \
 			src/ui/glw/glw_bloom.c \
 			src/ui/glw/glw_cube.c \
 			src/ui/glw/glw_displacement.c \
+			src/ui/glw/glw_coverflow.c \
 			src/ui/glw/glw_mirror.c \
 			src/ui/glw/glw_video_common.c \
 			src/ui/glw/glw_video_overlay.c \
@@ -505,6 +508,7 @@ ${BUILDDIR}/src/ui/gu/%.o : CFLAGS = $(CFLAGS_GTK) ${OPTFLAGS} ${CFLAGS_std}
 # IPC
 ##############################################################
 SRCS-$(CONFIG_LIRC) +=  src/ipc/lirc.c
+SRCS-$(CONFIG_LIBCEC) +=  src/ipc/libcec.c
 SRCS-$(CONFIG_STDIN)+=  src/ipc/stdin.c
 
 ##############################################################

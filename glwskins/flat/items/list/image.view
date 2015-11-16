@@ -6,14 +6,14 @@ widget(container_z, {
   ListItemHighlight();
 
   focusable: true;
-  onEvent(activate, navOpen($self.url, void, $self, $parent.model, void, $parent.url));
+  onEvent(activate, navOpen("slideshow:" + $self.url, void, $self, $parent.model, void, $parent.url));
   onEvent(itemMenu, eventWithProp(defaultInfo, $self));
 
   widget(container_x, {
     height: 5em;
     padding: 1;
     widget(image, {
-      source: $self.url;
+      source: $self.metadata.icon ?? $self.url;
     });
   });
 });

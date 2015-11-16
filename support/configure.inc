@@ -42,6 +42,7 @@ CONFIG_LIST="
  gu
  libogc
  lirc
+ libcec
  stdin
  release
  avahi
@@ -267,6 +268,8 @@ common_opt(){
   ;;
   --optlevel=*) OPTLEVEL="$2"
   ;;
+  --sanitize=*) SANITIZE="$optval"
+  ;;
   *)
   die_invalid_opt $1
   esac
@@ -339,6 +342,14 @@ EOF
 #define SHOWTIME_DEFAULT_UI "${DEFAULT_UI}"
 #define SHOWTIME_DEFAULT_LOGTARGET "${DEFAULT_LOGTARGET}"
 EOF
+
+#
+# sanitize
+#
+if [ -n "$SANITIZE" ]; then
+    echo >>${CONFIG_MAK} "LDFLAGS_cfg += -fsanitize=${SANITIZE}"
+    echo >>${CONFIG_MAK} "CFLAGS_cfg += -fsanitize=${SANITIZE}"
+fi
 
     # Create config.default
     cat > ${CONFIG_DEF} << EOF 
@@ -523,6 +534,10 @@ EOF
 
     if enabled libav; then
 	echo >>${CONFIG_MAK} "LDFLAGS_cfg += -lavresample -lswscale -lavformat -lavcodec -lavutil"
+    fi
+
+    if enabled libcec; then
+	echo >>${CONFIG_MAK} "LDFLAGS_cfg += -lcec"
     fi
 
     if enabled polarssl; then
