@@ -1,0 +1,24 @@
+
+delta($self.slideshow.hold, $view.loading);
+delta($self.model.loading,  $view.loading);
+
+widget(deck, {
+
+  delta($ui.fullwindow, isVisible());
+  delta($ui.disableScreensaver, isVisible());
+
+  keepLastActive: true;
+  keepNextActive: true;
+
+  focusable: true;
+  time: 0.3;
+  effect: blend;
+
+  onEvent(left,  deliverEvent($self.slideshow.eventSink, "SeekReverse"));
+  onEvent(right, deliverEvent($self.slideshow.eventSink, "SeekForward"));
+
+  cloner($self.model.nodes, image, {
+    source: $self.url;
+    delta($view.loading, isLoading() && isVisible());
+  });
+});

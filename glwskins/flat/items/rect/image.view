@@ -6,14 +6,14 @@ widget(container_z, {
   GridItemHighlight();
 
   focusable: true;
-  onEvent(activate, navOpen($self.url, void, $self, $parent.model, void, $parent.url));
+  onEvent(activate, navOpen("slideshow:" + $self.url, void, $self, $parent.model, void, $parent.url));
 
   widget(container_y, {
     style: "GridItem";
     padding: 0.25em;
 
     widget(image, {
-      source: $self.url;
+      source: $self.metadata.icon ?? $self.url;
     });
   });
 });

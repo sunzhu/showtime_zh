@@ -124,8 +124,8 @@ typedef enum {
   GLW_ATTRIB_ARGS,
   GLW_ATTRIB_PROP_PARENT,
   GLW_ATTRIB_PROP_SELF,
-  GLW_ATTRIB_PROP_MODEL,
-  GLW_ATTRIB_PROP_ORIGIN,
+  GLW_ATTRIB_PROP_ITEM_MODEL,
+  GLW_ATTRIB_PROP_PARENT_MODEL,
   GLW_ATTRIB_ANGLE,
   GLW_ATTRIB_MODE,
   GLW_ATTRIB_TIME,
@@ -777,14 +777,17 @@ typedef struct glw_root {
   int64_t gr_scheduled_refresh;
 
   /**
-   * Screensaver
+   * Screensaver / User activity
    */
 
+  int64_t gr_last_activity_at;
   int64_t gr_screensaver_reset_at;
 
   int gr_screensaver_force_enable;
   prop_t *gr_screensaver_active;
-
+  int gr_inhibit_screensaver;
+  prop_sub_t *gr_disable_screensaver_sub;
+  
   /**
    * View loader
    */
@@ -998,6 +1001,10 @@ typedef struct glw_rctx {
 
   uint8_t rc_overscanning : 1;
 
+  uint8_t rc_invisible : 1;    /* Not really visible in UI
+                                * Set when items are preloaded, etc
+                                */
+
 } glw_rctx_t;
 
 
@@ -1063,6 +1070,8 @@ typedef struct glw {
   struct glw *glw_parent;
   TAILQ_ENTRY(glw) glw_parent_link;
   struct glw_queue glw_childs;
+
+  TAILQ_ENTRY(glw) glw_render_link;
 
   struct glw *glw_selected;
   struct glw *glw_focused;
@@ -1137,7 +1146,6 @@ typedef struct glw {
 #define GLW2_CONSTRAINT_IGNORE_W    GLW_CONSTRAINT_W
 #define GLW2_CONSTRAINT_IGNORE_D    GLW_CONSTRAINT_D
 #define GLW2_ENABLED                0x10
-#define GLW2_ALWAYS_LAYOUT          0x20
 #define GLW2_ALWAYS_GRAB_KNOB       0x40
 #define GLW2_AUTOHIDE               0x80
 #define GLW2_SHADOW                 0x100
@@ -1182,12 +1190,16 @@ glw_filter_constraints(const glw_t *w)
   return (w->glw_flags & ~w->glw_flags2) & GLW_CONSTRAINT_FLAGS;
 }
 
+#define GLW_INIT_KEYBOARD_MODE 0x1
 
 int glw_init(glw_root_t *gr);
 
-int glw_init3(glw_root_t *gr,
+int glw_init2(glw_root_t *gr, int flags);
+
+int glw_init4(glw_root_t *gr,
               void (*dispatcher)(prop_courier_t *pc, int timeout),
-              prop_courier_t *courier);
+              prop_courier_t *courier,
+              int flags);
 
 void glw_fini(glw_root_t *gr);
 
@@ -1352,11 +1364,9 @@ typedef enum {
 
 
 
-const char *glw_get_a_name(glw_t *w);
-
 const char *glw_get_path(glw_t *w);
 
-char *glw_get_name(glw_t *w);
+const char *glw_get_name(glw_t *w);
 
 void glw_print_tree(glw_t *w);
 
@@ -1490,8 +1500,6 @@ void glw_gf_unregister(glw_gf_ctrl_t *ggc);
 
 void glw_gf_do(void);
 
-void glw_update_size(glw_root_t *gr);
-
 /**
  *
  */
@@ -1565,8 +1573,6 @@ void glw_gtb_set_caption_raw(glw_t *w, uint32_t *uc, int len);
 extern const float glw_identitymtx[16];
 
 void glw_icon_flush(glw_root_t *gr);
-
-void glw_reset_screensaver(glw_root_t *gr);
 
 int glw_image_get_details(glw_t *w, char *path, size_t pathlen, float *alpha);
 

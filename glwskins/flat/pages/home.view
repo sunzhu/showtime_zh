@@ -28,7 +28,7 @@
           style: "ListItemValue";
           size: 1.2em;
           font: "skin://fonts/RobotoCondensed-Regular.ttf";
-          focusable: true;
+          focusable: 0.1;
 
           bind($view.searchQuery);
           onEvent(enter, navOpen("search:" + $view.searchQuery),
@@ -49,7 +49,7 @@
       widget(label, {
         align: center;
         padding: [2em, 0];
-        caption: fmt("%02d:%02d", $core.clock.hour, $core.clock.minute);
+        caption: $core.clock.localtimeofday;
       });
     });
   });
@@ -58,10 +58,10 @@
 
 #define NEWSSTAND() {
   cloner($core.news, container_x, {
-    height: 3em;
+    height: 2em;
     divider: true;
     spacing: 1em;
-    padding: [2em, 1em, 2em, 0em];
+    padding: [2em, 0em];
 
     widget(icon, {
       source: "skin://icons/ic_info_outline_48px.svg";

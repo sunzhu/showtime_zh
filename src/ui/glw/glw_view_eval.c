@@ -1304,7 +1304,14 @@ clone_req_move(sub_cloner_t *sc, glw_t *w, glw_move_op_t *mop)
     }
   }
 
-  glw_clone_t *d = b ? b->glw_clone : NULL;
+  glw_clone_t *d = NULL;
+  if(b != NULL) {
+    d = b->glw_clone;
+    if(b != w->glw_clone->c_sc->sc_anchor) {
+      if(d == NULL)
+        return;
+    }
+  }
   prop_req_move(w->glw_clone->c_prop, d ? d->c_prop : NULL);
   mop->did_move = 1;
 }
@@ -3095,6 +3102,64 @@ glwf_space(glw_view_eval_context_t *ec, struct token *self,
 }
 
 
+/**
+ *
+ */
+typedef struct glw_captured_block {
+  token_t *block;
+  prop_t *prop_self;
+  prop_t *prop_parent;
+  prop_t *prop_view;
+  prop_t *prop_args;
+  prop_t *prop_clone;
+} glw_captured_block_t;
+
+
+/**
+ *
+ */
+static void
+glw_captured_block_release(glw_root_t *gr, glw_captured_block_t *gcb)
+{
+  glw_view_free_chain(gr, gcb->block);
+  prop_ref_dec(gcb->prop_self);
+  prop_ref_dec(gcb->prop_parent);
+  prop_ref_dec(gcb->prop_view);
+  prop_ref_dec(gcb->prop_args);
+  prop_ref_dec(gcb->prop_clone);
+}
+
+
+/**
+ *
+ */
+static void
+glw_captured_block_init(glw_captured_block_t *gcb,
+                        glw_view_eval_context_t *ec,
+                        token_t *block)
+{
+  gcb->block = glw_view_clone_chain(ec->gr, block, NULL);
+  gcb->prop_self   = prop_ref_inc(ec->prop_self);
+  gcb->prop_parent = prop_ref_inc(ec->prop_parent);
+  gcb->prop_view   = prop_ref_inc(ec->prop_view);
+  gcb->prop_clone  = prop_ref_inc(ec->prop_clone);
+  gcb->prop_args   = prop_ref_inc(ec->prop_args);
+}
+
+
+/**
+ *
+ */
+static void
+glw_captured_block_prepare_invoke(glw_view_eval_context_t *ec,
+                                  glw_captured_block_t *gcb)
+{
+  ec->prop_self   = gcb->prop_self;
+  ec->prop_parent = gcb->prop_parent;
+  ec->prop_view   = gcb->prop_view;
+  ec->prop_clone  = gcb->prop_clone;
+  ec->prop_args   = gcb->prop_args;
+}
 
 
 /**
@@ -3102,12 +3167,7 @@ glwf_space(glw_view_eval_context_t *ec, struct token *self,
  */
 typedef struct glw_event_map_eval_block {
   glw_event_map_t map;
-  token_t *block;
-  prop_t *prop_self;
-  prop_t *prop_parent;
-  prop_t *prop_view;
-  prop_t *prop_args;
-  prop_t *prop_clone;
+  glw_captured_block_t capture;
 } glw_event_map_eval_block_t;
 
 
@@ -3125,11 +3185,7 @@ glw_event_map_eval_block_fire(glw_t *w, glw_event_map_t *gem, event_t *src)
   LIST_INIT(&l);
 
   memset(&n, 0, sizeof(n));
-  n.prop_self   = b->prop_self;
-  n.prop_parent = b->prop_parent;
-  n.prop_view   = b->prop_view;
-  n.prop_clone  = b->prop_clone;
-  n.prop_args   = b->prop_args;
+  glw_captured_block_prepare_invoke(&n, &b->capture);
 
   if(src != NULL && src->e_type == EVENT_PROP_ACTION) {
     event_prop_action_t *epa = (event_prop_action_t *)src;
@@ -3137,17 +3193,17 @@ glw_event_map_eval_block_fire(glw_t *w, glw_event_map_t *gem, event_t *src)
   }
 
   n.gr = w->glw_root;
-  n.rc = NULL;
   n.w = w;
   n.passive_subscriptions = 1;
   n.sublist = &l;
   n.event = src;
 
-  body = glw_view_clone_chain(n.gr, b->block, NULL);
+  body = glw_view_clone_chain(n.gr, b->capture.block, NULL);
   glw_view_eval_block(body, &n, NULL);
   glw_prop_subscription_destroy_list(w->glw_root, &l);
   glw_view_free_chain(n.gr, body);
 }
+
 
 /**
  *
@@ -3156,18 +3212,9 @@ static void
 glw_event_map_eval_block_dtor(glw_root_t *gr, glw_event_map_t *gem)
 {
   glw_event_map_eval_block_t *b = (glw_event_map_eval_block_t *)gem;
-
-  glw_view_free_chain(gr, b->block);
-
-  prop_ref_dec(b->prop_self);
-  prop_ref_dec(b->prop_parent);
-  prop_ref_dec(b->prop_view);
-  prop_ref_dec(b->prop_args);
-  prop_ref_dec(b->prop_clone);
-
+  glw_captured_block_release(gr, &b->capture);
   free(b);
 }
-
 
 
 /**
@@ -3178,15 +3225,7 @@ glw_event_map_eval_block_create(glw_view_eval_context_t *ec,
 				struct token *block)
 {
   glw_event_map_eval_block_t *b = calloc(1, sizeof(glw_event_map_eval_block_t));
-
-  b->block = glw_view_clone_chain(ec->gr, block, NULL);
-
-  b->prop_self   = prop_ref_inc(ec->prop_self);
-  b->prop_parent = prop_ref_inc(ec->prop_parent);
-  b->prop_view   = prop_ref_inc(ec->prop_view);
-  b->prop_clone  = prop_ref_inc(ec->prop_clone);
-  b->prop_args   = prop_ref_inc(ec->prop_args);
-
+  glw_captured_block_init(&b->capture, ec, block);
   b->map.gem_dtor = glw_event_map_eval_block_dtor;
   b->map.gem_fire = glw_event_map_eval_block_fire;
   return &b->map;
@@ -3286,6 +3325,92 @@ glwf_onEvent(glw_view_eval_context_t *ec, struct token *self,
 }
 
 
+typedef struct glw_oninactivity_extra {
+  int trigged;
+  glw_captured_block_t capture;
+
+} glw_oninactivity_extra_t;
+
+
+static void
+glwf_onInactivity_dtor(glw_root_t *gr, struct token *self)
+{
+  glw_oninactivity_extra_t *goe = self->t_extra;
+  if(goe == NULL)
+    return;
+  glw_captured_block_release(gr, &goe->capture);
+  free(goe);
+}
+
+
+/**
+ *
+ */
+static int
+glwf_onInactivity(glw_view_eval_context_t *ec, struct token *self,
+                  token_t **argv, unsigned int argc)
+{
+  token_t *a = argv[0];   // Timeout  (0 == disabled)
+  token_t *b = argv[1];   // Block
+  glw_t *w = ec->w;
+  glw_root_t *gr = w->glw_root;
+  int64_t timeout;
+
+  if((a = token_resolve(ec, a)) == NULL)
+      return -1;
+
+  if(b->type != TOKEN_BLOCK)
+    return glw_view_seterr(ec->ei, a, "Second argument is not a block");
+
+  glw_oninactivity_extra_t *goe = self->t_extra;
+
+  if(goe == NULL) {
+    goe = self->t_extra = calloc(1, sizeof(glw_oninactivity_extra_t));
+    glw_captured_block_init(&goe->capture, ec, b);
+  }
+
+  timeout = token2int(ec, a) * 1000000;
+
+  if(timeout == 0) {
+    goe->trigged = 0;
+    return 0;
+  }
+
+  if(gr->gr_frame_start >= gr->gr_last_activity_at + timeout) {
+    // Inactivity time passed
+
+    glw_need_refresh(gr, 0);
+    if(!goe->trigged) {
+      goe->trigged = 1;
+
+      glw_view_eval_context_t n = {};
+      struct glw_prop_sub_list l;
+      glw_captured_block_prepare_invoke(&n, &goe->capture);
+      LIST_INIT(&l);
+      n.gr = w->glw_root;
+      n.w = w;
+      n.passive_subscriptions = 1;
+      n.sublist = &l;
+      token_t *body = glw_view_clone_chain(gr, goe->capture.block, NULL);
+      glw_view_eval_block(body, &n, NULL);
+      glw_prop_subscription_destroy_list(gr, &l);
+      glw_view_free_chain(gr, body);
+
+      glw_need_refresh(gr, 0);
+    }
+
+  } else {
+
+    goe->trigged = 0;
+    glw_schedule_refresh(gr, gr->gr_last_activity_at + timeout);
+
+  }
+  ec->dynamic_eval |= GLW_VIEW_EVAL_LAYOUT;
+  return 0;
+}
+
+
+
 /**
  *
  */
@@ -3297,8 +3422,8 @@ glwf_navOpen(glw_view_eval_context_t *ec, struct token *self,
   const char *url;
   const char *view = NULL;
   const char *how = NULL;
-  prop_t *origin = NULL;
-  prop_t *model = NULL;
+  prop_t *item_model = NULL;
+  prop_t *parent_model = NULL;
   const char *purl = NULL;
 
   if(argc < 1 || argc > 6)
@@ -3338,8 +3463,8 @@ glwf_navOpen(glw_view_eval_context_t *ec, struct token *self,
 
     if(c->type != TOKEN_PROPERTY_REF)
       return glw_view_seterr(ec->ei, c, "navOpen(): "
-			     "Third argument is not a property");
-    origin = c->t_prop;
+			     "Third argument (itemModel) is not a property");
+    item_model = c->t_prop;
   }
 
   if(argc > 3  && argv[3]->type != TOKEN_VOID) {
@@ -3348,8 +3473,8 @@ glwf_navOpen(glw_view_eval_context_t *ec, struct token *self,
 
     if(d->type != TOKEN_PROPERTY_REF)
       return glw_view_seterr(ec->ei, d, "navOpen(): "
-			     "Fourth argument is not a property");
-    model = d->t_prop;
+			     "Fourth argument (parentModel) is not a property");
+    parent_model = d->t_prop;
   }
 
   if(argc > 4) {
@@ -3362,7 +3487,7 @@ glwf_navOpen(glw_view_eval_context_t *ec, struct token *self,
       how = rstr_get(e->t_rstring);
     else
       return glw_view_seterr(ec->ei, e, "navOpen(): "
-			     "Fifth argument is not a string or (void)");
+			     "Fifth argument (how) is not a string or (void)");
   }
 
 
@@ -3376,15 +3501,16 @@ glwf_navOpen(glw_view_eval_context_t *ec, struct token *self,
       purl = rstr_get(f->t_rstring);
     else
       return glw_view_seterr(ec->ei, f, "navOpen(): "
-			     "Sixth argument is not a string or (void)");
+			     "Sixth argument (parent url) is not a "
+                             "string or (void)");
   }
 
   r = eval_alloc(self, ec, TOKEN_EVENT);
 
   event_t *ev = event_create_openurl(.url = url,
                                      .view = view,
-                                     .origin = origin,
-                                     .model = model,
+                                     .item_model = item_model,
+                                     .parent_model = parent_model,
                                      .how = how,
                                      .parent_url = purl);
 
@@ -6848,6 +6974,7 @@ static const token_func_t funcvec[] = {
   {"newstyle", 2, glwf_newstyle},
   {"space", 1, glwf_space},
   {"onEvent", -1, glwf_onEvent},
+  {"onInactivity", 2, glwf_onInactivity, glwf_null_ctor,glwf_onInactivity_dtor},
   {"navOpen", -1, glwf_navOpen},
   {"playTrackFromSource", -1, glwf_playTrackFromSource},
   {"enqueuetrack", 1, glwf_enqueueTrack},
