@@ -128,10 +128,15 @@ notify_add(prop_t *root, notify_type_t type, const char *icon, int delay,
 
   if(prop_set_parent(p, root ?: notify_prop_entries))
     prop_destroy(p);
-  
+
   if(delay != 0) {
+    prop_t *r = NULL;
+    if(delay < 0) {
+      r = prop_ref_inc(p);
+      delay = -delay;
+    }
     callout_arm(NULL, notify_timeout, p, delay);
-    return NULL;
+    return r;
   }
   return p;
 }
@@ -516,20 +521,22 @@ load_site_news(void)
 
 
   htsmsg_t *newsinfo = htsmsg_store_load("sitenews");
-  time_t no_news_before;
+  time_t servertime;
+
+  if(http_ctime(&servertime, dateheader)) {
+    buf_release(b);
+    htsmsg_release(newsinfo);
+    return;
+  }
 
   if(newsinfo == NULL)
     newsinfo = htsmsg_create_map();
 
-  no_news_before = htsmsg_get_u32_or_default(newsinfo, "nothingbefore", 0);
+  time_t no_news_before =
+    htsmsg_get_u32_or_default(newsinfo, "nothingbefore", 0);
 
   if(no_news_before == 0) {
-    if(http_ctime(&no_news_before, dateheader)) {
-      buf_release(b);
-      htsmsg_release(newsinfo);
-      return;
-    }
-
+    no_news_before = servertime;
     htsmsg_add_u32(newsinfo, "nothingbefore", no_news_before);
     htsmsg_store_save(newsinfo, "sitenews");
     htsmsg_release(newsinfo);
@@ -562,7 +569,7 @@ load_site_news(void)
       if(parse_created_on_time(&t, created_on))
         continue;
 
-      if(t < no_news_before)
+      if(t < no_news_before || t < servertime - 86400 * 30)
         continue;
 
       char idstr[64];
