@@ -47,6 +47,7 @@ static void glw_eventsink(void *opaque, prop_event_t event, ...);
 static void glw_update_em(glw_root_t *gr);
 static int  glw_set_keyboard_mode(glw_root_t *gr, int on);
 static void glw_register_activity(glw_root_t *gr);
+static void glw_touch_longpress(glw_root_t *gr);
 
 glw_settings_t glw_settings;
 
@@ -576,18 +577,14 @@ glw_prepare_frame(glw_root_t *gr, int flags)
 
   if(!(flags & GLW_NO_FRAMERATE_UPDATE)) {
 
-    if((gr->gr_frames & 0x7f) == 0) {
-
-      if(gr->gr_hz_sample) {
-        int64_t d = gr->gr_frame_start - gr->gr_hz_sample;
-
-        double hz = 128000000.0 / d;
-
-        prop_set_float(prop_create(gr->gr_prop_ui, "framerate"), hz);
-        gr->gr_framerate = hz;
-      }
-      gr->gr_hz_sample = gr->gr_frame_start;
+    if(likely(gr->gr_frames > 16)) {
+      int64_t d = gr->gr_frame_start - gr->gr_framerate_avg[gr->gr_frames & 0xf];
+      double hz = 16000000.0 / d;
+      prop_set(gr->gr_prop_ui, "framerate", PROP_SET_FLOAT, hz);
+      gr->gr_framerate = hz;
     }
+
+    gr->gr_framerate_avg[gr->gr_frames & 0xf] = gr->gr_frame_start;
   }
   gr->gr_frames++;
 
@@ -625,6 +622,14 @@ glw_prepare_frame(glw_root_t *gr, int flags)
     gpe.type = GLW_POINTER_MOTION_REFRESH;
     glw_pointer_event(gr, &gpe);
   }
+
+  if(unlikely(gr->gr_pointer_press != NULL) &&
+     gr->gr_pointer_press_time &&
+     gr->gr_frame_start > gr->gr_pointer_press_time + 500000) {
+    // touch longpress
+    glw_touch_longpress(gr);
+  }
+
 
   if(gr->gr_delayed_focus_leave) {
     if(--gr->gr_delayed_focus_leave == 0 && gr->gr_current_focus) {
@@ -1310,26 +1315,20 @@ glw_focus_set(glw_root_t *gr, glw_t *w, int how, const char *whom)
 
   gr->gr_current_focus = w;
   gr->gr_delayed_focus_leave = 0;
-#if 0
-  glw_t *h = w;
-  while(h->glw_parent != NULL) {
-    printf("Verifying %p %p %p\n", h, h->glw_parent, h->glw_parent->glw_focused);
-    if(h->glw_parent->glw_focused != h) {
-      glw_t *f = h->glw_parent->glw_focused;
-      printf("Parent %p %s points to %p %s <%s> instead of %p %s <%s>\n",
-             h->glw_parent, h->glw_parent->glw_class->gc_name,
-             f, f->glw_class->gc_name, glw_get_a_name(f),
-             h, h->glw_class->gc_name, glw_get_a_name(h));
-    }
-    h = h->glw_parent;
-  }
-#endif
 
   if(w != NULL) {
     glw_need_refresh(gr, 0);
 
     GLW_TRACE("Focus set to %s:%d by %s",
               rstr_get(w->glw_file), w->glw_line, whom);
+
+#if 0
+    glw_t *t = w->glw_parent;
+    while(t != NULL) {
+      printf("Parent %s\n", glw_get_name(t));
+      t = t->glw_parent;
+    }
+#endif
 
     gr->gr_last_focus = w;
 
@@ -1871,8 +1870,10 @@ glw_pointer_event_deliver(glw_t *w, glw_pointer_event_t *gpe)
     event_release(e);
     return r;
 
-  case GLW_POINTER_LEFT_PRESS:
   case GLW_POINTER_TOUCH_START:
+    gr->gr_pointer_press_time = gr->gr_frame_start;
+    // FALLTHRU
+  case GLW_POINTER_LEFT_PRESS:
     gr->gr_pointer_press = w;
     glw_path_modify(w, GLW_IN_PRESSED_PATH, 0, NULL);
     return 1;
@@ -1895,6 +1896,21 @@ glw_pointer_event_deliver(glw_t *w, glw_pointer_event_t *gpe)
     break;
   }
   return 0;
+}
+
+
+/**
+ *
+ */
+static void
+glw_touch_longpress(glw_root_t *gr)
+{
+  glw_t *w = gr->gr_pointer_press;
+  glw_path_modify(w, 0, GLW_IN_PRESSED_PATH, NULL);
+  event_t *e = event_create_action(ACTION_ITEMMENU);
+  glw_event_to_widget(w, e);
+  event_release(e);
+  gr->gr_pointer_press = NULL;
 }
 
 /**
