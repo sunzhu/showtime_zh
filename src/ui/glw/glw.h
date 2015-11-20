@@ -688,6 +688,11 @@ typedef struct glw_class {
   const char *(*gc_get_identity)(struct glw *w, char *tmp, size_t tmpsize);
 
   /**
+   *
+   */
+  struct glw *(*gc_find_visible_child)(struct glw *w);
+
+  /**
    * Registration link
    */
   LIST_ENTRY(glw_class) gc_link;
@@ -724,9 +729,9 @@ typedef struct glw_root {
   pool_t *gr_clone_pool;
   pool_t *gr_style_binding_pool;
   int gr_gem_id_tally;
-
   int gr_frames;
 
+  int gr_init_flags;
   struct glw *gr_universe;
 
   LIST_HEAD(, glw_cached_view) gr_views;
@@ -823,7 +828,7 @@ typedef struct glw_root {
   LIST_HEAD(,  glw_image) gr_icons;
   hts_cond_t gr_tex_load_cond;
 
-#define LQ_SKIN      0
+#define LQ_SKIN       0
 #define LQ_TENTATIVE  1
 #define LQ_THUMBS     2
 #define LQ_OTHER      3
@@ -878,6 +883,13 @@ typedef struct glw_root {
   int gr_underscan_v;
   int gr_underscan_h;
   int gr_current_size;
+
+  // Used to make UI flash the guidance border
+  int gr_user_underscan_changed;
+
+  // Set by user
+  int gr_user_underscan_h;
+  int gr_user_underscan_v;
 
   // Base offsets, should be set by frontend
   int gr_base_underscan_v;
@@ -1193,6 +1205,7 @@ glw_filter_constraints(const glw_t *w)
 }
 
 #define GLW_INIT_KEYBOARD_MODE 0x1
+#define GLW_INIT_OVERSCAN      0x2
 
 int glw_init(glw_root_t *gr);
 
