@@ -99,8 +99,17 @@ main(int argc, char **argv)
   [NSApp setDelegate: s];
 
   gconf.binary = argv[0];
-
+  gconf.can_standby = 1;
   get_device_id();
+
+  NSFileManager* fileManager = [NSFileManager defaultManager];
+ 
+  NSArray *urls = [fileManager URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask];
+  if ([urls count] > 0) {
+    NSURL *cachedir = [[urls objectAtIndex:0] URLByAppendingPathComponent:@APPNAMEUSER];
+    const char *p = [cachedir.path cStringUsingEncoding:NSUTF8StringEncoding];
+    gconf.cache_path = strdup(p);
+}
 
   posix_init();
 
@@ -132,7 +141,12 @@ main(int argc, char **argv)
 void
 arch_exit(void)
 {
-  exit(gconf.exit_code);
+  if(gconf.exit_code == APP_EXIT_STANDBY) {
+    system("/usr/bin/pmset sleepnow");
+    exit(0);
+  }
+
+ exit(gconf.exit_code);
 }
 
 
@@ -229,6 +243,7 @@ mainloop_courier_init(void)
   app_flush_caches();
   shutdown_hook_run(1);
   main_fini();
+  arch_exit();
 }
 
 
