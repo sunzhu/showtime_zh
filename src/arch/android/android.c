@@ -17,6 +17,7 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
+#include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
@@ -91,18 +92,6 @@ arch_cache_avail_bytes(void)
     return 0;
 
   return buf.f_bfree * buf.f_bsize;
-}
-
-/**
- *
- */
-uint64_t
-arch_get_seed(void)
-{
-  uint64_t v = getpid();
-  v = (v << 16) ^ getppid();
-  v = (v << 32) ^ time(NULL);
-  return v;
 }
 
 
@@ -199,6 +188,20 @@ arch_localtime(const time_t *now, struct tm *tm)
 {
   localtime_r(now, tm);
 }
+
+static int devurandom;
+
+void
+arch_get_random_bytes(void *ptr, size_t size)
+{
+  ssize_t r = read(devurandom, ptr, size);
+  if(r != size)
+    abort();
+}
+
+INITIALIZER(opendevurandom) {
+  devurandom = open("/dev/urandom", O_RDONLY);
+};
 
 
 /**
