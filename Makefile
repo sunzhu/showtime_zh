@@ -142,6 +142,7 @@ SRCS +=	src/misc/ptrvec.c \
 	src/misc/gb2312.c \
 	src/misc/cancellable.c \
 	src/misc/lockmgr.c \
+	src/misc/prng.c \
 
 SRCS += ext/trex/trex.c
 
@@ -187,7 +188,6 @@ ${BUILDDIR}/ext/sqlite/sqlite3.o : CFLAGS = -O2 ${SQLITE_CFLAGS_cfg} \
  -DSQLITE_OMIT_COMPLETE \
  -DSQLITE_OMIT_DECLTYPE \
  -DSQLITE_OMIT_DEPRECATED \
- -DSQLITE_OMIT_EXPLAIN \
  -DSQLITE_OMIT_GET_TABLE \
  -DSQLITE_OMIT_TCL_VARIABLE \
  -DSQLITE_OMIT_LOAD_EXTENSION \
@@ -226,6 +226,7 @@ SRCS += src/fileaccess/fileaccess.c \
 	src/fileaccess/fa_aes.c \
 	src/fileaccess/fa_data.c \
 	src/fileaccess/fa_imageloader.c \
+	src/fileaccess/fa_filepicker.c \
 
 SRCS-$(CONFIG_FTPCLIENT) += src/fileaccess/fa_ftp.c \
 			    src/fileaccess/ftpparse.c \

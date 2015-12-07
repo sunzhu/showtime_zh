@@ -436,7 +436,8 @@ ui_create(void)
 
   if(glw_init4(gr, &prop_courier_poll_with_alarm,
                prop_courier_create_passive(),
-               GLW_INIT_KEYBOARD_MODE | GLW_INIT_OVERSCAN)) {
+               GLW_INIT_KEYBOARD_MODE | GLW_INIT_OVERSCAN |
+               GLW_INIT_IN_FULLSCREEN)) {
     TRACE(TRACE_ERROR, "GLW", "Unable to init GLW");
     exit(1);
   }
@@ -848,15 +849,16 @@ main(int argc, char **argv)
 
   vcos_set_vlog_impl(my_vcos_log);
 
-  kill_framebuffer();
-
-  omx_init();
-
   gconf.binary = argv[0];
 
   posix_init();
 
   parse_opts(argc, argv);
+
+  if(gconf.shell_fd != -1)
+    kill_framebuffer();
+
+  omx_init();
 
   linux_init();
 

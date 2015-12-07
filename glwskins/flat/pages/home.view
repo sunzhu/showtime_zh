@@ -20,7 +20,8 @@ style(sidebarBackdrop, {
       });
 
       widget(container_x, {
-        padding: [0.5em, 0.5em];
+        height: 2em;
+        padding: [0.5em, 0];
         spacing: 0.5em;
         widget(icon, {
           fhpSpill: true;
@@ -30,6 +31,7 @@ style(sidebarBackdrop, {
         });
 
         widget(text, {
+          padding: [0, 0.5em];
           style: "ListItemValue";
           size: 1.2em;
           font: "skin://fonts/RobotoCondensed-Regular.ttf";
@@ -128,8 +130,8 @@ widget(container_z, {
 
           alpha: iir(select($clone.showSidebar, 0.3, 1), 4);
 
-          margin: [2em, 0em];
-          childTilesX: 5;
+          margin: [$ui.xmargin, 0em];
+          childTilesX: select($ui.aspect > 1, 5, 2);
           childTilesY: 4;
 
           NEWSSTAND();
@@ -146,26 +148,30 @@ widget(container_z, {
               spacing: 0.5em;
               padding: 0.5em;
 
-              widget(image, {
-                source: $self.icon ??
-	          "skin://icons/" +
-	          translate($self.type, "ic_folder_48px",
-		            "tv",       "ic_tv_48px",
-		            "usb",      "ic_usb_48px",
-		            "cd",       "ic_album_48px",
-		            "dvd",      "ic_album_48px",
-		            "bluray",   "ic_album_48px",
-		            "setting",  "ic_settings_48px",
-		            "plugin",   "ic_extension_48px") + ".svg";
+              widget(displacement, {
+                scaling: [1,1,1] - [0.11,0.1,0] * iir(isPressed(), 4, true)
+                widget(image, {
+                  source: $self.icon ??
+	            "skin://icons/" +
+	            translate($self.type, "ic_folder_48px",
+		              "tv",       "ic_tv_48px",
+		              "usb",      "ic_usb_48px",
+		              "cd",       "ic_album_48px",
+		              "dvd",      "ic_album_48px",
+		              "bluray",   "ic_album_48px",
+		              "setting",  "ic_settings_48px",
+		              "plugin",   "ic_extension_48px") + ".svg";
 
-                color:  select($self.icon, 1, iir(!isNavFocused(), 4)) - iir(isPressed(), 4, true);
+                  color:  select($self.icon, 1, iir(!isNavFocused(), 4));
+                  saturation: iir(isPressed(), 4, true) * 0.66;
+                });
               });
 
               widget(label, {
                 align: center;
                 caption: $self.title;
                 size: 1.2em;
-                color: iir(!isNavFocused(), 4) - iir(isPressed(), 4, true);
+                color: iir(!isNavFocused(), 4) - 0.5 * iir(isPressed(), 4, true);
               });
             });
           });
@@ -186,19 +192,21 @@ widget(container_z, {
 
     widget(container_x, {
       space(1);
-      padding: [1em, 0];
       height: 3em;
-      widget(icon, {
+      widget(container_y, {
+        align: center;
+        width: 4em;
         clickable: true;
-        angle: iir($clone.showSidebar, 4) * -90;
         onEvent(activate, {
-
           toggle($clone.showSidebar);
         });
         navFocusable: false;
-        color: 0.5 + iir(isHovered(), 4);
-        size: 2em;
-        source: "skin://icons/ic_menu_48px.svg";
+        widget(icon, {
+          angle: iir($clone.showSidebar, 4) * -90;
+          color: 0.5 + iir(isHovered(), 4);
+          size: 2em;
+          source: "skin://icons/ic_menu_48px.svg";
+        });
       });
     });
   });

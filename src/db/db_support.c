@@ -92,6 +92,8 @@ db_preparex(sqlite3 *db, sqlite3_stmt **ppStmt, const char *zSql,
 {
   int rc;
 
+
+
   while(SQLITE_LOCKED==(rc = sqlite3_prepare_v2(db, zSql, -1, ppStmt, NULL))) {
     rc = wait_for_unlock_notify(db);
     if( rc!=SQLITE_OK ) break;
@@ -100,6 +102,10 @@ db_preparex(sqlite3 *db, sqlite3_stmt **ppStmt, const char *zSql,
   if(rc != SQLITE_OK) {
     TRACE(TRACE_ERROR, "SQLITE", "SQL Error %d at %s:%d",
 	  rc, file, line);
+  } else {
+    if(0)
+      db_explain(*ppStmt);
+
   }
   return rc;
 }
@@ -534,21 +540,57 @@ db_escape_path_query(char *dst, size_t dstlen, const char *src)
 }
 
 
+/*
+** Argument pStmt is a prepared SQL statement. This function compiles
+** an EXPLAIN QUERY PLAN command to report on the prepared statement,
+** and prints the report to stdout using printf().
+*/
+int
+db_explain(sqlite3_stmt *pStmt)
+{
+  const char *zSql;               /* Input SQL */
+  char *zExplain;                 /* SQL with EXPLAIN QUERY PLAN prepended */
+  sqlite3_stmt *pExplain;         /* Compiled EXPLAIN QUERY PLAN command */
+  int rc;                         /* Return code from sqlite3_prepare_v2() */
 
+  zSql = sqlite3_sql(pStmt);
+  if( zSql==0 ) return SQLITE_ERROR;
+
+  TRACE(TRACE_DEBUG, "EXPLAIN", "%s", zSql);
+
+  zExplain = sqlite3_mprintf("EXPLAIN QUERY PLAN %s", zSql);
+  if( zExplain==0 ) return SQLITE_NOMEM;
+
+  rc = sqlite3_prepare_v2(sqlite3_db_handle(pStmt), zExplain, -1, &pExplain, 0);
+  sqlite3_free(zExplain);
+  if( rc!=SQLITE_OK ) return rc;
+
+  while( SQLITE_ROW==sqlite3_step(pExplain) ){
+    int iSelectid = sqlite3_column_int(pExplain, 0);
+    int iOrder = sqlite3_column_int(pExplain, 1);
+    int iFrom = sqlite3_column_int(pExplain, 2);
+    const char *zDetail = (const char *)sqlite3_column_text(pExplain, 3);
+
+    TRACE(TRACE_DEBUG, "EXPLAIN", "%d %d %d %s",
+          iSelectid, iOrder, iFrom, zDetail);
+  }
+
+  return sqlite3_finalize(pExplain);
+}
 
 #if ENABLE_SQLITE_LOCKING
 
 /**
  * Sqlite mutex helpers
  */
-static hts_mutex_t static_mutexes[6];
+static hts_lwmutex_t static_mutexes[6];
 
 static int
 sqlite_mutex_init(void)
 {
   int i;
   for(i = 0; i < 6; i++)
-    hts_mutex_init(&static_mutexes[i]);
+    hts_lwmutex_init(&static_mutexes[i]);
   return SQLITE_OK;
 }
 
@@ -561,17 +603,17 @@ sqlite_mutex_end(void)
 static sqlite3_mutex *
 sqlite_mutex_alloc(int id)
 {
-  hts_mutex_t *m;
+  hts_lwmutex_t *m;
 
   switch(id) {
   case SQLITE_MUTEX_FAST:
-    m = malloc(sizeof(hts_mutex_t));
-    hts_mutex_init(m);
+    m = malloc(sizeof(hts_lwmutex_t));
+    hts_lwmutex_init(m);
     break;
 
   case SQLITE_MUTEX_RECURSIVE:
-    m = malloc(sizeof(hts_mutex_t));
-    hts_mutex_init_recursive(m);
+    m = malloc(sizeof(hts_lwmutex_t));
+    hts_lwmutex_init_recursive(m);
     break;
     
   case SQLITE_MUTEX_STATIC_MASTER: m=&static_mutexes[0]; break;
@@ -589,23 +631,23 @@ sqlite_mutex_alloc(int id)
 static void
 sqlite_mutex_free(sqlite3_mutex *M)
 {
-  hts_mutex_t *m = (hts_mutex_t *)M;
-  hts_mutex_destroy(m);
+  hts_lwmutex_t *m = (hts_lwmutex_t *)M;
+  hts_lwmutex_destroy(m);
   free(m);
 }
 
 static void
 sqlite_mutex_enter(sqlite3_mutex *M)
 {
-  hts_mutex_t *m = (hts_mutex_t *)M;
-  hts_mutex_lock(m);
+  hts_lwmutex_t *m = (hts_lwmutex_t *)M;
+  hts_lwmutex_lock(m);
 }
 
 static void
 sqlite_mutex_leave(sqlite3_mutex *M)
 {
-  hts_mutex_t *m = (hts_mutex_t *)M;
-  hts_mutex_unlock(m);
+  hts_lwmutex_t *m = (hts_lwmutex_t *)M;
+  hts_lwmutex_unlock(m);
 }
 
 static int
@@ -641,7 +683,6 @@ db_log(void *aux, int code, const char *str)
         "SQLITE", "%s (code: 0x%x)", str, code);
 }
 
-#if 0
 #include "misc/callout.h"
 
 static callout_t memlogger;
@@ -668,7 +709,6 @@ memlogger_fn(callout_t *co, void *aux)
         scr_current, scr_highwater);
 
 }
-#endif
 
 void
 db_init(void)
@@ -683,7 +723,6 @@ db_init(void)
 #ifdef PS3
   sqlite3_soft_heap_limit(10000000);
 #endif
-#if 0
-  callout_arm(&memlogger, memlogger_fn, NULL, 1);
-#endif
+  if(0)
+    callout_arm(&memlogger, memlogger_fn, NULL, 1);
 }

@@ -26,6 +26,8 @@
 #include "event.h"
 
 static int longpress_select;
+static libcec_configuration cec_config;
+static libcec_connection_t conn;
 
 static int
 log_message(void *lib, const cec_log_message message)
@@ -74,6 +76,9 @@ const static action_type_t *btn_to_action[256] = {
 
   [CEC_USER_CONTROL_CODE_CHANNEL_UP]  = AVEC(ACTION_NEXT_CHANNEL),
   [CEC_USER_CONTROL_CODE_CHANNEL_DOWN]= AVEC(ACTION_PREV_CHANNEL),
+
+  [CEC_USER_CONTROL_CODE_F1_BLUE]     = AVEC(ACTION_SYSINFO),
+  [CEC_USER_CONTROL_CODE_F4_YELLOW]   = AVEC(ACTION_SHOW_MEDIA_STATS),
 };
 
 static int
@@ -98,7 +103,7 @@ keypress(void *aux, const cec_keypress kp)
 
   if(e == NULL) {
     const action_type_t *avec = NULL;
-    if(kp.duration == 0) {
+    if(kp.duration == 0 || kp.keycode == cec_config.comboKey) {
       avec = btn_to_action[kp.keycode];
     }
 
@@ -118,14 +123,37 @@ keypress(void *aux, const cec_keypress kp)
 }
 
 
+static void
+source_activated(void *aux, const cec_logical_address la, const uint8_t on)
+{
+  TRACE(TRACE_INFO, "CEC", "Logical address %d is %s",
+        la, on ? "active" : "inactive");
+}
+
+
+static int
+handle_cec_command(void *aux, const cec_command cmd)
+{
+  switch(cmd.opcode) {
+  case CEC_OPCODE_STANDBY:
+    if(cmd.initiator == CECDEVICE_TV) {
+      TRACE(TRACE_INFO, "CEC", "TV STANDBY");
+    }
+    break;
+  default:
+    break;
+  }
+  return 1;
+}
+
 
 static ICECCallbacks g_callbacks = {
   .CBCecLogMessage = log_message,
   .CBCecKeyPress   = keypress,
+  .CBCecSourceActivated = source_activated,
+  .CBCecCommand = handle_cec_command,
 };
 
-static libcec_configuration cec_config;
-static libcec_connection_t conn;
 
 
 /**

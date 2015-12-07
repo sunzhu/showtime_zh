@@ -4,8 +4,13 @@ $ui.sizeOffset = 4;
 $ui.xmargin = select($ui.aspect > 1, $ui.width / 50, 0);
 $ui.showTopIcons = $ui.pointerVisible || $ui.touch;
 $ui.showAllPlaydeckButtons = 0;
+
 onEvent(sysinfo, {
   toggle($ui.sysinfo);
+});
+
+onEvent(mediastats, {
+  toggle($ui.mediainfo);
 });
 
 onEvent(logwindow, {
@@ -17,20 +22,16 @@ onEvent(back, {
 }, $ui.logwindow);
 
 
+$view.orientation = select($ui.aspect > 1, "landscape", "portrait");
 
 style(PageContainer, {
   alpha: 1 - iir(clamp(getLayer(), 0, 1), 4) * 0.9;
 });
 
-$ui.background = "pixmap:gradient:20,20,20:60,60,60";
-
 widget(container_z, {
 
   widget(loader, {
-    source: selectedElement(vectorize($core.glw.views.standard.background))
-      ?? "background.view";
-    effect: blend;
-    time: 0.3;
+    source: "background.view";
   });
 
   widget(loader, {
@@ -90,8 +91,8 @@ widget(container_z, {
           widget(loader, {
             autohide: true;
             source: translate($core.media.current.type, "",
-                              "tracks", "playdecks/tracks.view",
-                              "radio", "playdecks/radio.view"
+                              "tracks", "playdecks/" + $view.orientation + "/tracks.view",
+                              "radio",  "playdecks/" + $view.orientation + "/radio.view"
                              );
           });
 
@@ -120,16 +121,19 @@ widget(container_z, {
         alpha: iir($ui.showTopIcons, 4);
 
         widget(container_x, {
-          padding: [1em, 0];
           height: 3em;
-          widget(icon, {
+          widget(container_y, {
+            align: center;
+            width: 4em;
             clickable: $nav.canGoBack || $ui.logwindow;
             alpha: iir($nav.canGoBack || $ui.logwindow, 4);
             onEvent(activate, deliverEvent($ui.eventSink, "back"));
             navFocusable: false;
-            color: 0.5 + iir(isHovered(), 4);
-            size: 2em;
-            source: "skin://icons/ic_chevron_left_48px.svg";
+            widget(icon, {
+              color: 0.5 + iir(isHovered(), 4);
+              size: 2em;
+              source: "skin://icons/ic_chevron_left_48px.svg";
+            });
           });
           space(1);
         });
@@ -261,6 +265,24 @@ widget(container_z, {
   });
 
   widget(underscan, {
-#import "sysinfo.view"
+
+    widget(container_y, {
+      spacing: 0.5em;
+
+      widget(loader, {
+        time: 0.1;
+        effect: blend;
+        autohide: true;
+        source: select($ui.mediainfo, "mediainfo.view", "");
+      });
+
+      widget(loader, {
+        time: 0.1;
+        effect: blend;
+        autohide: true;
+        source: select($ui.sysinfo, "sysinfo.view", "");
+      });
+
+    });
   });
 });

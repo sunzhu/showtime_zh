@@ -88,8 +88,6 @@ extern int64_t arch_get_avtime(void);
 
 extern const char *arch_get_system_type(void);
 
-extern uint64_t arch_get_seed(void);
-
 /**
  *
  */
@@ -251,6 +249,7 @@ typedef struct gconf {
   int enable_upnp_debug;
   int enable_ecmascript_debug;
   int enable_input_event_debug;
+  int enable_touch_debug;
 
   int enable_torrent_debug;
   int enable_torrent_tracker_debug;
@@ -317,8 +316,6 @@ typedef struct gconf {
   char lang[32];
 
   char device_type[64];
-
-  const char *remote_ui;
 
 } gconf_t;
 

@@ -176,6 +176,8 @@ glw_dis_screensaver_callback(void *opaque, int value)
 {
   glw_root_t *gr = opaque;
   gr->gr_inhibit_screensaver = value;
+  TRACE(TRACE_DEBUG, "GLW", "Screensaver %s",
+        value ? "inhibited" : "allowed");
 }
 
 /**
@@ -255,7 +257,6 @@ glw_init4(glw_root_t *gr,
             PROP_SET_STRING, gr->gr_skin);
 
   gr->gr_pointer_visible    = prop_create(gr->gr_prop_ui, "pointerVisible");
-  gr->gr_is_fullscreen      = prop_create(gr->gr_prop_ui, "fullscreen");
   gr->gr_screensaver_active = prop_create(gr->gr_prop_ui, "screensaverActive");
   gr->gr_prop_width         = prop_create(gr->gr_prop_ui, "width");
   gr->gr_prop_height        = prop_create(gr->gr_prop_ui, "height");
@@ -265,6 +266,9 @@ glw_init4(glw_root_t *gr,
 
   if(flags & GLW_INIT_KEYBOARD_MODE)
     glw_set_keyboard_mode(gr, 1);
+
+  if(flags & GLW_INIT_IN_FULLSCREEN)
+    gr->gr_is_fullscreen = 1;
 
   gr->gr_evsub =
     prop_subscribe(0,
@@ -395,7 +399,8 @@ glw_load_universe(glw_root_t *gr)
 
   gr->gr_universe = glw_view_create(gr,
                                     universe, NULL, NULL, page,
-                                    NULL, NULL, NULL, NULL, 0);
+                                    NULL, NULL, NULL, gr->gr_prop_core,
+                                    NULL, 0);
 
   rstr_release(universe);
 }
@@ -541,10 +546,11 @@ glw_screensaver_is_active(glw_root_t *gr)
     return 0;
   }
 
-  if(!gr->gr_is_fullscreen)
+  if(!gr->gr_is_fullscreen) {
     return 0;
+  }
 
-  int64_t d = glw_settings.gs_screensaver_delay;
+  int d = glw_settings.gs_screensaver_delay;
 
   if(!d)
     return 0;
@@ -1081,7 +1087,7 @@ glw_path_flood(glw_t *w, int or, int and)
 /**
  *
  */
-static void
+void
 glw_path_modify(glw_t *w, int set, int clr, glw_t *stop)
 {
   clr = ~clr; // Invert so we can just AND it
@@ -1776,7 +1782,7 @@ glw_focus_child(glw_t *w)
 /**
  *
  */
-int
+static int
 glw_root_event_handler(glw_root_t *gr, event_t *e)
 {
   if(e->e_type == EVENT_KEYDESC)
@@ -1801,7 +1807,7 @@ glw_root_event_handler(glw_root_t *gr, event_t *e)
     event_addref(e);
     event_dispatch(e);
   }
-  return 1;
+  return 0;
 }
 
 
@@ -1816,19 +1822,30 @@ glw_event_to_widget(glw_t *w, event_t *e)
 
   // First, descend in the view hierarchy
 
+  GLW_TRACE("Event '%s' route start at widget '%s'",
+            event_sprint(e), glw_get_name(w));
+
   while(1) {
     if(!glw_path_in_focus(w))
       break;
 
-    if(glw_event_map_intercept(w, e, 1))
+    if(glw_event_map_intercept(w, e, 1)) {
+      // glw_event_map_intercept() does GLW_TRACE() by itself
       return 1;
+    }
 
-    if(w->glw_flags2 & GLW2_POSITIONAL_NAVIGATION)
-      if(glw_navigate_matrix(w, e))
-        return 1;
-
-    if(glw_send_event2(w, e))
+    if(w->glw_flags2 & GLW2_POSITIONAL_NAVIGATION &&
+       glw_navigate_matrix(w, e)) {
+      GLW_TRACE("Event '%s' intercepted by matrix-nav at '%s' (descending)",
+                event_sprint(e), glw_get_name(w));
       return 1;
+    }
+
+    if(glw_send_event2(w, e)) {
+      GLW_TRACE("Event '%s' intercepted by widget '%s' (descending)",
+                event_sprint(e), glw_get_name(w));
+      return 1;
+    }
 
     if(w->glw_focused == NULL)
       break;
@@ -1843,13 +1860,18 @@ glw_event_to_widget(glw_t *w, event_t *e)
     if(glw_event_map_intercept(w, e, 0))
       return 1;
 
-    if(glw_bubble_event2(w, e))
+    if(glw_bubble_event2(w, e)) {
+      GLW_TRACE("Event '%s' intercepted by widget '%s' (ascending)",
+                event_sprint(e), glw_get_name(w));
       return 1;
-
+    }
     w = w->glw_parent;
   }
 
-  // Nothing grabbed the event, default it
+  GLW_TRACE("Event '%s' relayed to root handler",
+            event_sprint(e));
+
+      // Nothing grabbed the event, default it
 
   return glw_root_event_handler(gr, e);
 }
@@ -1858,7 +1880,7 @@ glw_event_to_widget(glw_t *w, event_t *e)
 /**
  *
  */
-int
+static int
 glw_event(glw_root_t *gr, event_t *e)
 {
   if(gr->gr_current_focus != NULL) {
@@ -1935,12 +1957,15 @@ glw_pointer_event_deliver(glw_t *w, glw_pointer_event_t *gpe)
 static void
 glw_touch_longpress(glw_root_t *gr)
 {
+  gr->gr_pointer_press_time = 0;
   glw_t *w = gr->gr_pointer_press;
-  glw_path_modify(w, 0, GLW_IN_PRESSED_PATH, NULL);
   event_t *e = event_create_action(ACTION_ITEMMENU);
-  glw_event_to_widget(w, e);
+  int r = glw_event_to_widget(w, e);
   event_release(e);
-  gr->gr_pointer_press = NULL;
+  if(r) {
+    glw_path_modify(w, 0, GLW_IN_PRESSED_PATH, NULL);
+    gr->gr_pointer_press = NULL;
+  }
 }
 
 /**
@@ -1954,6 +1979,7 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
   float x, y;
   glw_pointer_event_t *gpe0 = NULL;
   int r = 0;
+
   if(w->glw_flags & (GLW_FOCUS_BLOCKED | GLW_CLIPPED | GLW_HIDDEN))
     return 0;
 
@@ -1962,11 +1988,19 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
     if(glw_widget_unproject(w->glw_matrix, &x, &y, p, dir) &&
        x <= 1 && y <= 1 && x >= -1 && y >= -1) {
       gpe0 = alloca(sizeof(glw_pointer_event_t));
+
+      const glw_class_t *gc = w->glw_class;
+
       gpe0->type = gpe->type;
       gpe0->x = x;
       gpe0->y = y;
       gpe0->ts = gpe->ts;
       gpe0->delta_y = gpe->delta_y;
+      gpe0->delta_x = gpe->delta_x;
+
+      if(gc->gc_pointer_event_filter != NULL)
+        if(gc->gc_pointer_event_filter(w, gpe0))
+          return 1;
 
       if(gpe->type < GLW_POINTER_MOTION_UPDATE)
         r = 1;
@@ -1990,33 +2024,6 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
   return glw_pointer_event_deliver(w, gpe0) | r;
 }
 
-
-/**
- *
- */
-static void
-touch_move_transfer_to_parent(glw_t *w, glw_pointer_event_t *gpe,
-                              Vec3 p, Vec3 dir)
-{
-  float x, y;
-  glw_pointer_event_t gpe0;
-
-  // See if any parent widget want to snap on
-  while((w = w->glw_parent) != NULL) {
-    if(w->glw_matrix == NULL)
-      continue;
-
-    if(glw_widget_unproject(w->glw_matrix, &x, &y, p, dir) &&
-       x <= 1 && y <= 1 && x >= -1 && y >= -1) {
-      gpe0.ts = gpe->ts;
-      gpe0.type = GLW_POINTER_TOUCH_START;
-      gpe0.x = x;
-      gpe0.y = y;
-      if(glw_send_pointer_event(w, &gpe0))
-        break;
-    }
-  }
-}
 
 /**
  *
@@ -2070,9 +2077,19 @@ glw_pointer_event(glw_root_t *gr, glw_pointer_event_t *gpe)
   }
 
   if(gpe->type == GLW_POINTER_TOUCH_START) {
-    gr->gr_pointer_press_x = gpe->x;
-    gr->gr_pointer_press_y = gpe->y;
+    gr->gr_touch_start_x = gpe->x;
+    gr->gr_touch_start_y = gpe->y;
     prop_set(gr->gr_prop_ui, "touch", PROP_SET_INT, 1);
+  }
+
+  if(gpe->type == GLW_POINTER_TOUCH_MOVE) {
+    gr->gr_touch_move_x = gpe->x;
+    gr->gr_touch_move_y = gpe->y;
+  }
+
+  if(gpe->type == GLW_POINTER_TOUCH_END) {
+    gr->gr_touch_end_x = gpe->x;
+    gr->gr_touch_end_y = gpe->y;
   }
 
   /* If a widget has grabbed to pointer (such as when holding the button
@@ -2097,6 +2114,13 @@ glw_pointer_event(glw_root_t *gr, glw_pointer_event_t *gpe)
         gpe0.y = y;
         gpe0.ts = gpe->ts;
         glw_send_pointer_event(w, &gpe0);
+      } else if((w = gr->gr_pointer_grab_scroll) != NULL && w->glw_matrix != NULL) {
+        glw_widget_unproject(w->glw_matrix, &x, &y, p, dir);
+        gpe0.type = GLW_POINTER_FOCUS_MOTION;
+        gpe0.x = x;
+        gpe0.y = y;
+        gpe0.ts = gpe->ts;
+        glw_send_pointer_event(w, &gpe0);
       } else if((w = gr->gr_pointer_press) != NULL && w->glw_matrix != NULL) {
 
         int loss_press = 0;
@@ -2105,26 +2129,10 @@ glw_pointer_event(glw_root_t *gr, glw_pointer_event_t *gpe)
            x < -1 || y < -1 || x > 1 || y > 1)
           loss_press = 1;
 
-        if(gpe->type == GLW_POINTER_TOUCH_MOVE) {
-          float dx = fabsf(gr->gr_pointer_press_x - gpe->x);
-          float dy = fabsf(gr->gr_pointer_press_y - gpe->y);
-          float d = dx * dx + dy * dy;
-          if(d > 0.001) {
-            loss_press = 1;
-          }
-        }
-
         if(loss_press) {
           // Moved outside button, release
           glw_path_modify(w, 0, GLW_IN_PRESSED_PATH, NULL);
           gr->gr_pointer_press = NULL;
-
-          if(gpe->type == GLW_POINTER_TOUCH_MOVE) {
-            gpe0.type = GLW_POINTER_TOUCH_CANCEL;
-
-            glw_send_pointer_event(w, &gpe0);
-            touch_move_transfer_to_parent(w, gpe, p, dir);
-          }
         }
       }
     }
@@ -2293,8 +2301,6 @@ glw_rec_toggle(glw_root_t *gr)
 static void
 glw_dispatch_event(glw_root_t *gr, event_t *e)
 {
-  int r;
-
   runcontrol_activity();
 
   if(e->e_type == EVENT_REPAINT_UI) {
@@ -2386,12 +2392,7 @@ glw_dispatch_event(glw_root_t *gr, event_t *e)
 
   }
 
-  r = glw_event(gr, e);
-
-  if(!r) {
-    event_addref(e);
-    event_dispatch(e);
-  }
+  glw_event(gr, e);
 }
 
 /**
@@ -2663,9 +2664,12 @@ glw_class_find_by_name(const char *name)
 {
   glw_class_t *gc;
 
-  LIST_FOREACH(gc, &glw_classes, gc_link)
+  LIST_FOREACH(gc, &glw_classes, gc_link) {
     if(!strcmp(gc->gc_name, name))
       break;
+    if(gc->gc_name2 != NULL && !strcmp(gc->gc_name2, name))
+      break;
+  }
   return gc;
 }
 
@@ -2690,6 +2694,8 @@ glw_get_name(glw_t *w)
   const char *extra = NULL;
   char tmp[512];
   const glw_class_t *gc = w->glw_class;
+  if(w == w->glw_root->gr_universe)
+    return "Universe";
 
   if(gc->gc_get_identity != NULL)
     extra = gc->gc_get_identity(w, tmp, sizeof(tmp));
@@ -2765,7 +2771,7 @@ glw_get_path(glw_t *w)
 void
 glw_set_fullscreen(glw_root_t *gr, int fullscreen)
 {
-  prop_set_int(gr->gr_is_fullscreen, !!fullscreen);
+  gr->gr_is_fullscreen = fullscreen;
 }
 
 

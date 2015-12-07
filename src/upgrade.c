@@ -28,6 +28,7 @@
 
 #include "main.h"
 #include "upgrade.h"
+#if ENABLE_UPGRADE
 #include "arch/arch.h"
 #include "arch/halloc.h"
 #include "fileaccess/fileaccess.h"
@@ -1281,6 +1282,13 @@ upgrade_init(void)
   archname = "android";
 #endif
 
+#ifdef __APPLE__
+  if(gconf.upgrade_path == NULL)
+    return;
+  artifact_type = "bin";
+  archname = "osx";
+#endif
+
   if(artifact_type == NULL || archname == NULL)
     return;
 
@@ -1406,3 +1414,24 @@ static backend_t be_upgrade = {
 };
 
 BE_REGISTER(upgrade);
+
+#else
+
+
+void
+upgrade_init(void)
+{}
+
+int
+upgrade_refresh(void)
+{
+  return 0;
+}
+
+char *
+upgrade_get_track(void)
+{
+  return NULL;
+}
+
+#endif
