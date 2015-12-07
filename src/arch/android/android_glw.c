@@ -35,6 +35,23 @@
 #include "android.h"
 #include "android_glw.h"
 
+
+static void
+dis_screensaver_callback(void *opaque, int value)
+{
+  android_glw_root_t *agr = opaque;
+  JNIEnv *env;
+  (*JVM)->GetEnv(JVM, (void **)&env, JNI_VERSION_1_6);
+
+  jclass class = (*env)->GetObjectClass(env, agr->agr_vrp);
+  jmethodID mid = (*env)->GetMethodID(env, class,
+                                      value ? "disableScreenSaver" :
+                                      "enableScreenSaver",
+                                      "()V");
+
+  (*env)->CallVoidMethod(env, agr->agr_vrp, mid);
+}
+
 JNIEXPORT jint JNICALL
 Java_com_lonelycoder_mediaplayer_Core_glwCreate(JNIEnv *env,
                                                        jobject obj,
@@ -52,6 +69,14 @@ Java_com_lonelycoder_mediaplayer_Core_glwCreate(JNIEnv *env,
   hts_cond_init(&agr->agr_runcond, &agr->gr.gr_mutex);
 
   agr->agr_vrp = (*env)->NewGlobalRef(env, vrp);
+
+  agr->agr_disable_screensaver_sub =
+    prop_subscribe(0,
+                   PROP_TAG_CALLBACK_INT, dis_screensaver_callback, agr,
+                   PROP_TAG_NAME("ui", "disableScreensaver"),
+                   PROP_TAG_ROOT, agr->gr.gr_prop_ui,
+                   PROP_TAG_COURIER, agr->gr.gr_courier,
+                   NULL);
 
   glw_load_universe(&agr->gr);
   return (intptr_t)agr;
@@ -91,11 +116,13 @@ Java_com_lonelycoder_mediaplayer_Core_glwFini(JNIEnv *env,
 
 JNIEXPORT void JNICALL
 Java_com_lonelycoder_mediaplayer_Core_glwDestroy(JNIEnv *env,
-                                                     jobject obj,
-                                                     jint id)
+                                                 jobject obj,
+                                                 jint id)
 {
   android_glw_root_t *agr = (android_glw_root_t *)id;
   glw_root_t *gr = &agr->gr;
+
+  prop_unsubscribe(agr->agr_disable_screensaver_sub);
 
   glw_lock(gr);
   while(agr->agr_running == 1)
@@ -149,6 +176,41 @@ Java_com_lonelycoder_mediaplayer_Core_glwStep(JNIEnv *env,
   glw_layout0(gr->gr_universe, &rc);
   glw_render0(gr->gr_universe, &rc);
 
+
+  if(gconf.enable_touch_debug) {
+    glw_line(gr, &rc,
+             gr->gr_touch_start_x, 1,
+             gr->gr_touch_start_x, -1,
+             1, 0, 0, 1);
+
+    glw_line(gr, &rc,
+             -1, gr->gr_touch_start_y,
+             1, gr->gr_touch_start_y,
+             1, 0, 0, 1);
+
+
+    glw_line(gr, &rc,
+             gr->gr_touch_move_x, 1,
+             gr->gr_touch_move_x, -1,
+             0, 1, 0, 1);
+
+    glw_line(gr, &rc,
+             -1, gr->gr_touch_move_y,
+             1, gr->gr_touch_move_y,
+             0, 1, 0, 1);
+
+
+    glw_line(gr, &rc,
+             gr->gr_touch_end_x, 1,
+             gr->gr_touch_end_x, -1,
+             0, 0, 1, 1);
+
+    glw_line(gr, &rc,
+             -1, gr->gr_touch_end_y,
+             1, gr->gr_touch_end_y,
+             0, 0, 1, 1);
+  }
+
   glw_unlock(gr);
 
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -187,6 +249,15 @@ Java_com_lonelycoder_mediaplayer_Core_glwMotion(JNIEnv *env,
   case 3: gpe.type = GLW_POINTER_TOUCH_CANCEL; break;
   default: return;
   }
+
+  if(gconf.enable_input_event_debug)
+    TRACE(TRACE_DEBUG, "Touch", "%6s [%d] @ %4d,%-4d  src=0x%x",
+          gpe.type == GLW_POINTER_TOUCH_START  ? "Start" :
+          gpe.type == GLW_POINTER_TOUCH_END    ? "End" :
+          gpe.type == GLW_POINTER_TOUCH_MOVE   ? "Move" :
+          gpe.type == GLW_POINTER_TOUCH_CANCEL ? "Cancel" : "?",
+          action,
+          x, y, source);
 
   glw_lock(gr);
   gpe.x =  (2.0f * x / gr->gr_width ) - 1.0f;

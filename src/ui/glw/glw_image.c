@@ -102,6 +102,8 @@ typedef struct glw_image {
   int gi_switch_cnt;
   int gi_switch_tgt;
 
+  float gi_max_intensity;
+
   glw_program_args_t gi_gpa;
 
   rstr_t *gi_fs;
@@ -125,6 +127,7 @@ static int8_t tex_transform[9][4] = {
 
 static void update_box(glw_image_t *gi);
 static void pick_source(glw_image_t *gi, int next);
+static void compute_colors(glw_image_t *gi);
 
 /**
  *
@@ -326,7 +329,7 @@ glw_image_render(glw_t *w, const glw_rctx_t *rc)
       glw_zinc(&rc0);
     }
 
-    if(alpha_self > 0.01f) {
+    if(alpha_self > GLW_ALPHA_EPSILON) {
 
       if(gi->gi_bitmap_flags & GLW_IMAGE_ADDITIVE)
 	glw_blendmode(w->glw_root, GLW_BLEND_ADDITIVE);
@@ -357,7 +360,8 @@ glw_image_render(glw_t *w, const glw_rctx_t *rc)
       glw_zinc(&rc0);
     }
 
-    if(glt && glw_is_tex_inited(&glt->glt_texture) && alpha_self > 0.01f) {
+    if(glt && glw_is_tex_inited(&glt->glt_texture) &&
+       alpha_self > GLW_ALPHA_EPSILON) {
 
       if(gi->gi_bitmap_flags & GLW_IMAGE_ADDITIVE)
 	glw_blendmode(w->glw_root, GLW_BLEND_ADDITIVE);
@@ -758,6 +762,9 @@ glw_image_tex_load(glw_image_t *gi, rstr_t *url, int width, int height)
   if(gi->w.glw_class == &glw_repeatedimage)
     flags |= GLW_TEX_REPEAT;
 
+  if(unlikely(gi->gi_max_intensity < 1.0))
+    flags |= GLW_TEX_INTENSITY_ANALYSIS;
+
   return glw_tex_create(gi->w.glw_root, url, flags, width, height,
                         gi->gi_radius, gi->gi_shadow, gi->gi_aspect);
 }
@@ -883,6 +890,7 @@ glw_image_layout(glw_t *w, const glw_rctx_t *rc)
       gi->gi_pending = NULL;
       gi->gi_update = 1;
       gi->gi_loading_new_url = 0;
+      compute_colors(gi);
     }
   }
 
@@ -1055,10 +1063,16 @@ glw_image_callback(glw_t *w, void *opaque, glw_signal_t signal,
 static void
 compute_colors(glw_image_t *gi)
 {
-  float iS = 1 - gi->gi_saturation;
-  gi->gi_col_mul.r = gi->gi_color.r * iS;
-  gi->gi_col_mul.g = gi->gi_color.g * iS;
-  gi->gi_col_mul.b = gi->gi_color.b * iS;
+  float scale = 1 - gi->gi_saturation;
+
+  if(gi->gi_max_intensity < 1.0 && gi->gi_current != NULL &&
+     gi->gi_current->glt_intensity > gi->gi_max_intensity) {
+    scale *= gi->gi_max_intensity / gi->gi_current->glt_intensity;
+  }
+
+  gi->gi_col_mul.r = gi->gi_color.r * scale;
+  gi->gi_col_mul.g = gi->gi_color.g * scale;
+  gi->gi_col_mul.b = gi->gi_color.b * scale;
 
   gi->gi_col_off.r = gi->gi_saturation;
   gi->gi_col_off.g = gi->gi_saturation;
@@ -1091,6 +1105,7 @@ glw_image_ctor(glw_t *w)
   gi->gi_color.g = 1.0;
   gi->gi_color.b = 1.0;
   gi->gi_size_scale = 1.0;
+  gi->gi_max_intensity = 1.0f;
 
   compute_colors(gi);
 
@@ -1511,6 +1526,28 @@ glw_icon_flush(glw_root_t *gr)
 /**
  *
  */
+static int
+glw_image_set_float_unresolved(glw_t *w, const char *a, float value,
+                               glw_style_t *gs)
+{
+  glw_image_t *gi = (glw_image_t *)w;
+
+  if(!strcmp(a, "maxIntensity")) {
+    if(gi->gi_max_intensity == value)
+        return 0;
+    gi->gi_max_intensity = value;
+    compute_colors(gi);
+    return 1;
+  }
+
+  return GLW_SET_NOT_RESPONDING;
+}
+
+
+
+/**
+ *
+ */
 int
 glw_image_get_details(glw_t *w, char *path, size_t pathlen, float *alpha)
 {
@@ -1551,6 +1588,7 @@ static glw_class_t glw_image = {
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
   .gc_set_int16_4 = image_set_int16_4,
+  .gc_set_float_unresolved = glw_image_set_float_unresolved,
 };
 
 GLW_REGISTER_CLASS(glw_image);
@@ -1579,6 +1617,7 @@ static glw_class_t glw_icon = {
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
   .gc_set_int16_4 = image_set_int16_4,
+  .gc_set_float_unresolved = glw_image_set_float_unresolved,
 };
 
 GLW_REGISTER_CLASS(glw_icon);
@@ -1606,6 +1645,7 @@ static glw_class_t glw_backdrop = {
   .gc_get_identity = get_identity,
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
+  .gc_set_float_unresolved = glw_image_set_float_unresolved,
 };
 
 GLW_REGISTER_CLASS(glw_backdrop);
@@ -1634,6 +1674,7 @@ static glw_class_t glw_frontdrop = {
   .gc_get_identity = get_identity,
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
+  .gc_set_float_unresolved = glw_image_set_float_unresolved,
 };
 
 GLW_REGISTER_CLASS(glw_frontdrop);
@@ -1661,6 +1702,7 @@ static glw_class_t glw_repeatedimage = {
   .gc_set_fs = glw_image_set_fs,
   .gc_mod_flags2 = mod_flags2,
   .gc_set_int16_4 = image_set_int16_4,
+  .gc_set_float_unresolved = glw_image_set_float_unresolved,
 };
 
 GLW_REGISTER_CLASS(glw_repeatedimage);

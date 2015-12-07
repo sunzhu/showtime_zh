@@ -17,6 +17,7 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
+#include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
@@ -95,18 +96,6 @@ arch_cache_avail_bytes(void)
     return 0;
 
   return buf.f_bfree * buf.f_bsize;
-}
-
-/**
- *
- */
-uint64_t
-arch_get_seed(void)
-{
-  uint64_t v = getpid();
-  v = (v << 16) ^ getppid();
-  v = (v << 32) ^ time(NULL);
-  return v;
 }
 
 
@@ -204,6 +193,20 @@ arch_localtime(const time_t *now, struct tm *tm)
   localtime_r(now, tm);
 }
 
+static int devurandom;
+
+void
+arch_get_random_bytes(void *ptr, size_t size)
+{
+  ssize_t r = read(devurandom, ptr, size);
+  if(r != size)
+    abort();
+}
+
+INITIALIZER(opendevurandom) {
+  devurandom = open("/dev/urandom", O_RDONLY);
+};
+
 
 /**
  *
@@ -239,7 +242,7 @@ JNI_OnLoad(JavaVM *vm, void *reserved)
  *
  */
 JNIEXPORT void JNICALL
-Java_com_lonelycoder_mediaplayer_Core_coreInit(JNIEnv *env, jobject obj, jstring j_settings, jstring j_cachedir, jstring j_sdcard, jstring j_android_id, jint time_24hrs)
+Java_com_lonelycoder_mediaplayer_Core_coreInit(JNIEnv *env, jobject obj, jstring j_settings, jstring j_cachedir, jstring j_sdcard, jstring j_android_id, jint time_24hrs, jstring j_music, jstring j_pictures, jstring j_movies)
 {
   char path[PATH_MAX];
   trace_arch(TRACE_INFO, "Core", "Native core initializing");
@@ -295,11 +298,23 @@ Java_com_lonelycoder_mediaplayer_Core_coreInit(JNIEnv *env, jobject obj, jstring
 
   prop_jni_init(env);
 
-  service_create("music", "Music", "file:///sdcard/Music",
-                 "music", NULL, 0, 1, SVC_ORIGIN_SYSTEM);
+  const char *music    = (*env)->GetStringUTFChars(env, j_music, 0);
+  const char *pictures = (*env)->GetStringUTFChars(env, j_pictures, 0);
+  const char *movies   = (*env)->GetStringUTFChars(env, j_movies, 0);
 
-  service_create("music", "Movies", "file:///sdcard/Movies",
-                 "video", NULL, 0, 1, SVC_ORIGIN_SYSTEM);
+  service_createp("pictures", _p("Pictures"), pictures,
+                  "images", NULL, 0, 1, SVC_ORIGIN_SYSTEM);
+
+  service_createp("music", _p("Music"), music,
+                  "music", NULL, 0, 1, SVC_ORIGIN_SYSTEM);
+
+  service_createp("movies", _p("Movies"), movies,
+                  "video", NULL, 0, 1, SVC_ORIGIN_SYSTEM);
+
+  (*env)->ReleaseStringUTFChars(env, j_music, music);
+  (*env)->ReleaseStringUTFChars(env, j_pictures, pictures);
+  (*env)->ReleaseStringUTFChars(env, j_movies, movies);
+
 
   android_nav = nav_spawn();
 }
@@ -312,6 +327,17 @@ JNIEXPORT void JNICALL
 Java_com_lonelycoder_mediaplayer_Core_pollCourier(JNIEnv *env, jobject obj)
 {
   prop_jni_poll();
+}
+
+
+/**
+ *
+ */
+JNIEXPORT void JNICALL
+Java_com_lonelycoder_mediaplayer_Core_networkStatusChanged(JNIEnv *env, jobject obj)
+{
+  extern void asyncio_trig_network_change(void);
+  asyncio_trig_network_change();
 }
 
 

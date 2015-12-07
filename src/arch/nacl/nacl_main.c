@@ -42,6 +42,8 @@
 #include "ppapi/c/ppb_instance.h"
 #include "ppapi/c/ppb_message_loop.h"
 #include "ppapi/c/ppb_messaging.h"
+#include "ppapi/c/ppb_network_monitor.h"
+#include "ppapi/c/ppb_network_list.h"
 #include "ppapi/c/ppb_graphics_3d.h"
 #include "ppapi/c/ppb_tcp_socket.h"
 #include "ppapi/c/ppb_udp_socket.h"
@@ -77,8 +79,11 @@ const PPB_Graphics3D *ppb_graphics3d;
 const PPB_InputEvent *ppb_inputevent;
 const PPB_KeyboardInputEvent *ppb_keyboardinputevent;
 const PPB_MouseInputEvent *ppb_mouseinputevent;
+const PPB_WheelInputEvent *ppb_wheelinputevent;
 const PPB_HostResolver *ppb_hostresolver;
 const PPB_NetAddress *ppb_netaddress;
+const PPB_NetworkMonitor *ppb_networkmonitor;
+const PPB_NetworkList *ppb_networklist;
 const PPB_TCPSocket *ppb_tcpsocket;
 const PPB_UDPSocket *ppb_udpsocket;
 const PPB_MessageLoop *ppb_messageloop;
@@ -112,6 +117,10 @@ static LIST_HEAD(, nacl_jsrpc) nacl_jsrpcs;
 
 typedef struct nacl_glw_root {
   glw_root_t gr;
+
+  float mouse_x;
+  float mouse_y;
+
 } nacl_glw_root_t;
 
 PP_Resource nacl_3d_context;
@@ -530,6 +539,7 @@ handle_keydown(nacl_glw_root_t *ngr, PP_Resource input_event)
   if(code == KC_F11) {
     int fs = ppb_fullscreen->IsFullscreen(g_Instance);
     ppb_fullscreen->SetFullscreen(g_Instance, !fs);
+    glw_set_fullscreen(gr, fs);
     return 1;
   }
 
@@ -615,6 +625,9 @@ handle_mouse_event(nacl_glw_root_t *ngr, PP_Resource mouse_event,
   gpe.x =  (2.0 * pos.x / ngr->gr.gr_width ) - 1;
   gpe.y = -(2.0 * pos.y / ngr->gr.gr_height) + 1;
 
+  ngr->mouse_x = gpe.x;
+  ngr->mouse_y = gpe.y;
+
   PP_InputEvent_MouseButton ppbtn =
     ppb_mouseinputevent->GetButton(mouse_event);
 
@@ -668,6 +681,30 @@ handle_mouse_event(nacl_glw_root_t *ngr, PP_Resource mouse_event,
  *
  */
 static PP_Bool
+handle_wheel_event(nacl_glw_root_t *ngr, PP_Resource wheel_event)
+{
+  glw_pointer_event_t gpe = {0};
+
+  struct PP_FloatPoint pos = ppb_wheelinputevent->GetDelta(wheel_event);
+  //  int pagemode = ppb_wheelinputevent->GetScrollByPage(wheel_event);
+
+  gpe.x = ngr->mouse_x;
+  gpe.y = ngr->mouse_y;
+  gpe.delta_x = pos.x;
+  gpe.delta_y = pos.y;
+
+  gpe.type = GLW_POINTER_FINE_SCROLL;
+  glw_lock(&ngr->gr);
+  glw_pointer_event(&ngr->gr, &gpe);
+  glw_unlock(&ngr->gr);
+  return PP_TRUE;
+}
+
+
+/**
+ *
+ */
+static PP_Bool
 Input_HandleInputEvent(PP_Instance instance, PP_Resource input_event)
 {
   PP_InputEvent_Type type = ppb_inputevent->GetType(input_event);
@@ -685,6 +722,9 @@ Input_HandleInputEvent(PP_Instance instance, PP_Resource input_event)
     return handle_keydown(ngr, input_event);
   case PP_INPUTEVENT_TYPE_CHAR:
     return handle_char(ngr, input_event);
+
+  case PP_INPUTEVENT_TYPE_WHEEL:
+    return handle_wheel_event(ngr, input_event);
 
   default:
     break;
@@ -909,8 +949,11 @@ PPP_InitializeModule(PP_Module a_module_id, PPB_GetInterface get_browser)
   ppb_inputevent         = get_browser(PPB_INPUT_EVENT_INTERFACE);
   ppb_keyboardinputevent = get_browser(PPB_KEYBOARD_INPUT_EVENT_INTERFACE);
   ppb_mouseinputevent    = get_browser(PPB_MOUSE_INPUT_EVENT_INTERFACE);
+  ppb_wheelinputevent    = get_browser(PPB_WHEEL_INPUT_EVENT_INTERFACE);
   ppb_hostresolver       = get_browser(PPB_HOSTRESOLVER_INTERFACE);
   ppb_netaddress         = get_browser(PPB_NETADDRESS_INTERFACE);
+  ppb_networkmonitor     = get_browser(PPB_NETWORKMONITOR_INTERFACE);
+  ppb_networklist        = get_browser(PPB_NETWORKLIST_INTERFACE);
   ppb_tcpsocket          = get_browser(PPB_TCPSOCKET_INTERFACE);
   ppb_udpsocket          = get_browser(PPB_UDPSOCKET_INTERFACE);
   ppb_messageloop        = get_browser(PPB_MESSAGELOOP_INTERFACE);

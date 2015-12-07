@@ -1,21 +1,49 @@
 #import "skin://theme.view"
 
+#define PopupBackdrop() {
+  widget(container_x, {
+    filterConstraintX: true;
+    filterConstraintY: true;
 
 
-style(popupBackdrop, {
-  alpha: 0.5;
-  color: 0;
-});
+    widget(quad, {
+      width: 0.2em;
+      color: 0;
+    });
 
-style(popupContainer, {
-  padding: 1em;
-  filterConstraintX: true;
-});
+    widget(container_y, {
+      widget(quad, {
+        height: 0.2em;
+        color: 0;
+      });
+      widget(backdrop, {
+        source: "pixmap:gradient:40,40,40:60,60,60";
+        alpha 0.5;
+      });
+      widget(quad, {
+        height: 0.2em;
+        color: 0;
+      });
+    });
+
+    widget(quad, {
+      width: 0.2em;
+      color: 0;
+    });
+  });
+}
+
 
 style(popupRow, {
   padding: [1em, 0.25em];
   spacing: 1em;
 });
+
+style(textBackdrop, {
+  color: 0;
+  padding: [-0.1em, -0.1em];
+});
+
 
 #define popupGroup(BODY) {
   widget(container_z, {
@@ -30,40 +58,10 @@ style(popupRow, {
   });
 }
 
-#define popupInputField(BODY) {
-  widget(backdrop, {
-    source: "skin://graphics/border-tiny.png";
-    borderOnly: true;
-    border: 4;
-    color: 0.5;
-    BODY;
-  });
-}
-
 
 
 #define popupButton(EVENT, ENABLED, HIDDEN, CAPTION) {
 
-  widget(backdrop, {
-    source: "skin://graphics/border-tiny.png";
-    borderOnly: true;
-    border: 4;
-    padding: [$ui.size,0];
-    hidden: HIDDEN;
-    focusable: ENABLED;
-    onEvent(activate, EVENT);
-
-    alpha: select(isHovered() || isNavFocused(), 1, 0.5);
-
-    widget(label, {
-      align: center;
-      caption: CAPTION;
-    });
-  });
-}
-
-#define popupButtonOK(EVENT, ENABLED, HIDDEN) {
-
   widget(container_z, {
     height: 2em;
 
@@ -79,31 +77,19 @@ style(popupRow, {
       align: center;
 
       widget(label, {
-	caption: _("OK");
+	caption: CAPTION;
+        color: !isNavFocused();
       });
     });
   });
+}
 
+
+#define popupButtonOK(EVENT, ENABLED, HIDDEN) {
+  popupButton(EVENT, ENABLED, HIDDEN, _("Ok"));
 }
 
 #define popupButtonCancel(EVENT, ENABLED, HIDDEN) {
-  widget(container_z, {
-    height: 2em;
-
-    GridItemBevel();
-    GridItemHighlight();
-
-    hidden: HIDDEN;
-    focusable: ENABLED;
-    onEvent(activate, EVENT);
-
-    widget(container_x, {
-      padding: [2em, 0];
-
-      widget(label, {
-	caption: _("Cancel");
-      });
-    });
-  });
+  popupButton(EVENT, ENABLED, HIDDEN, _("Cancel"));
 }
 

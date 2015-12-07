@@ -332,7 +332,7 @@ clip_out(glw_root_t *gr, glw_renderer_cache_t *grc,
   Vec4 c1, c2, c3;
   const float alpha_out = gr->gr_clip_alpha_out[plane - 1];
   const float sharpness_out = gr->gr_clip_sharpness_out[plane - 1];
-  if(alpha_out < 0.01)
+  if(alpha_out < GLW_ALPHA_EPSILON)
     return;
 
   glw_vec4_copy(v1, V1);
@@ -1167,6 +1167,26 @@ glw_wirebox(glw_root_t *root, const glw_rctx_t *rc)
 {
   add_job(root, &rc->rc_mtx, NULL, NULL, &white, NULL, 1, 0,
           &box_vertices[0][0], 4,
+          NULL, 0,
+          0, NULL, rc, GLW_DRAW_LINE_LOOP, INT16_MAX);
+}
+
+
+/**
+ *
+ */
+void
+glw_line(glw_root_t *root, const glw_rctx_t *rc,
+         float x1, float y1, float x2, float y2,
+         float r, float g, float b, float alpha)
+{
+  float line_vertices[2][12] = {
+    { x1,y1, 0, 0, r, g, b, alpha},
+    { x2,y2, 0, 0, r, g, b, alpha},
+  };
+
+  add_job(root, &rc->rc_mtx, NULL, NULL, &white, NULL, 1, 0,
+          &line_vertices[0][0], 2,
           NULL, 0,
           0, NULL, rc, GLW_DRAW_LINE_LOOP, INT16_MAX);
 }

@@ -37,6 +37,7 @@
 #include "text/text.h"
 #include "event.h"
 #include "image/image.h"
+#include "fileaccess/fa_filepicker.h"
 
 /**
  *
@@ -360,7 +361,7 @@ glw_text_bitmap_layout(glw_t *w, const glw_rctx_t *rc)
     gtb->gtb_flags & GTB_PERMANENT_CURSOR ||
     (w->glw_class == &glw_text && glw_is_focused(w));
 
-  if(gtb->gtb_paint_cursor && rc->rc_alpha > 0.01)
+  if(gtb->gtb_paint_cursor && rc->rc_alpha > GLW_ALPHA_EPSILON)
     glw_need_refresh(gr, 0);
 
   gtb->gtb_need_layout = 0;
@@ -395,7 +396,7 @@ glw_text_bitmap_render(glw_t *w, const glw_rctx_t *rc)
 
   alpha = rc->rc_alpha * w->glw_alpha;
 
-  if(alpha < 0.01f)
+  if(alpha < GLW_ALPHA_EPSILON)
     return;
 
   if(glw_is_tex_inited(&gtb->gtb_texture) && gtb->gtb_image != NULL) {
@@ -653,14 +654,33 @@ glw_text_bitmap_event(glw_t *w, event_t *e)
     return 1;
 
   } else if(event_is_action(e, ACTION_ACTIVATE)) {
-    if(w->glw_root->gr_open_osk != NULL) {
 
-      gtb_caption_refresh(gtb);
-      w->glw_root->gr_open_osk(w->glw_root, gtb->gtb_description,
-			       gtb->gtb_caption, w,
-			       gtb->gtb_flags & GTB_PASSWORD);
-      return 1;
+    gtb_caption_refresh(gtb);
+
+
+    if(gtb->gtb_flags & (GTB_FILE_REQUEST | GTB_DIR_REQUEST)) {
+
+      if(gtb->gtb_p == NULL) {
+        TRACE(TRACE_ERROR, "GLW",
+              "File requests on unbound widgets is not supported");
+      } else {
+
+        int flags =
+          (gtb->gtb_flags & GTB_FILE_REQUEST ? FILEPICKER_FILES : 0) |
+          (gtb->gtb_flags & GTB_DIR_REQUEST  ? FILEPICKER_DIRECTORIES : 0);
+
+        filepicker_pick_to_prop(gtb->gtb_description,
+                                gtb->gtb_p, gtb->gtb_caption,
+                                flags);
+      }
+
+    } else {
+      w->glw_root->gr_open_osk(w->glw_root,
+                               gtb->gtb_description,
+                               gtb->gtb_caption, w,
+                               gtb->gtb_flags & GTB_PASSWORD);
     }
+    return 1;
   }
   return 0;
 }
@@ -927,7 +947,8 @@ gtb_set_rstr(glw_t *w, glw_attribute_t a, rstr_t *str, glw_style_t *origin)
  */
 static void
 bind_to_property(glw_t *w, prop_t *p, const char **pname,
-		 prop_t *view, prop_t *args, prop_t *clone)
+		 prop_t *view, prop_t *args, prop_t *clone,
+                 prop_t *core)
 {
   glw_text_bitmap_t *gtb = (void *)w;
   gtb_unbind(gtb);
@@ -941,9 +962,9 @@ bind_to_property(glw_t *w, prop_t *p, const char **pname,
 		   PROP_TAG_NAMED_ROOT, view, "view",
 		   PROP_TAG_NAMED_ROOT, args, "args",
 		   PROP_TAG_NAMED_ROOT, clone, "clone",
+                   PROP_TAG_NAMED_ROOT, core, "core",
 		   PROP_TAG_ROOT, w->glw_root->gr_prop_ui,
 		   PROP_TAG_NAMED_ROOT, w->glw_root->gr_prop_nav, "nav",
-                   PROP_TAG_NAMED_ROOT, w->glw_root->gr_prop_core, "core",
 		   NULL);
 
   if(w->glw_flags2 & GLW2_AUTOHIDE)

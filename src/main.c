@@ -274,21 +274,23 @@ main_init(void)
 
   gconf.exit_code = 1;
 
-  asyncio_init_early();
-  init_group(INIT_GROUP_NET);
-
   unicode_init();
-
 
   /* Initialize property tree */
   prop_init();
   init_global_info();
 
+  /* Callout framework */
+  callout_init();
+
+  /* Network init */
+  asyncio_init_early();
+  init_group(INIT_GROUP_NET);
+
+
   /* Initiailize logging */
   trace_init();
 
-  /* Callout framework */
-  callout_init();
   prop_init_late();
 
   /* Initialize htsmsg_store() */
@@ -577,9 +579,6 @@ parse_opts(int argc, char **argv)
       argc -= 2; argv += 2;
     } else if (!strcmp(argv[0], "--showtime-shell-fd") && argc > 1) {
       gconf.shell_fd = atoi(argv[1]);
-      argc -= 2; argv += 2;
-    } else if (!strcmp(argv[0], "--remote") && argc > 1) {
-      gconf.remote_ui = argv[1];
       argc -= 2; argv += 2;
     } else if (!strcmp(argv[0], "--proxy") && argc > 1) {
       char *x = mystrdupa(argv[1]);

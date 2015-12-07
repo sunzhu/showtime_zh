@@ -56,6 +56,8 @@
 
 #define GLW_CURSOR_AUTOHIDE_TIME 3000000
 
+#define GLW_ALPHA_EPSILON (1.0f / 256.0f)
+
 struct event;
 
 typedef struct glw_style glw_style_t;
@@ -185,6 +187,8 @@ typedef enum {
 #define GTB_OUTLINE       0x10
 #define GTB_PERMANENT_CURSOR 0x20
 #define GTB_OSK_PASSWORD     0x40   /* Password for on screen keyboard */
+#define GTB_FILE_REQUEST     0x80   /* Edit should ask for a file */
+#define GTB_DIR_REQUEST      0x100  /* Edit should ask for a directory */
 
 typedef struct glw_vertex {
   float x, y, z;
@@ -242,7 +246,7 @@ typedef enum {
   GLW_POINTER_MOTION_UPDATE,  // Updated (mouse did really move)
   GLW_POINTER_MOTION_REFRESH, // GLW Internal refresh (every frame)
   GLW_POINTER_FOCUS_MOTION,
-  GLW_POINTER_FINE_SCROLL,
+  GLW_POINTER_FINE_SCROLL,    // In pixels
   GLW_POINTER_SCROLL,
   GLW_POINTER_GONE,
 } glw_pointer_event_type_t;
@@ -382,6 +386,7 @@ typedef enum {
 typedef struct glw_class {
 
   const char *gc_name;
+  const char *gc_name2;
   size_t gc_instance_size;
   size_t gc_parent_data_size;
 
@@ -436,7 +441,7 @@ typedef struct glw_class {
   int (*gc_set_prop)(struct glw *w, glw_attribute_t a, prop_t *p);
 
   void (*gc_set_roots)(struct glw *w, prop_t *self, prop_t *parent,
-                       prop_t *clone);
+                       prop_t *clone, prop_t *core);
 
   int (*gc_bind_to_id)(struct glw *w, const char *id);
 
@@ -511,10 +516,16 @@ typedef struct glw_class {
   int (*gc_bubble_event)(struct glw *w, struct event *e);
 
   /**
-   *
+   * These are sent to widgets when traversing the widgde tree downwards
+   * ie, more early in the process
+   */
+  int (*gc_pointer_event_filter)(struct glw *w, const glw_pointer_event_t *gpe);
+
+  /**
+   * These are sent to widget when traversing the widget tree upwards
+   * ie, later in the process
    */
   int (*gc_pointer_event)(struct glw *w, const glw_pointer_event_t *gpe);
-
 
   /**
    * Send a GLW_SIGNAL_... to all listeners
@@ -605,7 +616,8 @@ typedef struct glw_class {
 			      const char **pname,
 			      prop_t *view,
 			      prop_t *args,
-			      prop_t *clone);
+			      prop_t *clone,
+                              prop_t *core);
 
   /**
    *
@@ -714,6 +726,7 @@ typedef struct glw_program glw_program_t;
 typedef struct glw_root {
   prop_t *gr_prop_ui;
   prop_t *gr_prop_nav;
+
   prop_t *gr_prop_core;
 
   void (*gr_prop_dispatcher)(prop_courier_t *pc, int timeout);
@@ -772,7 +785,7 @@ typedef struct glw_root {
   int64_t gr_ui_start;        // Timestamp UI was initialized
   int64_t gr_frame_start;     // Timestamp when we started rendering frame
   int64_t gr_frame_start_avtime; // AVtime when start rendering frame
-  prop_t *gr_is_fullscreen;   // Set if our window is in fullscreen
+  int gr_is_fullscreen;   // Set if our window is in fullscreen
 
   int64_t gr_framerate_avg[16];
 
@@ -855,9 +868,17 @@ typedef struct glw_root {
   struct glw *gr_pointer_grab;
   struct glw *gr_pointer_hover;
   struct glw *gr_pointer_press;
+  struct glw *gr_pointer_grab_scroll;
+
   int64_t gr_pointer_press_time;
-  float gr_pointer_press_x;
-  float gr_pointer_press_y;
+
+  float gr_touch_start_x;
+  float gr_touch_start_y;
+  float gr_touch_move_x;
+  float gr_touch_move_y;
+  float gr_touch_end_x;
+  float gr_touch_end_y;
+
   struct glw *gr_current_focus;
   struct glw *gr_last_focus;
   int gr_delayed_focus_leave;
@@ -1206,6 +1227,7 @@ glw_filter_constraints(const glw_t *w)
 
 #define GLW_INIT_KEYBOARD_MODE 0x1
 #define GLW_INIT_OVERSCAN      0x2
+#define GLW_INIT_IN_FULLSCREEN 0x4
 
 int glw_init(glw_root_t *gr);
 
@@ -1315,6 +1337,8 @@ glw_t *glw_get_focusable_child(glw_t *w);
 
 int glw_focus_child(glw_t *w);
 
+void glw_path_modify(glw_t *w, int set, int clr, glw_t *stop);
+
 
 /**
  * Clipping
@@ -1355,7 +1379,7 @@ void glw_lp(float *v, glw_root_t *gr, float t, float alpha);
  */
 glw_t *glw_view_create(glw_root_t *gr, rstr_t *url, rstr_t *alturl,
                        glw_t *parent, prop_t *prop, prop_t *prop_parent,
-                       prop_t *args, prop_t *prop_clone,
+                       prop_t *args, prop_t *prop_clone, prop_t *prop_core,
                        rstr_t *file, int line);
 
 void glw_view_eval_signal(glw_t *w, glw_signal_t sig);
@@ -1409,10 +1433,6 @@ void glw_unref(glw_t *w);
 glw_t *glw_get_prev_n(glw_t *c, int count);
 
 glw_t *glw_get_next_n(glw_t *c, int count);
-
-int glw_event(glw_root_t *gr, struct event *e);
-
-int glw_root_event_handler(glw_root_t *gr, event_t *e);
 
 int glw_event_to_widget(glw_t *w, struct event *e);
 
@@ -1475,6 +1495,10 @@ void glw_align_1(glw_rctx_t *rc, int a);
 void glw_align_2(glw_rctx_t *rc, int a);
 
 void glw_wirebox(glw_root_t *gr, const glw_rctx_t *rc);
+
+void glw_line(glw_root_t *root, const glw_rctx_t *rc,
+              float x1, float x2, float y1, float y2,
+              float r, float g, float b, float alpha);
 
 void glw_renderer_render(glw_root_t *gr);
 

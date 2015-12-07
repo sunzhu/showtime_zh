@@ -333,7 +333,7 @@ glw_array_render(glw_t *w, const glw_rctx_t *rc)
   rc0 = *rc;
   rc0.rc_alpha *= w->glw_alpha;
 
-  if(rc0.rc_alpha < 0.01f)
+  if(rc0.rc_alpha < GLW_ALPHA_EPSILON)
     return;
 
   glw_reposition(&rc0, a->margin[0], rc->rc_height - a->margin[1],
@@ -480,6 +480,14 @@ glw_array_pointer_event(glw_t *w, const glw_pointer_event_t *gpe)
 {
   glw_array_t *a = (glw_array_t *)w;
   return glw_scroll_handle_pointer_event(&a->gsc, w, gpe);
+}
+
+
+static int
+handle_pointer_event_filter(struct glw *w, const glw_pointer_event_t *gpe)
+{
+  glw_array_t *a = (glw_array_t *)w;
+  return glw_scroll_handle_pointer_event_filter(&a->gsc, w, gpe);
 }
 
 /**
@@ -764,6 +772,7 @@ static glw_class_t glw_array = {
   .gc_set_int16_4 = glw_array_set_int16_4,
   .gc_layout = glw_array_layout,
   .gc_pointer_event = glw_array_pointer_event,
+  .gc_pointer_event_filter = handle_pointer_event_filter,
   .gc_bubble_event = glw_array_bubble_event,
   .gc_set_int_unresolved = glw_array_set_int_unresolved,
   .gc_set_float_unresolved = glw_array_set_float_unresolved,

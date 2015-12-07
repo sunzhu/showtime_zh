@@ -321,7 +321,7 @@ glw_list_render_y(glw_t *w, const glw_rctx_t *rc)
   glw_store_matrix(w, &rc1);
 
 
-  if(rc->rc_alpha < 0.01f)
+  if(rc->rc_alpha < GLW_ALPHA_EPSILON)
     return;
 
   const int clip_top    = l->gsc.clip_offset_pre - 1;
@@ -366,7 +366,7 @@ glw_list_render_x(glw_t *w, const glw_rctx_t *rc)
 
   glw_store_matrix(w, &rc0);
 
-  if(rc->rc_alpha < 0.01f)
+  if(rc->rc_alpha < GLW_ALPHA_EPSILON)
     return;
 
   rc1 = rc0;
@@ -689,6 +689,12 @@ handle_pointer_event(struct glw *w, const glw_pointer_event_t *gpe)
   return glw_scroll_handle_pointer_event(&l->gsc, w, gpe);
 }
 
+static int
+handle_pointer_event_filter(struct glw *w, const glw_pointer_event_t *gpe)
+{
+  glw_list_t *l = (glw_list_t *)w;
+  return glw_scroll_handle_pointer_event_filter(&l->gsc, w, gpe);
+}
 
 
 
@@ -706,6 +712,7 @@ static glw_class_t glw_list_y = {
   .gc_suggest_focus = glw_list_suggest_focus,
   .gc_set_int16_4 = glw_list_set_int16_4,
   .gc_pointer_event = handle_pointer_event,
+  .gc_pointer_event_filter = handle_pointer_event_filter,
   .gc_bubble_event = glw_navigate_vertical,
   .gc_set_int_unresolved = glw_list_set_int_unresolved,
   .gc_set_float_unresolved = glw_list_set_float_unresolved,
