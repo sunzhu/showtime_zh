@@ -203,8 +203,6 @@ typedef struct http_file {
 
   int hf_id;
 
-  char hf_line[4096];
-
 } http_file_t;
 
 
@@ -1184,9 +1182,12 @@ http_read_response(http_file_t *hf, struct http_header_list *headers)
   hf->hf_max_age = 30;
 
   int first_line = 1;
+  char *line = NULL;
 
   for(li = 0; ;li++) {
-    if(tcp_read_line(hc->hc_tc, hf->hf_line, sizeof(hf->hf_line)) < 0)
+    free(line);
+    line = tcp_read_line2(hc->hc_tc, 65536);
+    if(line == NULL)
       return -1;
 
     if(first_line) {
@@ -1194,13 +1195,13 @@ http_read_response(http_file_t *hf, struct http_header_list *headers)
       first_line = 0;
     }
 
-    HF_TRACE(hf, "< %s", hf->hf_line);
+    HF_TRACE(hf, "< %s", line);
 
-    if(hf->hf_line[0] == 0)
+    if(line[0] == 0)
       break;
 
     if(li == 0) {
-      q = hf->hf_line;
+      q = line;
       while(*q && *q != ' ')
 	q++;
       while(*q == ' ')
@@ -1209,10 +1210,10 @@ http_read_response(http_file_t *hf, struct http_header_list *headers)
       continue;
     }
 
-    if((c = strchr(hf->hf_line, ':')) == NULL)
+    if((c = strchr(line, ':')) == NULL)
       continue;
 
-    if(http_tokenize(hf->hf_line, argv, 2, ':') != 2)
+    if(http_tokenize(line, argv, 2, ':') != 2)
       continue;
     *c = 0;
 
@@ -1315,7 +1316,7 @@ http_read_response(http_file_t *hf, struct http_header_list *headers)
     hf->hf_auth_failed = 0;
     http_auth_cache_set(hf);
   }
-
+  free(line);
   return code;
 }
 
