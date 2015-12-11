@@ -17,22 +17,52 @@
  *  This program is also available under a commercial proprietary license.
  *  For more information, contact andreas@lonelycoder.com
  */
-#ifndef VIDEO_PLAYBACK_H
-#define VIDEO_PLAYBACK_H
+#pragma once
 
-#include "media/media.h"
-
+struct media_pipe;
 struct rstr;
 struct video_queue;
 struct vsource_list;
 struct prop;
+struct video_args;
+struct htsmsg;
 
-void video_playback_create(media_pipe_t *mp);
+#include "compiler.h"
+#include "arch/atomic.h"
+#include "misc/queue.h"
 
-void video_playback_destroy(media_pipe_t *mp);
+void video_playback_create(struct media_pipe *mp);
 
-struct prop *video_queue_find_next(struct video_queue *vq, 
+void video_playback_destroy(struct media_pipe *mp);
+
+struct prop *video_queue_find_next(struct video_queue *vq,
 				   struct prop *current, int reverse,
 				   int wrap);
 
-#endif /* PLAY_VIDEO_H */
+/**
+ * Video playback info
+ */
+
+struct htsmsg *video_playback_info_create(const struct video_args *va);
+
+
+typedef enum {
+  VPI_START,
+  VPI_STOP,
+} vpi_op_t;
+
+typedef struct video_playback_info_handler {
+  void (*invoke)(vpi_op_t op, struct htsmsg *info, struct prop *mp_root);
+  LIST_ENTRY(video_playback_info_handler) link;
+} video_playback_info_handler_t;
+
+void register_video_playback_info_handler(video_playback_info_handler_t *vpih);
+
+void video_playback_info_invoke(vpi_op_t op, struct htsmsg *vpi, struct prop *p);
+
+#define VPI_REGISTER(handler) \
+  static video_playback_info_handler_t handler ## _strct = { handler}; \
+  INITIALIZER(handler ## _init) {                               \
+    register_video_playback_info_handler(&handler ## _strct); }
+
+
