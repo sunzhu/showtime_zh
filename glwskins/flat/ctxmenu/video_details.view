@@ -6,7 +6,7 @@
     hidden: !ENABLED;
     height: 2em;
     ListItemBevel();
-
+    ListItemHighlight();
     focusable: true;
     onEvent(activate, EVENT);
 
@@ -109,6 +109,20 @@ widget(list_y, {
     fireEvent(navOpen($args.url, void, $args, $self.model, "continuous", $self.url));
     $clone.itemMenu = void;
   }, "skin://icons/ic_play_arrow_48px.svg");
+
+
+
+  ITEM(_("Mark as unseen"), {
+    $args.playcount = false;
+    $clone.itemMenu = void;
+  }, void, $args.playcount > 0);
+
+  // Mark as seen (video)
+
+  ITEM(_("Mark as seen"), {
+    $args.playcount = true;
+    $clone.itemMenu = void;
+  }, void, $args.playcount < 1);
 
   cloner($args.options, loader, {
     time: 0.1;
