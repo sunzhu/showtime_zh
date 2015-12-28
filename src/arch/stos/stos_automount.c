@@ -111,7 +111,7 @@ try_mount_fs(fsinfo_t *fi)
   if(mount(fi->fi_devname, mpoint, fi->fi_type, mountflags, "")) {
     if(errno == EBUSY) {
       // Assume it's already mounted OK
-      TRACE(TRACE_DEBUG, "Automount", "%s already mounted",
+      TRACE(TRACE_DEBUG, "Automount", "%s (%s) already mounted",
             fi->fi_devname, mpoint);
     } else {
 
@@ -471,4 +471,4 @@ stos_automount_stop(void)
   unmount_all("/stos/media");
 }
 
-INITME(INIT_GROUP_IPC, stos_automount_start, stos_automount_stop);
+INITME(INIT_GROUP_IPC, stos_automount_start, stos_automount_stop, 0);

@@ -105,7 +105,7 @@ arch_cache_avail_bytes(void)
 size_t
 arch_malloc_size(void *ptr)
 {
-  return malloc_usable_size(ptr);
+  return 0;
 }
 
 
@@ -297,11 +297,10 @@ Java_com_lonelycoder_mediaplayer_Core_coreInit(JNIEnv *env, jobject obj, jstring
   STCore = (*env)->NewGlobalRef(env, c);
 
   prop_jni_init(env);
-
+#if 0
   const char *music    = (*env)->GetStringUTFChars(env, j_music, 0);
   const char *pictures = (*env)->GetStringUTFChars(env, j_pictures, 0);
   const char *movies   = (*env)->GetStringUTFChars(env, j_movies, 0);
-
   service_createp("pictures", _p("Pictures"), pictures,
                   "images", NULL, 0, 1, SVC_ORIGIN_SYSTEM);
 
@@ -310,11 +309,14 @@ Java_com_lonelycoder_mediaplayer_Core_coreInit(JNIEnv *env, jobject obj, jstring
 
   service_createp("movies", _p("Movies"), movies,
                   "video", NULL, 0, 1, SVC_ORIGIN_SYSTEM);
-
   (*env)->ReleaseStringUTFChars(env, j_music, music);
   (*env)->ReleaseStringUTFChars(env, j_pictures, pictures);
   (*env)->ReleaseStringUTFChars(env, j_movies, movies);
+#endif
 
+  service_createp("androidstorage", _p("Android Storage"),
+                  "file:///storage",
+                  "storage", NULL, 0, 1, SVC_ORIGIN_SYSTEM);
 
   android_nav = nav_spawn();
 }

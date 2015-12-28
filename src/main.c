@@ -69,7 +69,7 @@
 
 #include "fileaccess/fileaccess.h"
 
-inithelper_t *inithelpers;
+static LIST_HEAD(, inithelper) inithelpers;
 
 /**
  *
@@ -154,6 +154,27 @@ init_global_info(void)
   prop_set(s, "copyright", PROP_SET_STRING, "© 2006 - 2015 Lonelycoder AB");
 }
 
+
+/**
+ *
+ */
+static int
+ihcmp(const inithelper_t *a, const inithelper_t *b)
+{
+  return a->prio - b->prio;
+}
+
+
+/**
+ *
+ */
+void
+inithelper_register(inithelper_t *ih)
+{
+  LIST_INSERT_SORTED(&inithelpers, ih, link, ihcmp, inithelper_t);
+}
+
+
 /**
  *
  */
@@ -161,7 +182,7 @@ void
 init_group(int group)
 {
   const inithelper_t *ih;
-  for(ih = inithelpers; ih != NULL; ih = ih->next) {
+  LIST_FOREACH(ih, &inithelpers, link) {
     if(ih->group == group)
       ih->init();
   }
@@ -175,7 +196,7 @@ void
 fini_group(int group)
 {
   const inithelper_t *ih;
-  for(ih = inithelpers; ih != NULL; ih = ih->next) {
+  LIST_FOREACH(ih, &inithelpers, link) {
     if(ih->group == group && ih->fini != NULL)
       ih->fini();
   }
@@ -259,6 +280,37 @@ swrefresh(void)
   hts_mutex_unlock(&gconf.state_mutex);
 }
 
+
+/**
+ *
+ */
+static void
+generate_device_id(void)
+{
+  if(gconf.device_id[0] != 0)
+    return;
+
+  rstr_t *s = htsmsg_store_get_str("deviceid", "deviceid");
+  if(s != NULL) {
+    snprintf(gconf.device_id, sizeof(gconf.device_id), "%s", rstr_get(s));
+  } else {
+    uint8_t d[20];
+    char uuid[40];
+
+    arch_get_random_bytes(d, sizeof(d));
+
+    snprintf(uuid, sizeof(uuid),
+             "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x"
+             "%02x%02x%02x%02x%02x%02x",
+             d[0x0], d[0x1], d[0x2], d[0x3],
+             d[0x4], d[0x5], d[0x6], d[0x7],
+             d[0x8], d[0x9], d[0xa], d[0xb],
+             d[0xc], d[0xd], d[0xe], d[0xf]);
+
+    snprintf(gconf.device_id, sizeof(gconf.device_id), "%s", uuid);
+    htsmsg_store_set("deviceid", "deviceid", HMF_STR, uuid);
+  }
+}
 
 
 /**
@@ -382,6 +434,12 @@ main_init(void)
   /* Initialize plugin manager */
   plugins_init(gconf.devplugins);
 
+  if(gconf.device_id[0] == 0)
+    generate_device_id();
+  TRACE(TRACE_DEBUG, "SYSTEM", "Hashed device ID: %s", gconf.device_id);
+  if(gconf.device_type[0])
+    TRACE(TRACE_DEBUG, "SYSTEM", "Device type: %s", gconf.device_type);
+
   /* Start software installer thread (plugins, upgrade, etc) */
   hts_thread_create_detached("swinst", swthread, NULL, THREAD_PRIO_BGTASK);
 
@@ -406,9 +464,6 @@ main_init(void)
 
   runcontrol_init();
 
-  TRACE(TRACE_DEBUG, "SYSTEM", "Hashed device ID: %s", gconf.device_id);
-  if(gconf.device_type[0])
-    TRACE(TRACE_DEBUG, "SYSTEM", "Device type: %s", gconf.device_type);
 }
 
 

@@ -330,6 +330,7 @@ vda_close(struct media_codec *mc)
   VDADecoderFlush(vdad->vdad_decoder, 0);
   VDADecoderDestroy(vdad->vdad_decoder);
   destroy_frames(vdad);
+  free(vdad);
 }
 
 
@@ -351,7 +352,7 @@ video_vda_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
   CFNumberRef cv_pix_fmt;
   int zero_copy = 1;
 
-  if(mc->codec_id != AV_CODEC_ID_H264 || !video_settings.vda)
+  if(mc->codec_id != AV_CODEC_ID_H264 || !video_settings.video_accel)
     return 1;
 
   if(mcp == NULL || mcp->extradata == NULL || mcp->extradata_size == 0 ||

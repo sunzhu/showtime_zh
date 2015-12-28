@@ -26,6 +26,8 @@ struct video_settings {
   struct setting *vzoom_setting;
   struct setting *pan_horizontal_setting;
   struct setting *pan_vertical_setting;
+  struct setting *scale_horizontal_setting;
+  struct setting *scale_vertical_setting;
   struct setting *stretch_horizontal_setting;
   struct setting *stretch_fullscreen_setting;
   struct setting *vinterpolate_setting;
@@ -45,8 +47,7 @@ struct video_settings {
   int vdpau_deinterlace;
   int vdpau_deinterlace_resolution_limit;
   int continuous_playback;
-  int vda;
-
+  int video_accel;
 
   int seek_back_step;
   int seek_fwd_step;

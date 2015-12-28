@@ -288,7 +288,7 @@ net_fmt_host(char *dst, size_t dstlen, const net_addr_t *na)
 const char *
 net_addr_str(const net_addr_t *na)
 {
-  static __thread char buf[64];
+  static char buf[64];
   net_fmt_host(buf, sizeof(buf), na);
   return buf;
 }
@@ -614,4 +614,4 @@ net_refresh_network_status(void)
   prop_destroy_marked_childs(interfaces);
 }
 
-INITME(INIT_GROUP_NET, net_refresh_network_status, NULL);
+INITME(INIT_GROUP_NET, net_refresh_network_status, NULL, 0);

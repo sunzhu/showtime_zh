@@ -32,6 +32,7 @@
 #include "misc/strtab.h"
 #include "arch/arch.h"
 #include "usage.h"
+#include "backend/search.h"
 
 #include "ecmascript/ecmascript.h"
 
@@ -59,8 +60,7 @@ static struct strtab catnames[] = {
 };
 
 
-static const char *plugin_repo_url =
-  "http://plugins.movian.tv/repo/plugins-v1.json";
+static const char *plugin_repo_url = PLUGINREPO;
 static char *plugin_alt_repo_url;
 static char *plugin_beta_passwords;
 static HTS_MUTEX_DECL(plugin_mutex);
@@ -93,13 +93,13 @@ typedef struct plugin {
 
   struct plugin_view_entry_list pl_views;
 
-  void (*pl_enable_cb)(int enabled);
-
   char pl_loaded;
   char pl_installed;
   char pl_can_upgrade;
   char pl_new_version_avail;
   char pl_mark;
+
+  prop_t *pl_repo_model;
 
 } plugin_t;
 
@@ -401,6 +401,9 @@ plugin_fill_prop(struct htsmsg *pm, struct prop *p,
   prop_set(metadata, "version", PROP_SET_STRING,
            htsmsg_get_str(pm, "version"));
 
+  prop_set(metadata, "popularity", PROP_SET_INT,
+           htsmsg_get_u32_or_default(pm, "popularity", 0));
+
   if(icon != NULL) {
     if(basepath != NULL) {
       char url[512];
@@ -468,8 +471,13 @@ plugin_prop_setup(htsmsg_t *pm, plugin_t *pl, const char *basepath)
   prop_t *p;
   hts_mutex_assert(&plugin_mutex);
   p = prop_create(plugin_root_list, pl->pl_id);
+  mystrset(&pl->pl_title, htsmsg_get_str(pm, "title") ?: pl->pl_id);
   prop_set(p, "type", PROP_SET_STRING, "plugin");
   plugin_fill_prop(pm, p, basepath, pl);
+  if(basepath == NULL) {
+    prop_ref_dec(pl->pl_repo_model);
+    pl->pl_repo_model = prop_ref_inc(p);
+  }
 }
 
 
@@ -832,8 +840,10 @@ plugin_load_repo(void)
     for(pl = LIST_FIRST(&plugins); pl != NULL; pl = next) {
       next = LIST_NEXT(pl, pl_link);
       prop_set(pl->pl_status, "inRepo", PROP_SET_INT, !pl->pl_mark);
-      if(pl->pl_mark && !pl->pl_enable_cb) {
-	pl->pl_mark = 0;
+      if(pl->pl_mark) {
+        prop_ref_dec(pl->pl_repo_model);
+        pl->pl_repo_model = NULL;
+        pl->pl_mark = 0;
       }
     }
   }
@@ -921,7 +931,7 @@ plugin_setup_start_model(void)
   prop_set_string(prop_create(p, "type"), "store");
   prop_link(_p("Browse available plugins"),
 	    prop_create(prop_create(p, "metadata"), "title"));
-  prop_set_string(prop_create(p, "url"), "plugin:repo");
+  prop_set_string(prop_create(p, "url"), "plugin:repo:categories");
 
   prop_concat_add_source(pc, sta, NULL);
 
@@ -938,6 +948,55 @@ plugin_setup_start_model(void)
   prop_set_string(prop_create(d, "type"), "separator");
   prop_concat_add_source(pc, inst, d);
 }
+
+
+/**
+ *
+ */
+static void
+plugin_category_set_title_in_model(prop_t *model, int category)
+{
+  prop_t *gn = NULL;
+  switch(category) {
+  case PLUGIN_CAT_TV:
+    gn = _p("Online TV");
+    break;
+
+  case PLUGIN_CAT_VIDEO:
+    gn = _p("Video streaming");
+    break;
+
+  case PLUGIN_CAT_MUSIC:
+    gn = _p("Music streaming");
+    break;
+
+  case PLUGIN_CAT_CLOUD:
+    gn = _p("Cloud services");
+    break;
+
+  case PLUGIN_CAT_GLWVIEW:
+    gn = _p("User interface extensions");
+    break;
+
+  case PLUGIN_CAT_GLWOSK:
+    gn = _p("On Screen Keyboards");
+    break;
+
+  case PLUGIN_CAT_SUBTITLES:
+    gn = _p("Subtitles");
+    break;
+
+  default:
+    gn = _p("Uncategorized");
+    break;
+  }
+
+  prop_t *tgt = prop_create_multi(model, "metadata", "title", NULL);
+  prop_link(gn, tgt);
+  prop_ref_dec(tgt);
+}
+
+
 
 /**
  *
@@ -973,48 +1032,14 @@ plugin_setup_repo_model(void)
     prop_nf_pred_int_add(pnf, "node.status.inRepo",
 			 PROP_NF_CMP_NEQ, 1, NULL,
 			 PROP_NF_MODE_EXCLUDE);
-    prop_nf_sort(pnf, "node.metadata.title", 0, 0, NULL, 1);
+    //    prop_nf_sort(pnf, "node.metadata.title", 0, 0, NULL, 1);
+    prop_nf_sort(pnf, "node.metadata.popularity", 1, 0, NULL, 1);
     prop_nf_release(pnf);
 
     prop_t *header = prop_create_root(NULL);
     prop_set(header, "type", PROP_SET_STRING, "separator");
+    plugin_category_set_title_in_model(header, i);
 
-    prop_t *gn = NULL;
-    switch(i) {
-    case PLUGIN_CAT_TV:
-      gn = _p("Online TV");
-      break;
-
-    case PLUGIN_CAT_VIDEO:
-      gn = _p("Video streaming");
-      break;
-
-    case PLUGIN_CAT_MUSIC:
-      gn = _p("Music streaming");
-      break;
-
-    case PLUGIN_CAT_CLOUD:
-      gn = _p("Cloud services");
-      break;
-
-    case PLUGIN_CAT_GLWVIEW:
-      gn = _p("User interface extensions");
-      break;
-
-    case PLUGIN_CAT_GLWOSK:
-      gn = _p("On Screen Keyboards");
-      break;
-
-    case PLUGIN_CAT_SUBTITLES:
-      gn = _p("Subtitles");
-      break;
-
-    default:
-      gn = _p("Uncategorized");
-      break;
-    }
-
-    prop_link(gn, prop_create(prop_create(header, "metadata"), "title"));
     prop_concat_add_source(pc, cat, header);
   }
 
@@ -1027,7 +1052,6 @@ plugin_setup_repo_model(void)
 static void
 plugins_setup_root_props(void)
 {
-  htsmsg_t *store = htsmsg_store_load("pluginconf") ?: htsmsg_create_map();
   prop_t *parent = prop_create(prop_get_global(), "plugins");
 
   plugin_root_list = prop_create(parent, "nodes");
@@ -1042,7 +1066,7 @@ plugins_setup_root_props(void)
 
   setting_create(SETTING_STRING, gconf.settings_general,
                  SETTINGS_INITIAL_UPDATE,
-                 SETTING_HTSMSG("alt_repo", store, "pluginconf"),
+                 SETTING_STORE("pluginconf", "alt_repo"),
                  SETTING_TITLE(_p("Alternate plugin Repository URL")),
                  SETTING_CALLBACK(set_alt_repo_url, NULL),
                  SETTING_MUTEX(&plugin_mutex),
@@ -1050,14 +1074,14 @@ plugins_setup_root_props(void)
 
   setting_create(SETTING_STRING, gconf.settings_general,
                  SETTINGS_INITIAL_UPDATE,
-                 SETTING_HTSMSG("betapasswords", store, "pluginconf"),
+                 SETTING_STORE("pluginconf", "betapasswords"),
                  SETTING_TITLE(_p("Beta testing passwords")),
                  SETTING_CALLBACK(set_beta_passwords, NULL),
                  SETTING_MUTEX(&plugin_mutex),
                  NULL);
 
   setting_create(SETTING_BOOL, gconf.settings_general, SETTINGS_INITIAL_UPDATE,
-                 SETTING_HTSMSG("autoupgrade", store, "pluginconf"),
+                 SETTING_STORE("pluginconf", "autoupgrade"),
                  SETTING_TITLE(_p("Automatically upgrade plugins")),
                  SETTING_VALUE(1),
                  SETTING_CALLBACK(set_autoupgrade, NULL),
@@ -1162,16 +1186,6 @@ plugins_reload_dev_plugin(void)
 /**
  *
  */
-static int
-plugin_canhandle(const char *url)
-{
-  return !strncmp(url, "plugin:", strlen("plugin:"));
-}
-
-
-/**
- *
- */
 static void
 plugin_remove(plugin_t *pl)
 {
@@ -1180,12 +1194,15 @@ plugin_remove(plugin_t *pl)
   usage_event("Plugin remove", 1,
               USAGE_SEG("plugin", pl->pl_id));
 
+  TRACE(TRACE_DEBUG, "plugin", "Uninstalling %s", pl->pl_id);
+
   snprintf(path, sizeof(path), "%s/installedplugins/%s.zip",
 	   gconf.persistent_path, pl->pl_id);
   fa_unlink(path, NULL, 0);
 
-  TRACE(TRACE_DEBUG, "plugin", "Uninstalling %s", pl->pl_id);
-  htsmsg_store_remove("plugins/%s", pl->pl_id);
+  snprintf(path, sizeof(path), "%s/plugins/%s",
+	   gconf.persistent_path, pl->pl_id);
+  fa_unlink_recursive(path, NULL, 0, 0);
 
   plugin_unload(pl);
 
@@ -1313,6 +1330,59 @@ plugin_install(plugin_t *pl, const char *package)
   return 0;
 }
 
+/**
+ *
+ */
+static void
+open_category_page(prop_t *model, const char *category)
+{
+  prop_set(model, "type", PROP_SET_STRING, "directory");
+  prop_set(model, "contents", PROP_SET_STRING, "grid");
+  plugin_category_set_title_in_model(model, str2val(category, catnames));
+  prop_t *n = prop_create_r(model, "nodes");
+  prop_link(prop_create(plugin_repo_model, category), n);
+  prop_ref_dec(n);
+}
+
+/**
+ *
+ */
+static void
+add_category(prop_t *model, int category, const char *subtype)
+{
+  char url[128];
+  snprintf(url, sizeof(url), "plugin:repo:%s", val2str(category, catnames));
+  prop_t *item = prop_create_r(model, NULL);
+  prop_set(item, "type", PROP_SET_STRING, "directory");
+  prop_set(item, "url", PROP_SET_STRING, url);
+  prop_set(item, "subtype", PROP_SET_STRING, subtype);
+  plugin_category_set_title_in_model(item, category);
+  prop_ref_dec(item);
+}
+
+
+/**
+ *
+ */
+static void
+open_categories(prop_t *model)
+{
+  prop_set(model, "type", PROP_SET_STRING, "directory");
+  prop_set(model, "contents", PROP_SET_STRING, "grid");
+  prop_setv(model, "metadata", "title", NULL, PROP_ADOPT_RSTRING,
+            _("Plugin categories"));
+
+  prop_t *nodes = prop_create_r(model, "nodes");
+  add_category(nodes, PLUGIN_CAT_TV, "tv");
+  add_category(nodes, PLUGIN_CAT_VIDEO, "movie");
+  add_category(nodes, PLUGIN_CAT_MUSIC, "audiotrack");
+  add_category(nodes, PLUGIN_CAT_SUBTITLES, "subtitles");
+#if !defined(PS3)
+  add_category(nodes, PLUGIN_CAT_GLWOSK, NULL);
+#endif
+  prop_ref_dec(nodes);
+}
+
 
 /**
  *
@@ -1320,20 +1390,74 @@ plugin_install(plugin_t *pl, const char *package)
 static int
 plugin_open_url(prop_t *page, const char *url, int sync)
 {
+  prop_t *model = prop_create_r(page, "model");
+  const char *x;
   if(!strcmp(url, "plugin:start")) {
     usage_page_open(sync, "Plugins installed");
-    prop_link(plugin_start_model, prop_create(page, "model"));
+    prop_link(plugin_start_model, model);
+
+  } else if((x = mystrbegins(url, "plugin:repo:")) != NULL) {
+    char usage[64];
+    snprintf(usage, sizeof(usage), "Plugins %s", x);
+    usage_page_open(sync, usage);
+
+    if(!strcmp(x, "categories")) {
+      open_categories(model);
+    } else {
+      open_category_page(model, x);
+      plugins_upgrade_check();
+    }
   } else if(!strcmp(url, "plugin:repo")) {
     usage_page_open(sync, "Plugins repo");
-    prop_link(plugin_repo_model, prop_create(page, "model"));
+    prop_link(plugin_repo_model, model);
     plugins_upgrade_check();
   } else {
     nav_open_error(page, "Invalid URI");
   }
+  prop_ref_dec(model);
   return 0;
 }
 
 
+/**
+ *
+ */
+static void
+plugin_search(struct prop *model, const char *query, prop_t *loading)
+{
+  plugin_t *pl;
+  prop_t *classnodes = prop_create_r(model, "nodes");
+  prop_t *nodes;
+  prop_t *entries;
+  int results = 0;
+
+  if(!search_class_create(classnodes, &nodes, &entries, "Plugins", NULL)) {
+    hts_mutex_lock(&plugin_mutex);
+    LIST_FOREACH(pl, &plugins, pl_link) {
+      if(pl->pl_repo_model == NULL || !mystrstr(pl->pl_title, query))
+        continue;
+
+      results++;
+      prop_link(pl->pl_repo_model, prop_create(nodes, NULL));
+    }
+    prop_set_int(entries, results);
+
+    prop_ref_dec(entries);
+    prop_ref_dec(nodes);
+    hts_mutex_unlock(&plugin_mutex);
+  }
+  prop_ref_dec(classnodes);
+}
+
+
+/**
+ *
+ */
+static int
+plugin_canhandle(const char *url)
+{
+  return !strncmp(url, "plugin:", strlen("plugin:"));
+}
 
 
 /**
@@ -1342,6 +1466,7 @@ plugin_open_url(prop_t *page, const char *url, int sync)
 static backend_t be_plugin = {
   .be_canhandle = plugin_canhandle,
   .be_open = plugin_open_url,
+  .be_search = plugin_search,
 };
 
 BE_REGISTER(plugin);
@@ -1433,8 +1558,7 @@ pvs_cb(void *opaque, const char *str)
  *
  */
 static void
-add_view_type(htsmsg_t *store, prop_t *p,
-              const char *type, const char *class, prop_t *title)
+add_view_type(prop_t *p, const char *type, const char *class, prop_t *title)
 {
   char id[256];
   plugin_view_t *pv = calloc(1, sizeof(plugin_view_t));
@@ -1445,7 +1569,7 @@ add_view_type(htsmsg_t *store, prop_t *p,
   pv->pv_s =
     setting_create(SETTING_MULTIOPT, p, SETTINGS_INITIAL_UPDATE,
                    SETTING_TITLE(title),
-                   SETTING_HTSMSG(id, store, "selectedviews"),
+                   SETTING_STORE("selectedviews", id),
                    SETTING_CALLBACK(pvs_cb, pv),
                    SETTING_OPTION("default", _p("Default")),
                    SETTING_MUTEX(&plugin_mutex),
@@ -1468,27 +1592,25 @@ plugins_view_settings_init(void)
 {
   prop_t *p = prop_create_root(NULL);
 
-  htsmsg_t *s = htsmsg_store_load("selectedviews") ?: htsmsg_create_map();
-
   prop_concat_add_source(gconf.settings_look_and_feel,
 			 prop_create(p, "nodes"),
 			 makesep(_p("Preferred views from plugins")));
 
-  add_view_type(s, p, "standard", "background",  _p("Background"));
-  add_view_type(s, p, "standard", "loading",     _p("Loading screen"));
-  add_view_type(s, p, "standard", "screensaver", _p("Screen saver"));
-  add_view_type(s, p, "standard", "home",        _p("Home page"));
-  add_view_type(s, p, "standard", "osk",         _p("On Screen Keyboards"));
+  add_view_type(p, "standard", "background",  _p("Background"));
+  add_view_type(p, "standard", "loading",     _p("Loading screen"));
+  add_view_type(p, "standard", "screensaver", _p("Screen saver"));
+  add_view_type(p, "standard", "home",        _p("Home page"));
+  add_view_type(p, "standard", "osk",         _p("On Screen Keyboards"));
 
   settings_create_separator(p, _p("Browsing"));
 
-  add_view_type(s, p, "standard", "tracks",     _p("Audio tracks"));
-  add_view_type(s, p, "standard", "album",      _p("Album"));
-  add_view_type(s, p, "standard", "albums",     _p("List of albums"));
-  add_view_type(s, p, "standard", "artist",     _p("Artist"));
-  add_view_type(s, p, "standard", "tvchannels", _p("TV channels"));
-  add_view_type(s, p, "standard", "images",     _p("Images"));
-  add_view_type(s, p, "standard", "movies",     _p("Movies"));
+  add_view_type(p, "standard", "tracks",     _p("Audio tracks"));
+  add_view_type(p, "standard", "album",      _p("Album"));
+  add_view_type(p, "standard", "albums",     _p("List of albums"));
+  add_view_type(p, "standard", "artist",     _p("Artist"));
+  add_view_type(p, "standard", "tvchannels", _p("TV channels"));
+  add_view_type(p, "standard", "images",     _p("Images"));
+  add_view_type(p, "standard", "movies",     _p("Movies"));
 }
 
 

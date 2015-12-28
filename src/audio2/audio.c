@@ -111,17 +111,13 @@ audio_mastervol_init(void)
 void
 audio_init(void)
 {
-  htsmsg_t *store = htsmsg_store_load("audio2");
-  if(store == NULL)
-    store = htsmsg_create_map();
-
   prop_t *asettings =
     settings_add_dir(NULL, _p("Audio settings"), "sound", NULL,
                      _p("Setup audio output"),
                      "settings:audio");
 
   audio_mastervol_init();
-  audio_class = audio_driver_init(asettings, store);
+  audio_class = audio_driver_init(asettings);
 
   settings_create_separator(asettings,
 			    _p("Audio settings during video playback"));
@@ -132,7 +128,7 @@ audio_init(void)
                    SETTING_TITLE(_p("Audio gain adjustment during video playback")),
                    SETTING_RANGE(-12, 12),
                    SETTING_UNIT_CSTR("dB"),
-                   SETTING_HTSMSG("videovolume", store, "audio2"),
+                   SETTING_STORE("audio2", "videovolume"),
                    SETTING_VALUE_ORIGIN("global"),
                    NULL);
 
@@ -143,7 +139,7 @@ audio_init(void)
                    SETTING_RANGE(-5000, 5000),
                    SETTING_STEP(50),
                    SETTING_UNIT_CSTR("ms"),
-                   SETTING_HTSMSG("avdelta", store, "audio2"),
+                   SETTING_STORE("audio2", "avdelta"),
                    SETTING_VALUE_ORIGIN("global"),
                    NULL);
 
@@ -309,8 +305,7 @@ audio_setup_spdif_muxer(audio_decoder_t *ad, AVCodec *codec)
   }
   
   if(avformat_write_header(fctx, NULL)) {
-    TRACE(TRACE_ERROR, "audio", "Unable to open SPDIF muxer",
-	  codec->name);
+    TRACE(TRACE_ERROR, "audio", "Unable to open SPDIF muxer");
     goto bad;
   }
   ad->ad_spdif_muxer = fctx;
@@ -498,7 +493,8 @@ audio_process_audio(audio_decoder_t *ad, media_buf_t *mb)
           if(!ad->ad_channel_layout_fail) {
             ad->ad_channel_layout_fail = 1;
               TRACE(TRACE_ERROR, "Audio",
-                    "Unable to map %d channels to channel layout");
+                    "Unable to map %d channels to channel layout",
+                    ctx->channels);
           }
 	  return 0;
 	}
