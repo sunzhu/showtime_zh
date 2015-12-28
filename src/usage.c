@@ -45,7 +45,7 @@ usage_early_init(void)
   hts_mutex_init(&usage_mutex);
 }
 
-INITME(INIT_GROUP_NET, usage_early_init, NULL);
+INITME(INIT_GROUP_NET, usage_early_init, NULL, 0);
 
 
 
@@ -176,7 +176,7 @@ usage_init(void)
 void
 usage_start(void)
 {
-  if(gconf.disable_analytics || gconf.device_id[0] == 0)
+  if(gconf.disable_analytics)
     return;
   task_run(try_send, NULL);
 }
@@ -298,4 +298,4 @@ usage_fini(void)
 }
 
 
-INITME(INIT_GROUP_API, usage_init, usage_fini);
+INITME(INIT_GROUP_API, usage_init, usage_fini, 0);

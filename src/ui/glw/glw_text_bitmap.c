@@ -39,6 +39,8 @@
 #include "image/image.h"
 #include "fileaccess/fa_filepicker.h"
 
+static glw_class_t glw_text;
+
 /**
  *
  */
@@ -583,6 +585,7 @@ static void
 gtb_unbind(glw_text_bitmap_t *gtb)
 {
   prop_unsubscribe(gtb->gtb_sub);
+  gtb->gtb_sub = NULL;
 
   if(gtb->gtb_p != NULL) {
     prop_ref_dec(gtb->gtb_p);
@@ -653,10 +656,10 @@ glw_text_bitmap_event(glw_t *w, event_t *e)
     }
     return 1;
 
-  } else if(event_is_action(e, ACTION_ACTIVATE)) {
-
+  } else if(event_is_action(e, ACTION_ACTIVATE) ||
+            event_is_action(e, ACTION_ITEMMENU)) {
+    
     gtb_caption_refresh(gtb);
-
 
     if(gtb->gtb_flags & (GTB_FILE_REQUEST | GTB_DIR_REQUEST)) {
 
@@ -675,6 +678,10 @@ glw_text_bitmap_event(glw_t *w, event_t *e)
       }
 
     } else {
+
+      if(event_is_action(e, ACTION_ACTIVATE) && e->e_flags & EVENT_MOUSE)
+        return 1;
+
       w->glw_root->gr_open_osk(w->glw_root,
                                gtb->gtb_description,
                                gtb->gtb_caption, w,
@@ -841,7 +848,7 @@ glw_text_bitmap_ctor(glw_t *w)
   glw_root_t *gr = w->glw_root;
 
   w->glw_flags2 |= GLW2_FOCUS_ON_CLICK;
-  gtb->gtb_edit_ptr = -1;
+  gtb->gtb_edit_ptr = 0;
   gtb->gtb_size_scale = 1.0;
   gtb->gtb_color.r = 1.0;
   gtb->gtb_color.g = 1.0;
@@ -1164,7 +1171,7 @@ do_render(glw_text_bitmap_t *gtb, glw_root_t *gr, int no_output)
   if(gtb->gtb_flags & GTB_OUTLINE)
     flags |= TR_RENDER_OUTLINE;
 
-  if(gtb->gtb_edit_ptr >= 0)
+  if(gtb->w.glw_class == &glw_text)
     flags |= TR_RENDER_CHARACTER_POS;
 
   tr_align = TR_ALIGN_JUSTIFIED;

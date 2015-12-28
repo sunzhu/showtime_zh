@@ -534,7 +534,7 @@ hc_echo_data(http_connection_t *hc, int opcode,
 	     uint8_t *data, size_t len, void *opaque)
 {
   websocket_send(hc, opcode, data, len);
-  TRACE(TRACE_DEBUG, "WS", "Echoing %d bytes (opcode:%d)", len, opcode);
+  TRACE(TRACE_DEBUG, "WS", "Echoing %zd bytes (opcode:%d)", len, opcode);
   return 0;
 }
 
@@ -696,4 +696,4 @@ httpcontrol_init(void)
     http_path_add("/api/restart", NULL, hc_restart, 1);
 }
 
-INITME(INIT_GROUP_API, httpcontrol_init, NULL);
+INITME(INIT_GROUP_API, httpcontrol_init, NULL, 0);

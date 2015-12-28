@@ -358,6 +358,9 @@ osk_open(glw_root_t *gr, const char *title, const char *input, glw_t *w,
   if(title == NULL)
     title = "";
 
+  if(input == NULL)
+    input = "";
+
   void *title16;
   void *input16;
 
@@ -1165,8 +1168,7 @@ glw_ps3_start(void)
                  SETTING_OPTION("2", _p("No")),
                  SETTING_COURIER(gr->gr_courier),
                  SETTING_CALLBACK(set_seekmode, gp),
-                 SETTING_HTSMSG("analogseekmode",
-                                glw_settings.gs_settings_store, "glw"),
+                 SETTING_STORE("glw", "analogseekmode"),
                  NULL);
 
   gr->gr_open_osk = osk_open;

@@ -19,6 +19,7 @@ GLW_DEFAULT_SKIN="flat"
 DEFAULT_LOGTARGET=""
 APPNAME="Movian"
 OPTLEVEL=2
+PLUGINREPO="http://plugins.movian.tv/repo/plugins-v1.json"
 
 CONFIG_LIST="
  libasound
@@ -73,7 +74,6 @@ CONFIG_LIST="
  sqlite_locking
  sqlite_internal
  libav
- vda
  tlsf
  airplay
  webpopup
@@ -225,6 +225,7 @@ common_help(){
   echo "  --extra-ldflags          Extra ldflags"
   echo "  --downloadcache          Where to download files during build [$DOWNLOADCACHE]"
   echo " --optlevel=LEVEL          Optimization level [$OPTLEVEL]"
+  echo " --plugin-repo=URL         URL to plugin repo [$PLUGINREPO]"
   echo ""
   echo "Platform specific options:"
 }
@@ -242,6 +243,8 @@ common_opt(){
   --extra-ldflags=*) EXTRA_LDFLAGS="$2"
   ;;
   --downloadcache=*) DOWNLOADCACHE="$2"
+  ;;
+  --plugin-repo=*) PLUGINREPO="$2"
   ;;
 
   --enable-?*|--disable-?*)
@@ -340,6 +343,7 @@ EOF
 #define CONFIGURE_ARGS "$@"
 #define APPNAME "${lcname}"
 #define APPNAMEUSER "${APPNAME}"
+#define PLUGINREPO "${PLUGINREPO}"
 #define SHOWTIME_DEFAULT_UI "${DEFAULT_UI}"
 #define SHOWTIME_DEFAULT_LOGTARGET "${DEFAULT_LOGTARGET}"
 EOF

@@ -22,7 +22,7 @@ function handleDrop(e) {
     return;
   }
 
-  if(types[0] == 'text/uri-list') {
+  if(types[0] == 'text/uri-list' || types[0] == 'text/plain') {
     items[0].getAsString(function(url) {
       stelem.postMessage({msgtype:'openurl', url: url});
     });
@@ -65,6 +65,14 @@ function handleMessage(e) {
     fileReader.readAsArrayBuffer(chunk);
     break;
 
+  case 'getrnd':
+    var array = new Uint8Array(e.data.bytes);
+    window.crypto.getRandomValues(array);
+    stelem.postMessage({msgtype:'rpcreply',
+                        data: array.buffer,
+                        reqid: e.data.reqid});
+    break;
+
   case 'fsinfo':
     var fn = e.data.fs == 'cache' ? navigator.webkitTemporaryStorage :
       navigator.webkitPersistentStorage;
@@ -79,6 +87,7 @@ function handleMessage(e) {
 
   case 'running':
     document.getElementById("loader").parentNode.removeChild(loader);
+    document.body.style.background = "#000";
     clearTimeout(loadtimeout);
     break;
   }

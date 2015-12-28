@@ -26,6 +26,7 @@
 
 #include "arch/threads.h"
 #include "misc/rstr.h"
+#include "misc/queue.h"
 
 #include "compiler.h"
 
@@ -105,7 +106,8 @@ void trace_init(void);
 
 void trace_fini(void);
 
-void tracelog(int flags, int level, const char *subsys, const char *fmt, ...);
+void tracelog(int flags, int level, const char *subsys, const char *fmt, ...)
+    attribute_printf(4,5);
 
 void tracev(int flags, int level, const char *subsys, const char *fmt, va_list ap);
 
@@ -250,6 +252,7 @@ typedef struct gconf {
   int enable_ecmascript_debug;
   int enable_input_event_debug;
   int enable_touch_debug;
+  int enable_MediaCodec_debug;
 
   int enable_torrent_debug;
   int enable_torrent_tracker_debug;
@@ -325,9 +328,11 @@ extern gconf_t gconf;
 extern const char *htsversion;
 extern const char *htsversion_full;
 
-
 typedef struct inithelper {
-  struct inithelper *next;
+  LIST_ENTRY(inithelper) link;
+  void (*init)(void);
+  void (*fini)(void);
+  int prio;
   enum {
     INIT_GROUP_NET,
     INIT_GROUP_API,
@@ -335,23 +340,23 @@ typedef struct inithelper {
     INIT_GROUP_ASYNCIO,
     INIT_GROUP_GRAPHICS,
   } group;
-  void (*init)(void);
-  void (*fini)(void);
 } inithelper_t;
 
-extern inithelper_t *inithelpers;
 
-#define INITME(group_, init_, fini_)                               \
+
+extern void inithelper_register(inithelper_t *ih);
+
+// Lower prio == init earlier
+#define INITME(group_, init_, fini_, prio_)                        \
   static inithelper_t HTS_JOIN(inithelper, __LINE__) = {	   \
     .group = group_,						   \
     .init = init_,                                                 \
-    .fini = fini_                                                  \
+    .fini = fini_,                                                 \
+    .prio = prio_,                                                 \
   };								   \
   INITIALIZER(HTS_JOIN(inithelperctor, __LINE__))                  \
   {								   \
-    inithelper_t *ih = &HTS_JOIN(inithelper, __LINE__);		   \
-    ih->next = inithelpers;					   \
-    inithelpers = ih;						   \
+    inithelper_register(&HTS_JOIN(inithelper, __LINE__));          \
   }
 
 void init_group(int group);
