@@ -4,7 +4,22 @@ var droppedfile;
 var running = false;
 var loaded = false;
 
+
+var appversion = "development";
+
+if(typeof chrome.runtime['getManifest'] == 'function') {
+  var manifest = chrome.runtime.getManifest();
+  appversion = manifest.version;
+}
+
+
+console.log("Running version: " + appversion);
+console.log("Browser version: " + navigator.userAgent);
+
+
+
 var loadtimeout = setTimeout(function() {
+  document.getElementById('vertag').innerText = appversion;
    document.getElementById('loader').style.display='block';
 
 }, 1000);
@@ -38,6 +53,25 @@ function handleDragOver(e) {
   e.stopPropagation();
   e.preventDefault();
 }
+
+function cleanup() {
+    document.body.style.background = "#fff";
+    if(!running)
+      document.getElementById('loader').style.display='none';
+    document.getElementById('appcontainer').style.display='none';
+    document.getElementById('crash').style.display='block';
+}
+
+
+
+function displaycrash(reason) {
+  cleanup();
+
+  var dbginfo = "Version: " + appversion + "\nEvent: " + reason + "\nLoaded: " + (loaded ? "yes": "no") +"\nRunning: " + (running ? "yes" : "no") + "\nBrowser: " + navigator.userAgent + "\nDOM LastError: " + stelem.lastError;
+
+  document.getElementById('crashinfo').innerText = dbginfo;
+}
+
 
 function handleMessage(e) {
 
@@ -94,33 +128,13 @@ function handleMessage(e) {
     document.body.style.background = "#000";
     clearTimeout(loadtimeout);
     break;
+
+  case 'panic':
+    displaycrash('Panic: ' + e.data.reason);
+    break;
   }
 }
 
-function cleanup() {
-    document.body.style.background = "#fff";
-    if(!running)
-      document.getElementById('loader').style.display='none';
-    document.getElementById('appcontainer').style.display='none';
-    document.getElementById('crash').style.display='block';
-}
-
-
-var appversion = "development";
-
-if(typeof chrome.runtime['getManifest'] == 'function') {
-  var manifest = chrome.runtime.getManifest();
-  appversion = manifest.version;
-}
-console.log("Running version: " + appversion);
-
-function displaycrash(reason) {
-  cleanup();
-
-  var dbginfo = "Version: " + appversion + "\nEvent: " + reason + "\nLoaded: " + (loaded ? "yes": "no") +"\nRunning: " + (running ? "yes" : "no") + "\nBrowser: " + navigator.userAgent + "\nLastError: " + stelem.lastError;
-
-  document.getElementById('crashinfo').innerText = dbginfo;
-}
 
 
 function launch() {
