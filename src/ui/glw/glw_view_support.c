@@ -76,6 +76,7 @@ glw_view_token_free(glw_root_t *gr, token_t *t)
   case TOKEN_HASH:
   case TOKEN_ASSIGNMENT:
   case TOKEN_COND_ASSIGNMENT:
+  case TOKEN_REF_ASSIGNMENT:
   case TOKEN_DEBUG_ASSIGNMENT:
   case TOKEN_LINK_ASSIGNMENT:
   case TOKEN_END_OF_EXPR:
@@ -221,6 +222,7 @@ glw_view_token_copy(glw_root_t *gr, token_t *src)
   case TOKEN_HASH:
   case TOKEN_ASSIGNMENT:
   case TOKEN_COND_ASSIGNMENT:
+  case TOKEN_REF_ASSIGNMENT:
   case TOKEN_DEBUG_ASSIGNMENT:
   case TOKEN_LINK_ASSIGNMENT:
   case TOKEN_END_OF_EXPR:
@@ -449,9 +451,10 @@ glw_view_print_tree(token_t *f, int indent)
   token_t *c = f;
 
   while(c != NULL) {
-    printf("%*.s%s %p (%s:%d)\n", indent, "", token2name(c), c,
+    TRACE(TRACE_DEBUG, "GLW",
+          "%*.s%s %p (%s:%d)\n", indent, "", token2name(c), c,
            rstr_get(c->file), c->line);
-    
+
     if(c->child != NULL) {
       glw_view_print_tree(c->child, indent + 4);
     }
