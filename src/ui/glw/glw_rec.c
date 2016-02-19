@@ -74,8 +74,8 @@ glw_rec_init(const char *filename, int width, int height, int fps)
   gr->v_ctx->height = height;
   gr->v_ctx->time_base.den = fps;
   gr->v_ctx->time_base.num = 1;
-  gr->v_ctx->pix_fmt = PIX_FMT_RGB32;
-  gr->v_ctx->coder_type = 1;
+  gr->v_ctx->pix_fmt = AV_PIX_FMT_RGB32;
+  gr->v_ctx->coder_type = 0;
 
   if(av_set_parameters(gr->oc, NULL) < 0) {
     TRACE(TRACE_ERROR, "GLWREC",
