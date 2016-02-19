@@ -75,29 +75,12 @@ fa_imageloader_init(void)
 }
 
 
-/**
- * Load entire image into memory using fileaccess load method.
- * Faster than open+read+close.
- */
 static image_t *
-fa_imageloader2(const char *url, const char **vpaths,
-		char *errbuf, size_t errlen, int *cache_control,
-                cancellable_t *c)
+fa_imageloader_buf(buf_t *buf, char *errbuf, size_t errlen)
 {
-  buf_t *buf;
   jpeg_meminfo_t mi;
   image_coded_type_t fmt;
   int width = -1, height = -1, orientation = 0, progressive = 0, planes = 0;
-
-  buf = fa_load(url,
-                FA_LOAD_VPATHS(vpaths),
-                FA_LOAD_ERRBUF(errbuf, errlen),
-                FA_LOAD_CACHE_CONTROL(cache_control),
-                FA_LOAD_CANCELLABLE(c),
-                FA_LOAD_FLAGS(FA_CONTENT_ON_ERROR),
-                NULL);
-  if(buf == NULL || buf == NOT_MODIFIED)
-    return (image_t *)buf;
 
   const uint8_t *p = buf_c8(buf);
   mi.data = p;
@@ -115,7 +98,6 @@ fa_imageloader2(const char *url, const char **vpaths,
     if(jpeg_info(&ji, jpeginfo_mem_reader, &mi,
 		 JPEG_INFO_DIMENSIONS | JPEG_INFO_ORIENTATION,
 		 p, buf->b_size, errbuf, errlen)) {
-      buf_release(buf);
       return NULL;
     }
 
@@ -141,7 +123,6 @@ fa_imageloader2(const char *url, const char **vpaths,
   } else {
   bad:
     snprintf(errbuf, errlen, "Unknown format");
-    buf_release(buf);
     return NULL;
   }
 
@@ -156,6 +137,31 @@ fa_imageloader2(const char *url, const char **vpaths,
   } else {
     snprintf(errbuf, errlen, "Out of memory");
   }
+  return img;
+}
+
+/**
+ * Load entire image into memory using fileaccess load method.
+ * Faster than open+read+close.
+ */
+static image_t *
+fa_imageloader2(const char *url, const char **vpaths,
+		char *errbuf, size_t errlen, int *cache_control,
+                cancellable_t *c)
+{
+  buf_t *buf;
+
+  buf = fa_load(url,
+                FA_LOAD_VPATHS(vpaths),
+                FA_LOAD_ERRBUF(errbuf, errlen),
+                FA_LOAD_CACHE_CONTROL(cache_control),
+                FA_LOAD_CANCELLABLE(c),
+                FA_LOAD_FLAGS(FA_CONTENT_ON_ERROR),
+                NULL);
+  if(buf == NULL || buf == NOT_MODIFIED)
+    return (image_t *)buf;
+
+  image_t *img = fa_imageloader_buf(buf, errbuf, errlen);
   buf_release(buf);
   return img;
 }
@@ -397,8 +403,43 @@ write_thumb(const AVCodecContext *src, const AVFrame *sframe,
 }
 
 
+/**
+ *
+ */
+attribute_unused static image_t *
+thumb_from_buf(buf_t *buf, char *errbuf, size_t errlen,
+               const char *cacheid, time_t mtime)
+{
+  image_t *img = fa_imageloader_buf(buf, errbuf, errlen);
+
+  if(img != NULL)
+    blobcache_put(cacheid, "videothumb", buf, INT32_MAX, NULL, mtime, 0);
+
+  buf_release(buf);
+  return img;
+}
 
 
+/**
+ *
+ */
+attribute_unused static image_t *
+thumb_from_attachment(const char *url, int64_t offset, int size,
+                      char *errbuf, size_t errlen, const char *cacheid,
+                      time_t mtime)
+{
+  fa_handle_t *fh = fa_open(url, errbuf, errlen);
+  if(fh == NULL)
+    return NULL;
+
+  fh = fa_slice_open(fh, offset, size);
+  buf_t *buf = fa_load_and_close(fh);
+  if(buf == NULL) {
+    snprintf(errbuf, errlen, "Load error");
+    return NULL;
+  }
+  return thumb_from_buf(buf, errbuf, errlen, cacheid, mtime);
+}
 
 
 /**
@@ -433,11 +474,50 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
       fctx->flags |= AVFMT_FLAG_GENPTS;
 
     AVCodecContext *ctx = NULL;
+    int vstream = 0;
     for(i = 0; i < fctx->nb_streams; i++) {
-      if(fctx->streams[i]->codec != NULL && 
-	 fctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
-	ctx = fctx->streams[i]->codec;
-	break;
+      AVStream *st = fctx->streams[i];
+      AVCodecContext *c = st->codec;
+      AVDictionaryEntry *mt;
+
+      if(c == NULL)
+        continue;
+
+      switch(c->codec_type) {
+      case AVMEDIA_TYPE_VIDEO:
+        if(ctx == NULL) {
+          vstream = i;
+          ctx = fctx->streams[i]->codec;
+        }
+        break;
+
+      case AVMEDIA_TYPE_ATTACHMENT:
+        mt = av_dict_get(st->metadata, "mimetype", NULL, AV_DICT_IGNORE_SUFFIX);
+        if(sec == -1 && mt != NULL &&
+           (!strcmp(mt->value, "image/jpeg") ||
+            !strcmp(mt->value, "image/png"))) {
+#if ENABLE_LIBAV_ATTACHMENT_POINTER
+          int64_t offset = st->attached_offset;
+          int size = st->attached_size;
+          fa_libav_close_format(fctx);  /* Close here because it will be parked
+                                         * by fa_buffer (and thus reused)
+                                         */
+          return thumb_from_attachment(url, offset, size, errbuf, errlen,
+                                       cacheid, mtime);
+#else
+          buf_t *b = buf_create_and_adopt(st->codec->extradata_size,
+                                          st->codec->extradata,
+                                          (void *)&av_free);
+          st->codec->extradata = NULL;
+          st->codec->extradata_size = 0;
+          fa_libav_close_format(fctx);
+          return thumb_from_buf(b, errbuf, errlen, cacheid, mtime);
+#endif
+        }
+        break;
+
+      default:
+        break;
       }
     }
     if(ctx == NULL) {
@@ -460,7 +540,7 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
 
     ifv_close();
 
-    ifv_stream = i;
+    ifv_stream = vstream;
     ifv_url = strdup(url);
     ifv_fctx = fctx;
     ifv_ctx = ctx;
@@ -491,11 +571,18 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
 
 
   int64_t ts = av_rescale(sec, st->time_base.den, st->time_base.num);
+  int delayed_seek = 0;
 
-  if(av_seek_frame(ifv_fctx, ifv_stream, ts, AVSEEK_FLAG_BACKWARD) < 0) {
-    ifv_close();
-    snprintf(errbuf, errlen, "Unable to seek to %"PRId64, ts);
-    return NULL;
+  if(ifv_ctx->codec_id == AV_CODEC_ID_RV40 ||
+     ifv_ctx->codec_id == AV_CODEC_ID_RV30) {
+    // Must decode one frame
+    delayed_seek = 1;
+  } else {
+    if(av_seek_frame(ifv_fctx, ifv_stream, ts, AVSEEK_FLAG_BACKWARD) < 0) {
+      ifv_close();
+      snprintf(errbuf, errlen, "Unable to seek to %"PRId64, ts);
+      return NULL;
+    }
   }
 
   avcodec_flush_buffers(ifv_ctx);
@@ -530,9 +617,20 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
     int want_pic = pkt.pts >= ts || cnt <= 0;
 
     ifv_ctx->skip_frame = want_pic ? AVDISCARD_DEFAULT : AVDISCARD_NONREF;
-    
+
     avcodec_decode_video2(ifv_ctx, frame, &got_pic, &pkt);
     av_free_packet(&pkt);
+
+    if(delayed_seek) {
+      delayed_seek = 0;
+      if(av_seek_frame(ifv_fctx, ifv_stream, ts, AVSEEK_FLAG_BACKWARD) < 0) {
+        ifv_close();
+        break;
+      }
+      continue;
+    }
+
+
     if(got_pic == 0 || !want_pic) {
       continue;
     }
@@ -598,8 +696,10 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
     snprintf(errbuf, errlen, "Frame not found (scanned %d)", 
 	     MAX_FRAME_SCAN - cnt);
 
-  avcodec_flush_buffers(ifv_ctx);
-  callout_arm(&thumb_flush_callout, ifv_autoclose, NULL, 5);
+  if(ifv_ctx != NULL) {
+    avcodec_flush_buffers(ifv_ctx);
+    callout_arm(&thumb_flush_callout, ifv_autoclose, NULL, 5);
+  }
   return img;
 }
 
@@ -624,7 +724,7 @@ fa_image_from_video(const char *url0, const image_meta_t *im,
   *tim++ = 0;
   int secs;
 
-  if(!strcmp(tim, "auto"))
+  if(!strcmp(tim, "cover"))
     secs = -1;
   else
     secs = atoi(tim);
