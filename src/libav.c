@@ -19,9 +19,9 @@
  */
 #include <ctype.h>
 #include <libavformat/avformat.h>
-#include <libavutil/audioconvert.h>
 #include <libswscale/swscale.h>
 #include <libavutil/pixdesc.h>
+#include <libavutil/channel_layout.h>
 
 #include "main.h"
 #include "media/media.h"
@@ -200,13 +200,13 @@ libav_deliver_frame(video_decoder_t *vd,
   vd->vd_sws =
     sws_getCachedContext(vd->vd_sws,
                          frame->width, frame->height, frame->format,
-                         frame->width, frame->height, PIX_FMT_YUV420P,
+                         frame->width, frame->height, AV_PIX_FMT_YUV420P,
                          0, NULL, NULL, NULL);
 
   if(vd->vd_sws == NULL) {
     TRACE(TRACE_ERROR, "Video", "Unable to convert from %s to %s",
 	  av_get_pix_fmt_name(frame->format),
-	  av_get_pix_fmt_name(PIX_FMT_YUV420P));
+	  av_get_pix_fmt_name(AV_PIX_FMT_YUV420P));
     return;
   }
 
@@ -219,12 +219,12 @@ libav_deliver_frame(video_decoder_t *vd,
     vd->vd_convert_height = frame->height;
     vd->vd_convert_pixfmt = frame->format;
 
-    avpicture_alloc(&vd->vd_convert, PIX_FMT_YUV420P, frame->width,
+    avpicture_alloc(&vd->vd_convert, AV_PIX_FMT_YUV420P, frame->width,
                     frame->height);
 
     TRACE(TRACE_DEBUG, "Video", "Converting from %s to %s",
 	  av_get_pix_fmt_name(frame->format),
-	  av_get_pix_fmt_name(PIX_FMT_YUV420P));
+	  av_get_pix_fmt_name(AV_PIX_FMT_YUV420P));
   }
 
   sws_scale(vd->vd_sws, (void *)frame->data, frame->linesize, 0,
@@ -239,7 +239,7 @@ libav_deliver_frame(video_decoder_t *vd,
   fi.fi_pitch[2] = vd->vd_convert.linesize[2];
 
   fi.fi_type = 'LAVC';
-  fi.fi_pix_fmt = PIX_FMT_YUV420P;
+  fi.fi_pix_fmt = AV_PIX_FMT_YUV420P;
   fi.fi_avframe = NULL;
   video_deliver_frame(vd, &fi);
 }
@@ -356,8 +356,8 @@ libav_decode_video(struct media_codec *mc, struct video_decoder *vd,
 /**
  *
  */
-static enum PixelFormat
-libav_get_format(struct AVCodecContext *ctx, const enum PixelFormat *fmt)
+static enum AVPixelFormat
+libav_get_format(struct AVCodecContext *ctx, const enum AVPixelFormat *fmt)
 {
   media_codec_t *mc = ctx->opaque;
   if(mc->close != NULL) {
@@ -479,34 +479,31 @@ void
 metadata_from_libav(char *dst, size_t dstlen,
 		    const AVCodec *codec, const AVCodecContext *avctx)
 {
-  char *n;
-  int off = snprintf(dst, dstlen, "%s", codec->name);
+  const char *name = codec->name;
+  const char *profile = av_get_profile_name(codec, avctx->profile);
 
-  n = dst;
-  while(*n) {
-    *n = toupper((int)*n);
-    n++;
-  }
+  if(codec->id == AV_CODEC_ID_DTS && profile != NULL)
+    name = NULL;
 
-  if(codec->id  == AV_CODEC_ID_H264) {
-    const char *p;
-    switch(avctx->profile) {
-    case FF_PROFILE_H264_BASELINE:  p = "Baseline";  break;
-    case FF_PROFILE_H264_MAIN:      p = "Main";      break;
-    case FF_PROFILE_H264_EXTENDED:  p = "Extended";  break;
-    case FF_PROFILE_H264_HIGH:      p = "High";      break;
-    case FF_PROFILE_H264_HIGH_10:   p = "High 10";   break;
-    case FF_PROFILE_H264_HIGH_422:  p = "High 422";  break;
-    case FF_PROFILE_H264_HIGH_444:  p = "High 444";  break;
-    case FF_PROFILE_H264_CAVLC_444: p = "CAVLC 444"; break;
-    default:                        p = NULL;        break;
+  int off = 0;
+
+  if(name) {
+    off = snprintf(dst, dstlen, "%s", codec->name);
+    char *n = dst;
+    while(*n) {
+      *n = toupper((int)*n);
+      n++;
     }
-
-    if(p != NULL && avctx->level != FF_LEVEL_UNKNOWN)
-      off += snprintf(dst + off, dstlen - off,
-		      ", %s (Level %d.%d)",
-		      p, avctx->level / 10, avctx->level % 10);
   }
+
+  if(profile != NULL)
+    off += snprintf(dst + off, dstlen - off,
+                    "%s%s", off ? " " : "", profile);
+
+  if(codec->id == AV_CODEC_ID_H264 && avctx->level != FF_LEVEL_UNKNOWN)
+    off += snprintf(dst + off, dstlen - off,
+                    " (Level %d.%d)",
+                    avctx->level / 10, avctx->level % 10);
 
   if(avctx->codec_type == AVMEDIA_TYPE_AUDIO) {
     char buf[64];

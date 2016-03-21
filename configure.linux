@@ -83,6 +83,9 @@ fatal() {
 }
 
 
+enable libpthread
+enable zlib
+enable dvd
 enable libfreetype
 enable libfontconfig
 enable libpulse
@@ -101,8 +104,11 @@ enable timegm
 enable inotify
 enable realpath
 enable webkit
+enable librtmp
 #enable airplay -- not functional yet
 #enable libxrandr  -- code does not really work yet
+
+[ -f project.config ] && source project.config
 
 for opt do
   optval="${opt#*=}"
@@ -113,10 +119,9 @@ for opt do
   ;;
   --cc=*) CC="$optval"
   ;;
-  --arch=*) ARCH="$optval"
+  --cxx=*) CXX="$optval"
   ;;
-  --enable-all)
-	  enable libgme
+  --arch=*) ARCH="$optval"
   ;;
   --glw-frontend=*) GLWFRONTEND="$optval"
   ;;
@@ -159,11 +164,6 @@ done
 
 
 setup_env "$@"
-
-enable libpthread
-enable zlib
-enable dvd
-enable dvd_linux
 
 
 #
@@ -511,7 +511,6 @@ fi
 # polarssl
 #
 if enabled polarssl; then
-    enable librtmp
     disable openssl
 fi
 
@@ -531,8 +530,6 @@ if enabled openssl; then
 	echo "To build with built-in version of polarssl, configure with --enable-polarssl"
 	die
     fi
-
-    enable librtmp
 fi
 
 
@@ -584,10 +581,7 @@ fi
 
 
 LIBAV_ARCH_FLAGS="--disable-shared --enable-static"
-libav_setup
-rtmpdump_setup
-xmp_setup
-gumbo_setup
+ext_setup
 
 #
 # Finalize

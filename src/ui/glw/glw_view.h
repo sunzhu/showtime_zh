@@ -91,6 +91,7 @@ typedef enum {
   TOKEN_NOP,
   TOKEN_VECTOR_FLOAT,
   TOKEN_EVENT,
+  TOKEN_GEM,
   TOKEN_URI,                   // A link with title and url
   TOKEN_VECTOR,                // List of tokens
   TOKEN_MOD_FLAGS,
@@ -137,6 +138,7 @@ typedef struct token {
   union {
     const struct token_attrib *t_attrib;
     struct glw_prop_sub *t_propsubr;
+    int t_prop_name_id;
   };
 
 #define TOKEN_PROPERTY_NAME_VEC_SIZE (16 / __SIZEOF_POINTER__)
@@ -159,6 +161,7 @@ typedef struct token {
     };
 
     struct glw_event_map *gem;
+    struct event *event;
 
     struct prop *prop;
 
@@ -193,6 +196,7 @@ typedef struct token {
 #define t_func            u.func
 #define t_func_arg        u.farg
 #define t_gem             u.gem
+#define t_event           u.event
 #define t_prop            u.prop
 #define t_uri_title       u.uri.title
 #define t_uri             u.uri.uri
@@ -231,7 +235,8 @@ typedef struct glw_view_eval_context {
   struct glw_root *gr;
   const struct glw_rctx *rc;
   token_t *rpn;
-  struct glw_prop_sub_list *sublist;
+  struct glw_prop_sub_slist *sublist;
+  struct glw_prop_sub_slist sublist_rpnlocal;
   struct event *event;
   prop_t *tgtprop;
 
@@ -332,14 +337,16 @@ token_t *glw_view_clone_chain(glw_root_t *gr, token_t *src, token_t **lp);
 
 void glw_view_cache_flush(glw_root_t *gr);
 
-struct glw_prop_sub_list;
-void glw_prop_subscription_destroy_list(glw_root_t *gr, 
-					struct glw_prop_sub_list *l);
+struct glw_prop_sub_slist;
+void glw_prop_subscription_destroy_list(glw_root_t *gr,
+					struct glw_prop_sub_slist *l);
 
-void glw_prop_subscription_suspend_list(struct glw_prop_sub_list *l);
+void glw_prop_subscription_suspend_list(struct glw_prop_sub_slist *l);
 
 void glw_view_loader_eval(glw_root_t *gr);
 
 void glw_view_loader_flush(glw_root_t *gr);
+
+void glw_propname_to_array(const char *pname[16], const token_t *a);
 
 #endif /* GLW_VIEW_H */

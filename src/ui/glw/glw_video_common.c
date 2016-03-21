@@ -117,13 +117,14 @@ glw_video_widget_event(glw_t *w, event_t *e)
   media_pipe_t *mp = gv->gv_mp;
 
   // Intercept media events
-
   if(event_is_action(e, ACTION_PLAYPAUSE) ||
      event_is_action(e, ACTION_PLAY) ||
      event_is_action(e, ACTION_PAUSE) ||
      event_is_action(e, ACTION_STOP) ||
      event_is_action(e, ACTION_SKIP_FORWARD) ||
-     event_is_action(e, ACTION_SKIP_BACKWARD)) {
+     event_is_action(e, ACTION_SKIP_BACKWARD) ||
+     event_is_type(e, EVENT_SELECT_AUDIO_TRACK) ||
+     event_is_type(e, EVENT_SELECT_SUBTITLE_TRACK)) {
     mp_enqueue_event(mp, e);
     return 1;
   }
@@ -1297,16 +1298,16 @@ video_deliver_lavc(const frame_info_t *fi, glw_video_t *gv,
   frame_info_t nfi = *fi;
 
   switch(fi->fi_pix_fmt) {
-  case PIX_FMT_YUV420P:
-  case PIX_FMT_YUV422P:
-  case PIX_FMT_YUV444P:
-  case PIX_FMT_YUV410P:
-  case PIX_FMT_YUV411P:
-  case PIX_FMT_YUV440P:
-  case PIX_FMT_YUVJ420P:
-  case PIX_FMT_YUVJ422P:
-  case PIX_FMT_YUVJ444P:
-  case PIX_FMT_YUVJ440P:
+  case AV_PIX_FMT_YUV420P:
+  case AV_PIX_FMT_YUV422P:
+  case AV_PIX_FMT_YUV444P:
+  case AV_PIX_FMT_YUV410P:
+  case AV_PIX_FMT_YUV411P:
+  case AV_PIX_FMT_YUV440P:
+  case AV_PIX_FMT_YUVJ420P:
+  case AV_PIX_FMT_YUVJ422P:
+  case AV_PIX_FMT_YUVJ444P:
+  case AV_PIX_FMT_YUVJ440P:
     av_pix_fmt_get_chroma_sub_sample(nfi.fi_pix_fmt, &nfi.fi_hshift,
                                      &nfi.fi_vshift);
 

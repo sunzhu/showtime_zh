@@ -124,8 +124,12 @@ glw_view_token_free(glw_root_t *gr, token_t *t)
       rstr_release(t->t_pnvec[i]);
     break;
 
-  case TOKEN_EVENT:
+  case TOKEN_GEM:
     glw_event_map_destroy(gr, t->t_gem);
+    break;
+
+  case TOKEN_EVENT:
+    event_release(t->t_event);
     break;
 
   case TOKEN_URI:
@@ -263,6 +267,7 @@ glw_view_token_copy(glw_root_t *gr, token_t *src)
     break;
 
   case TOKEN_VECTOR_FLOAT:
+  case TOKEN_GEM:
   case TOKEN_EVENT:
   case TOKEN_VECTOR:
   case TOKEN_num:
@@ -468,23 +473,38 @@ glw_view_print_tree(token_t *f, int indent)
 int
 glw_view_seterr(errorinfo_t *ei, token_t *b, const char *fmt, ...)
 {
-  char buf[PATH_MAX];
+  if(ei == NULL)
+    ei = alloca(sizeof(errorinfo_t));
 
   va_list ap;
   va_start(ap, fmt);
 
   assert(b != NULL);
 
-  if(ei == NULL) {
-    snprintf(buf, sizeof(buf), "GLW: %s:%d", rstr_get(b->file), b->line);
-    tracev(TRACE_NO_PROP, TRACE_ERROR, buf, fmt, ap);
-    return -1;
-  }
-
   vsnprintf(ei->error, sizeof(ei->error), fmt, ap);
   va_end(ap);
 
   snprintf(ei->file,  sizeof(ei->file),  "%s", rstr_get(b->file));
   ei->line = b->line;
+  tracelog(TRACE_NO_PROP, TRACE_ERROR, "GLW", "Error %s:%d: %s",
+           rstr_get(b->file), b->line, ei->error);
+
   return -1;
 }
+
+
+/**
+ *
+ */
+void
+glw_propname_to_array(const char *pname[16], const token_t *a)
+{
+  const token_t *t;
+  int i, j;
+  for(i = 0, t = a; t != NULL && i < 16 - 1; t = t->child)
+    for(j = 0; j < t->t_elements && i < 16 - 1; j++)
+      pname[i++]  = rstr_get(t->t_pnvec[j]);
+  pname[i] = NULL;
+}
+
+

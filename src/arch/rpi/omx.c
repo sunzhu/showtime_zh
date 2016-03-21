@@ -201,7 +201,7 @@ omx_component_create(const char *name, hts_mutex_t *mtx,
     ports.nVersion.nVersion = OMX_VERSION;
 
     omxchk(OMX_GetParameter(oc->oc_handle, types[i], &ports));
-    omxdbg("%s: type:%d: ports: %ld +%ld\n", name, i, ports.nStartPortNumber, ports.nPorts);
+    omxdbg("%s: type:%d: ports: %d +%d\n", name, i, ports.nStartPortNumber, ports.nPorts);
 
     if(ports.nPorts > 0) {
       oc->oc_inport = ports.nStartPortNumber;
@@ -209,7 +209,7 @@ omx_component_create(const char *name, hts_mutex_t *mtx,
     }
 
     for(int j = 0; j < ports.nPorts; j++)
-      omx_send_command(oc, OMX_CommandPortDisable, ports.nStartPortNumber + j, NULL, 0);
+      omx_send_command(oc, OMX_CommandPortDisable, ports.nStartPortNumber + j, NULL, 1);
 
   }
 

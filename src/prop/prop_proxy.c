@@ -41,7 +41,7 @@ struct prop_proxy_connection {
   atomic_t ppc_refcount;
   asyncio_fd_t *ppc_connection;
   char *ppc_url;
-  prop_t *ppc_status;
+  prop_t *ppc_error;
   htsbuf_queue_t ppc_outq;
 
 
@@ -105,7 +105,7 @@ ppc_release(prop_proxy_connection_t *ppc)
     asyncio_run_task(ppc_del_fd, ppc->ppc_connection);
   free(ppc->ppc_ws.packet);
   free(ppc->ppc_url);
-  prop_ref_dec(ppc->ppc_status);
+  prop_ref_dec(ppc->ppc_error);
   free(ppc);
 }
 
@@ -126,12 +126,33 @@ ppc_sendq(prop_proxy_connection_t *ppc)
  *
  */
 static void
+ppc_send_hello(prop_proxy_connection_t *ppc)
+{
+  int hellomsglen = 3;
+  uint8_t hellomsg[hellomsglen];
+  hellomsg[0] = STPP_CMD_HELLO;
+  hellomsg[1] = STPP_VERSION;
+  hellomsg[2] = 0;
+
+  htsbuf_queue_t q;
+  htsbuf_queue_init(&q, 0);
+  websocket_append_hdr(&q, 2, hellomsglen);
+  htsbuf_append(&q, hellomsg, hellomsglen);
+  asyncio_sendq(ppc->ppc_connection, &q, 0);
+}
+
+
+/**
+ *
+ */
+static void
 ppc_connected(void *aux, const char *err)
 {
   prop_proxy_connection_t *ppc = aux;
   char buf[1024];
   if(err != NULL) {
-    TRACE(TRACE_ERROR, "REMOTE", "Unable to connect to %s -- %s",
+    prop_set_string(ppc->ppc_error, err);
+    TRACE(TRACE_ERROR, "STPP", "Connection to %s failed -- %s",
           ppc->ppc_url, err);
 
     ppc_disconnect(ppc);
@@ -510,21 +531,57 @@ ppc_ws_input_notify(prop_proxy_connection_t *ppc, const uint8_t *data, int len)
 /**
  *
  */
-static void
+static int
+ppc_ws_input_hello(prop_proxy_connection_t *ppc, const uint8_t *data, int len)
+{
+  if(len < 1)
+    return -1;
+
+  if(data[0] != STPP_VERSION) {
+    prop_set_stringf(ppc->ppc_error, "Incompatible version %d", data[0]);
+    return -1;
+  }
+  data++;
+  len--;
+  if(len < 16)
+    return -1;
+
+  if(!memcmp(data, gconf.running_instance, 16)) {
+    prop_set_string(ppc->ppc_error, "Refusing connection to myself");
+    return -1;
+  }
+  data += 16;
+  len -= 16;
+  if(len < 1)
+    return -1;
+
+  //  uint8_t flags = data[0];
+  ppc->ppc_websocket_open = 2;
+  ppc_sendq(ppc);
+  return 0;
+}
+
+/**
+ *
+ */
+static int
 ppc_ws_input(void *opaque, int opcode, uint8_t *data, int len)
 {
   prop_proxy_connection_t *ppc = opaque;
 
   if(opcode != 2)
-    return;
+    return 1;
 
   if(len < 1)
-    return;
+    return 1;
   switch(data[0]) {
   case STPP_CMD_NOTIFY:
     ppc_ws_input_notify(ppc, data + 1, len - 1);
     break;
+  case STPP_CMD_HELLO:
+    return ppc_ws_input_hello(ppc, data + 1, len - 1);
   }
+  return 0;
 }
 
 
@@ -540,26 +597,19 @@ ppc_input(void *opaque, htsbuf_queue_t *q)
     if(line == NULL)
       return; // Not full line yet
     if(line == (void *)-1) {
+      prop_set_string(ppc->ppc_error, "Read error");
       ppc_disconnect(ppc);
       return;
     }
     if(*line == 0) {
       ppc->ppc_websocket_open = 1;
-      ppc_sendq(ppc);
-      // Done
+      ppc_send_hello(ppc);
     }
     free(line);
   }
 
-  while(1) {
-    int r = websocket_parse(q, ppc_ws_input, ppc, &ppc->ppc_ws);
-    if(r == 1) { // Bad data
-      ppc_disconnect(ppc);
-      break;
-    }
-    if(r == 0)
-      break;
-  }
+  if(websocket_parse(q, ppc_ws_input, ppc, &ppc->ppc_ws))
+    ppc_disconnect(ppc);
 }
 
 
@@ -579,6 +629,8 @@ ppc_connect(void *aux, int status, const void *data)
     break;
 
   case ASYNCIO_DNS_STATUS_FAILED:
+    prop_set_string(ppc->ppc_error, data);
+    ppc_release(ppc);
     return;
 
   default:
@@ -604,7 +656,7 @@ ppc_send(void *aux)
 {
   prop_proxy_connection_t *ppc = aux;
 
-  if(ppc->ppc_websocket_open)
+  if(ppc->ppc_websocket_open == 2)
     ppc_sendq(ppc);
 
   ppc_release(ppc);
@@ -632,7 +684,7 @@ prop_proxy_connect(const char *url, prop_t *status)
     ppc->ppc_port = 42000;
 
   ppc->ppc_url = strdup(url);
-  ppc->ppc_status = prop_ref_inc(status);
+  ppc->ppc_error = prop_create_r(status, "error");
   asyncio_dns_lookup_host(hostname, ppc_connect, ppc_retain(ppc));
 
   return prop_proxy_make(ppc, 0 /* global */, NULL, NULL, NULL);
@@ -792,8 +844,17 @@ prop_proxy_send_event(prop_t *p, const event_t *e)
     }
     break;
 
+  case EVENT_SELECT_AUDIO_TRACK:
+  case EVENT_SELECT_SUBTITLE_TRACK:
+    {
+      const event_select_track_t *est = (event_select_track_t *)e;
+      htsbuf_append_byte(&q, est->manual ? 0x01 : 0);
+      prop_proxy_send_str(est->id, &q);
+    }
+    break;
+
   default:
-    printf("Can't serialize event %d\n", e->e_type);
+    printf("%s: Can't serialize event %d\n", __FUNCTION__, e->e_type);
     htsbuf_queue_flush(&q);
     return;
   }
@@ -1030,7 +1091,25 @@ prop_proxy_want_more_childs(struct prop_sub *s)
 void
 prop_proxy_set_void(struct prop *p)
 {
-  printf("%s not implemeted\n", __FUNCTION__);
+  prop_proxy_connection_t *ppc = p->hp_proxy_ppc;
+  htsbuf_queue_t q;
+  htsbuf_queue_init(&q, 0);
+  htsbuf_append_byte(&q, STPP_CMD_SET);
+  prop_proxy_send_prop(p, &q);
+  htsbuf_append_byte(&q, STPP_SET_VOID);
+  prop_proxy_send_queue(ppc, &q);
+}
+
+
+void
+prop_proxy_select(struct prop *p)
+{
+  prop_proxy_connection_t *ppc = p->hp_proxy_ppc;
+  htsbuf_queue_t q;
+  htsbuf_queue_init(&q, 0);
+  htsbuf_append_byte(&q, STPP_CMD_SELECT);
+  prop_proxy_send_prop(p, &q);
+  prop_proxy_send_queue(ppc, &q);
 }
 
 

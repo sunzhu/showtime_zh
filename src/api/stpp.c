@@ -43,6 +43,7 @@ typedef struct stpp {
   struct stpp_subscription_tree stpp_subscriptions;
   struct stpp_prop_tree stpp_props;
   int stpp_prop_tally;
+  int stpp_helloed_ok;
 } stpp_t;
 
 
@@ -843,7 +844,20 @@ stpp_binary_event(prop_t *p, event_type_t event,
     e = event_create_action_str((const char *)data);
     break;
 
-
+  case EVENT_SELECT_AUDIO_TRACK:
+  case EVENT_SELECT_SUBTITLE_TRACK:
+    {
+      if(len < 1)
+        break;
+      uint8_t flags = data[0];
+      data++;
+      len--;
+      char *id = decode_string(&data, &len);
+      if(id != NULL)
+        e = event_create_select_track(id, event, flags & 1);
+      free(id);
+    }
+    break;
   default:
     TRACE(TRACE_ERROR, "STPP", "Can't handle event type %d", event);
     return;
@@ -853,6 +867,18 @@ stpp_binary_event(prop_t *p, event_type_t event,
     return;
   prop_send_ext_event(p, e);
   event_release(e);
+}
+
+static void
+stpp_send_hello(stpp_t *stpp)
+{
+  int buflen = 1 + 1 + 16 + 1;
+  uint8_t *buf = alloca(buflen);
+  buf[0] = STPP_CMD_HELLO;
+  buf[1] = STPP_VERSION;
+  memcpy(buf + 2, gconf.running_instance, 16);
+  buf[18] = 0x0; // Flags
+  websocket_send(stpp->stpp_hc, 2, buf, buflen);
 }
 
 /**
@@ -875,6 +901,23 @@ stpp_binary(stpp_t *stpp, const uint8_t *data, int len)
   const uint8_t cmd = data[0];
   data++;
   len--;
+
+  if(cmd == STPP_CMD_HELLO) {
+    if(len < 2)
+      return -1;
+#if 0
+    uint8_t version = data[0];
+    uint8_t flags = data[1];
+    char *id = NULL;
+    char *version = NULL;
+#endif
+    stpp_send_hello(stpp);
+    stpp->stpp_helloed_ok = 1;
+    return 0;
+  }
+
+  if(!stpp->stpp_helloed_ok)
+    return -1;
 
   switch(cmd) {
   case STPP_CMD_SUBSCRIBE:
@@ -968,7 +1011,18 @@ stpp_binary(stpp_t *stpp, const uint8_t *data, int len)
     stpp_cmd_want_more_childs(stpp, rd32_le(data));
     break;
 
+  case STPP_CMD_SELECT:
+    {
+      prop_t *p = decode_propref(stpp, &data, &len);
+      if(p == NULL)
+        break;
+
+      prop_select(p);
+    }
+    break;
+
   default:
+    TRACE(TRACE_ERROR, "STPP", "Received bad command 0x%x", cmd);
     return -1;
   }
   return 0;
