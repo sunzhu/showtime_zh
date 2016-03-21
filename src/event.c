@@ -107,6 +107,7 @@ static struct strtab actionnames[] = {
   { "Left",                  ACTION_LEFT },
   { "Right",                 ACTION_RIGHT },
   { "Activate",              ACTION_ACTIVATE },
+  { "Click",                 ACTION_CLICK },
   { "Enter",                 ACTION_ENTER },
   { "Submit",                ACTION_SUBMIT },
   { "Ok",                    ACTION_OK },
@@ -156,6 +157,7 @@ static struct strtab actionnames[] = {
   { "Select",                ACTION_SELECT },
   { "MediaStats",            ACTION_SHOW_MEDIA_STATS },
   { "Home",                  ACTION_HOME },
+  { "Reset",                 ACTION_RESET },
 
   { "ChangeView",            ACTION_SWITCH_VIEW },
   { "FullscreenToggle",      ACTION_FULLSCREEN_TOGGLE },
@@ -515,22 +517,7 @@ event_dispatch(event_t *e)
   event_to_prop(prop_get_by_name(PNVEC("global", "eventSink"),
 				 1, NULL), e);
   
-  if(event_is_action(e, ACTION_QUIT)) {
-    app_shutdown(0);
-
-  } else if(event_is_action(e, ACTION_STANDBY)) {
-    app_shutdown(APP_EXIT_STANDBY);
-
-  } else if(event_is_action(e, ACTION_POWER_OFF)) {
-    app_shutdown(APP_EXIT_POWEROFF);
-
-  } else if(event_is_action(e, ACTION_RESTART)) {
-    app_shutdown(APP_EXIT_RESTART);
-
-  } else if(event_is_action(e, ACTION_REBOOT)) {
-    app_shutdown(APP_EXIT_REBOOT);
-
-  } else if(event_is_action(e, ACTION_NAV_BACK) ||
+  if(event_is_action(e, ACTION_NAV_BACK) ||
 	    event_is_action(e, ACTION_NAV_FWD) ||
 	    event_is_action(e, ACTION_HOME) ||
 	    event_is_action(e, ACTION_PLAYQUEUE) ||

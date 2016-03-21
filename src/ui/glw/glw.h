@@ -67,7 +67,7 @@ typedef struct glw_program_args glw_program_args_t;
 TAILQ_HEAD(glw_queue, glw);
 LIST_HEAD(glw_head, glw);
 LIST_HEAD(glw_event_map_list, glw_event_map);
-LIST_HEAD(glw_prop_sub_list, glw_prop_sub);
+SLIST_HEAD(glw_prop_sub_slist, glw_prop_sub);
 LIST_HEAD(glw_loadable_texture_list, glw_loadable_texture);
 TAILQ_HEAD(glw_loadable_texture_queue, glw_loadable_texture);
 LIST_HEAD(glw_video_list, glw_video);
@@ -732,6 +732,8 @@ typedef struct glw_root {
   void (*gr_prop_dispatcher)(prop_courier_t *pc, int timeout);
   int gr_prop_maxtime;
 
+  atomic_t gr_refcount;
+
   int gr_keyboard_mode;
   int gr_skin_scale_adjustment;
   int gr_reduce_cpu;
@@ -1115,7 +1117,7 @@ typedef struct glw {
 
   struct glw_event_map_list glw_event_maps;
 
-  struct glw_prop_sub_list glw_prop_subscriptions;
+  struct glw_prop_sub_slist glw_prop_subscriptions;
 
   struct token *glw_dynamic_expressions;
 
@@ -1239,6 +1241,8 @@ int glw_init4(glw_root_t *gr,
               int flags);
 
 void glw_fini(glw_root_t *gr);
+
+void glw_release_root(glw_root_t *tr);
 
 void glw_load_universe(glw_root_t *gr);
 

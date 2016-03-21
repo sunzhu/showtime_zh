@@ -3,6 +3,8 @@
 
 widget(deck, {
 
+  onEvent(itemMenu, deliverEvent($self.value, "reset"));
+
   widget(container_z, {
 
     id: "wide";
@@ -61,7 +63,6 @@ widget(deck, {
               align: center;
               widget(quad, {
                 height: 0.5em;
-//                color: select(isNavFocused(), 0.0, 0.77);
               });
             });
           });

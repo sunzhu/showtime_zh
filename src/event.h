@@ -39,6 +39,7 @@ typedef enum {
   ACTION_DOWN,
   ACTION_LEFT,
   ACTION_RIGHT,
+  ACTION_CLICK,
   ACTION_ACTIVATE,
   ACTION_ENTER,
   ACTION_SUBMIT,
@@ -90,6 +91,7 @@ typedef enum {
   ACTION_SELECT,
   ACTION_SHOW_MEDIA_STATS,
   ACTION_HOME,
+  ACTION_RESET,
 
   ACTION_SWITCH_VIEW,
   ACTION_FULLSCREEN_TOGGLE,
@@ -167,6 +169,7 @@ typedef enum {
   EVENT_DYNAMIC_ACTION                = 27,
   EVENT_MAKE_SCREENSHOT               = 28,
   EVENT_PROP_ACTION                   = 29,
+  EVENT_SCROLL                        = 30,
 } event_type_t;
 
 
@@ -326,6 +329,22 @@ typedef struct event_prop_action {
   struct prop *p;
   struct rstr *action;
 } event_prop_action_t;
+
+
+/**
+ *
+ */
+typedef struct event_scroll {
+  event_t h;
+  float dX;
+  float dY;
+  int mode;
+#define EVENT_SCROLL_MODE_PIXELS 0
+#define EVENT_SCROLL_MODE_LINES  1
+#define EVENT_SCROLL_MODE_PAGES  2
+
+} event_scroll_t;
+
 
 void event_generic_dtor(event_t *e);
 

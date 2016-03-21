@@ -20,8 +20,11 @@
 
 #pragma once
 
+#define STPP_VERSION 1
+
 // These things are sent over the wire so no changes here please
 
+#define STPP_CMD_HELLO       0
 #define STPP_CMD_SUBSCRIBE   1
 #define STPP_CMD_UNSUBSCRIBE 2
 #define STPP_CMD_SET         3
@@ -29,6 +32,7 @@
 #define STPP_CMD_EVENT       5
 #define STPP_CMD_REQ_MOVE    6
 #define STPP_CMD_WANT_MORE_CHILDS 7
+#define STPP_CMD_SELECT      8
 
 
 // Notify types (First byte in STPP_CMD_NOTIFY message)

@@ -228,7 +228,8 @@ static struct strtab postfixtab[] = {
   { "ttf",             CONTENT_FONT },
   { "otf",             CONTENT_FONT },
 
-  { "pdf",             CONTENT_UNKNOWN },
+  { "pdf",             CONTENT_DOCUMENT },
+
   { "nfo",             CONTENT_UNKNOWN },
   { "gz",              CONTENT_UNKNOWN },
   { "txt",             CONTENT_UNKNOWN },
@@ -315,11 +316,11 @@ deep_probe(fa_dir_entry_t *fde, scanner_t *s)
 
       if(meta != NULL) {
         switch(fde->fde_type) {
-
+#if ENABLE_PLUGINS
         case CONTENT_PLUGIN:
           plugin_props_from_file(fde->fde_prop, rstr_get(fde->fde_url));
           break;
-	  
+#endif
         case CONTENT_FONT:
           fontstash_props_from_title(fde->fde_prop, rstr_get(fde->fde_url),
                                      rstr_get(fde->fde_filename));

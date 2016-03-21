@@ -209,8 +209,9 @@ fini_group(int group)
 static void *
 swthread(void *aux)
 {
+#if ENABLE_PLUGINS
   plugins_init2();
-  
+#endif
   hts_mutex_lock(&gconf.state_mutex);
   gconf.state_plugins_loaded = 1;
   hts_cond_broadcast(&gconf.state_cond);
@@ -222,6 +223,7 @@ swthread(void *aux)
 
   if(!gconf.disable_upgrades) {
 
+#if ENABLE_PLUGINS
     for(int i = 0; i < 10; i++) {
       if(!plugins_upgrade_check())
         break;
@@ -229,6 +231,7 @@ swthread(void *aux)
             "Failed to update repo, retrying in %d seconds", i + 1);
       sleep(i + i);
     }
+#endif
 
     for(int i = 0; i < 10; i++) {
       if(!upgrade_refresh())
@@ -257,8 +260,10 @@ swthread(void *aux)
     
     gconf.swrefresh = 0;
     hts_mutex_unlock(&gconf.state_mutex);
+#if ENABLE_PLUGINS
     if(!timeout)
       plugins_upgrade_check();
+#endif
     upgrade_refresh();
     load_site_news();
     hts_mutex_lock(&gconf.state_mutex);
@@ -287,6 +292,8 @@ swrefresh(void)
 static void
 generate_device_id(void)
 {
+  arch_get_random_bytes(gconf.running_instance, sizeof(gconf.running_instance));
+
   if(gconf.device_id[0] != 0)
     return;
 
@@ -431,11 +438,12 @@ main_init(void)
   /* Initialize audio subsystem */
   audio_init();
 
+#if ENABLE_PLUGINS
   /* Initialize plugin manager */
   plugins_init(gconf.devplugins);
+#endif
 
-  if(gconf.device_id[0] == 0)
-    generate_device_id();
+  generate_device_id();
   TRACE(TRACE_DEBUG, "SYSTEM", "Hashed device ID: %s", gconf.device_id);
   if(gconf.device_type[0])
     TRACE(TRACE_DEBUG, "SYSTEM", "Device type: %s", gconf.device_type);

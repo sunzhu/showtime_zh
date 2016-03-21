@@ -1,7 +1,6 @@
+
 #define ListItemBevel() {
   widget(container_y, {
-
-    style: "ListItemBevel";
 
     filterConstraintY: true;
     filterConstraintX: true;
@@ -22,8 +21,6 @@
 #define GridItemBevel() {
   widget(container_y, {
 
-    style: "GridItemBevel";
-
     filterConstraintY: true;
     widget(quad, {
       height: 1;
@@ -37,8 +34,6 @@
     });
   });
   widget(container_x, {
-
-    style: "GridItemBevel";
 
     filterConstraintX: true;
     widget(quad, {
@@ -147,12 +142,11 @@
     });
 
     widget(container_x, {
-      BackButton();
 
       widget(deck, {
         filterConstraintX: true;
         widget(label, {
-          padding: [4em, 0];
+          padding: [3em, 0];
           align: center;
           caption: TITLE;
           size: 1.5em;
@@ -163,17 +157,12 @@
         });
         page: select(isVoid($self.model.metadata.icon), 0, 1);
       });
-
-      widget(dummy, {
-        width: 4em;
-      });
     });
 
-    widget(label, {
-//      size: 1.5em;
-      align: right;
-      padding: [4em, 0];
-      caption: $core.clock.localtimeofday;
+    widget(container_x, {
+      hidden: !$nav.canGoBack;
+      BackButton();
+      space(1);
     });
   });
 }

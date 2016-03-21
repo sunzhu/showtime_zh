@@ -20,6 +20,7 @@ DEFAULT_LOGTARGET=""
 APPNAME="Movian"
 OPTLEVEL=2
 PLUGINREPO="http://plugins.movian.tv/repo/plugins-v1.json"
+LINKER="\${CC}" # Default is to link with c-compiler
 
 CONFIG_LIST="
  libasound
@@ -28,8 +29,6 @@ CONFIG_LIST="
  libpthread
  zlib
  dvd
- dvd_linux
- dvd_wii
  glw
  glw_frontend_x11
  glw_frontend_wii
@@ -74,6 +73,7 @@ CONFIG_LIST="
  sqlite_locking
  sqlite_internal
  libav
+ libav_attachment_pointer
  tlsf
  airplay
  webpopup
@@ -106,6 +106,7 @@ CONFIG_LIST="
  netlog
  gumbo
  upgrade
+ plugins
 "
 
 
@@ -437,6 +438,14 @@ gumbo_setup() {
 }
 
 
+ext_setup() {
+    libav_setup
+    rtmpdump_setup
+    xmp_setup
+    gumbo_setup
+}
+
+
 #
 #
 #
@@ -529,6 +538,7 @@ finalize() {
     cat >>${CONFIG_MAK} <<EOF
 CC=$CC
 CXX=$CXX
+LINKER:=$LINKER
 CFLAGS_cfg  += -I${EXT_INSTALL_DIR}/include
 LDFLAGS_cfg += -L${EXT_INSTALL_DIR}/lib
 STRIP=${TOOLCHAIN}strip
@@ -646,3 +656,4 @@ enable glw_settings
 enable netlog
 enable gumbo
 enable upgrade
+enable plugins

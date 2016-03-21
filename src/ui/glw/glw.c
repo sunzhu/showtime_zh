@@ -213,6 +213,8 @@ glw_init4(glw_root_t *gr,
   const char *skin = gconf.skin;
   prop_t *p;
 
+  atomic_set(&gr->gr_refcount, 1);
+
   if(gr->gr_prop_core == NULL)
     gr->gr_prop_core = prop_get_global();
 
@@ -337,7 +339,6 @@ glw_fini(glw_root_t *gr)
   prop_unsubscribe(gr->gr_scalesub);
   prop_unsubscribe(gr->gr_disable_screensaver_sub);
   prop_courier_destroy(gr->gr_courier);
-  hts_mutex_destroy(&gr->gr_mutex);
 
   /*
    * The view loader thread sometimes run with gr_mutex unlocked
@@ -371,6 +372,18 @@ glw_fini(glw_root_t *gr)
   rstr_release(gr->gr_pending_focus);
 }
 
+/**
+ *
+ */
+void
+glw_release_root(glw_root_t *gr)
+{
+  if(atomic_dec(&gr->gr_refcount))
+    return;
+
+  hts_mutex_destroy(&gr->gr_mutex);
+  free(gr);
+}
 
 /**
  *
@@ -1053,6 +1066,7 @@ glw_move(glw_t *w, glw_t *b)
     }
   }
   glw_signal0(p, GLW_SIGNAL_CHILD_MOVED, w);
+  glw_need_refresh(gr, 0);
 }
 
 /**
@@ -1941,7 +1955,8 @@ glw_pointer_event_deliver(glw_t *w, glw_pointer_event_t *gpe)
         glw_focus_set(gr, w, GLW_FOCUS_SET_INTERACTIVE, "LeftPress");
 
       glw_path_modify(w, 0, GLW_IN_PRESSED_PATH, NULL);
-      e = event_create_action(ACTION_ACTIVATE);
+      e = event_create_action_multi((const action_type_t[]){
+          ACTION_CLICK, ACTION_ACTIVATE}, 2);
       e->e_flags |= flags;
       glw_event_to_widget(w, e);
       event_release(e);
@@ -1978,7 +1993,7 @@ glw_touch_longpress(glw_root_t *gr)
  */
 int
 glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
-                   glw_t **hp, Vec3 p, Vec3 dir)
+                   glw_t **hoverp, Vec3 p, Vec3 dir)
 {
   glw_t *c;
   float x, y;
@@ -2010,8 +2025,8 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
       if(gpe->type < GLW_POINTER_MOTION_UPDATE)
         r = 1;
 
-      if(glw_is_focusable_or_clickable(w) && *hp == NULL)
-	*hp = w;
+      if(glw_is_focusable_or_clickable(w))
+	*hoverp = w;
 
     } else {
       return 0;
@@ -2019,7 +2034,7 @@ glw_pointer_event0(glw_root_t *gr, glw_t *w, glw_pointer_event_t *gpe,
   }
 
   TAILQ_FOREACH_REVERSE(c, &w->glw_childs, glw_queue, glw_parent_link) {
-    if(glw_pointer_event0(gr, c, gpe, hp, p, dir))
+    if(glw_pointer_event0(gr, c, gpe, hoverp, p, dir))
       return 1;
   }
 
