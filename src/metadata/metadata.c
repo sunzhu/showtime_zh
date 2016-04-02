@@ -225,7 +225,7 @@ metadata_stream_make_prop(const metadata_stream_t *ms, prop_t *parent,
     title = rstr_alloc(buf);
     rstr_release(fmt);
   }
-  
+
   prop_t *p = mp_add_trackr(parent,
                             title,
                             url,
@@ -237,7 +237,7 @@ metadata_stream_make_prop(const metadata_stream_t *ms, prop_t *parent,
                             score,
                             autosel);
   prop_ref_dec(p);
-  
+
   rstr_release(title);
 }
 
@@ -246,7 +246,7 @@ metadata_stream_make_prop(const metadata_stream_t *ms, prop_t *parent,
  *
  */
 void
-metadata_to_proptree(const metadata_t *md, prop_t *proproot, 
+metadata_to_proptree(const metadata_t *md, prop_t *proproot,
 		     int cleanup_streams)
 {
   metadata_stream_t *ms;
