@@ -694,7 +694,7 @@ fa_probe_metadata(const char *url, char *errbuf, size_t errsize,
 		  const char *filename, prop_t *stats)
 {
   AVFormatContext *fctx;
-
+  int park = 1;
   fa_open_extra_t foe = {
     .foe_stats = stats
   };
@@ -708,26 +708,26 @@ fa_probe_metadata(const char *url, char *errbuf, size_t errsize,
 
 #if ENABLE_LIBGME
   if(gme_probe(md, url, fh)) {
-    fa_close(fh);
+    fa_park(fh);
     return md;
   }
 #endif
 
 #if ENABLE_XMP
   if(xmp_probe(md, url, fh)) {
-    fa_close(fh);
+    fa_close_with_park(fh, park);
     return md;
   }
 #endif
 
   fa_seek(fh, 0, SEEK_SET);
   if(fa_probe_header(md, url, fh, filename)) {
-    fa_close(fh);
+    fa_close_with_park(fh, park);
     return md;
   }
 
   if(!fa_probe_iso(md, fh)) {
-    fa_close(fh);
+    fa_close_with_park(fh, park);
     return md;
   }
 
@@ -741,7 +741,7 @@ fa_probe_metadata(const char *url, char *errbuf, size_t errsize,
   }
 
   fa_lavf_load_meta(md, fctx, filename);
-  fa_libav_close_format(fctx);
+  fa_libav_close_format(fctx, park);
   return md;
 }
 
