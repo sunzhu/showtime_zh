@@ -1565,14 +1565,13 @@ init_dev_settings(void)
   prop_set_string(prop_create(r, "description"),
 		  "Settings for developers. If you don't know what this is, don't touch it");
 
-  add_dev_bool("Various experimental features (Use at own risk)",
-	       "experimental", &gconf.enable_experimental);
-
+#if ENABLE_UPGRADE
   add_dev_bool("Enable binreplace",
 	       "binreplace", &gconf.enable_bin_replace);
 
   add_dev_bool("Enable omnigrade",
 	       "omnigrade", &gconf.enable_omnigrade);
+#endif
 
 #ifndef NDEBUG
   add_dev_bool("Disable analytics",
@@ -1581,9 +1580,13 @@ init_dev_settings(void)
 
   add_dev_bool("Always close pages when pressing back",
 	       "navalwaysclose", &gconf.enable_nav_always_close);
-
+#ifndef PS3
   add_dev_bool("Disable HTTP connection reuse",
 	       "nohttpreuse", &gconf.disable_http_reuse);
+#endif
+
+  if(gconf.arch_dev_opts)
+    gconf.arch_dev_opts(&add_dev_bool);
 
 #if ENABLE_NETLOG
   setting_create(SETTING_STRING, gconf.settings_dev, SETTINGS_INITIAL_UPDATE,
