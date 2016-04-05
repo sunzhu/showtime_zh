@@ -626,14 +626,14 @@ msg: Justera uppdateringsfrekvens på TVn
 id: Audio delay
 msg: Ljuddelay
 
-id: Audio gain adjustment during video playback
-msg: Volym justering vid videouppspelning
-
-id: Audio settings during video playback
-msg: Ljudinställningar för videouppspelning
+id: Audio gain
+msg: Ljudvolym
 
 id: Setup audio output
 msg: Ställ in ljudutgång
+
+id: Video playback
+msg: Videouppspelning
 
 #
 # ./src/audio2/audio_test.c
@@ -721,6 +721,9 @@ msg: Töm cache
 
 id: Enable bittorrent
 msg: Använd svärmar
+
+id: Max upload speed
+msg: Maximal hastighet för uppladdning
 
 id: Max usage of free space for caching torrents
 msg: Maximalt utrymme för att spara svärmar
@@ -1742,6 +1745,9 @@ msg: Föredragen metod för VDPAU deinterlacing
 id: Resume video playback
 msg: Återuppta videouppspelning
 
+id: Show clock during playback
+msg: Visa klockan vid videouppspelning
+
 id: Step when seeking backward
 msg: Steg vid sökning bakåt
 
@@ -1759,7 +1765,4 @@ msg: Up / Ner när video spelas
 
 id: Video acceleration and display behaviour
 msg: Videoacceleration och inställningar för videopresentation
-
-id: Video playback
-msg: Videouppspelning
 

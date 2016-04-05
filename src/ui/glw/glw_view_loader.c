@@ -24,13 +24,7 @@
 typedef struct glw_view_loader {
   glw_t w;
 
-  struct prop *prop;
-  struct prop *prop_parent;
-  struct prop *prop_clone;
-  struct prop *prop_core;
-  struct prop *prop_parent_override;
-  struct prop *prop_self_override;
-  struct prop *args;
+  glw_scope_t *scope;
 
   rstr_t *url;
   rstr_t *alt_url;
@@ -95,7 +89,6 @@ static int
 glw_loader_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
 {
   glw_t *c, *n;
-  glw_view_loader_t *a = (void *)w;
 
   switch(signal) {
   default:
@@ -133,13 +126,6 @@ glw_loader_callback(glw_t *w, void *opaque, glw_signal_t signal, void *extra)
     if(c == TAILQ_FIRST(&w->glw_childs))
       glw_copy_constraints(w, c);
     return 1;
-
-  case GLW_SIGNAL_DESTROY:
-    prop_ref_dec(a->args);
-    prop_ref_dec(a->prop_parent_override);
-    prop_ref_dec(a->prop_self_override);
-    break;
-
   }
   return 0;
 }
@@ -187,11 +173,12 @@ glw_view_loader_retire_child(glw_t *w, glw_t *c)
 /**
  *
  */
-static void 
+static void
 glw_view_loader_ctor(glw_t *w)
 {
-  glw_view_loader_t *a = (void *)w;
-  a->time = 0.00001;
+  glw_view_loader_t *vl = (glw_view_loader_t *)w;
+  vl->time = 0.00001;
+  vl->scope = glw_scope_retain(w->glw_scope);
   w->glw_flags2 |= GLW2_EXPEDITE_SUBSCRIPTIONS;
 }
 
@@ -199,12 +186,13 @@ glw_view_loader_ctor(glw_t *w)
 /**
  *
  */
-static void 
+static void
 glw_view_loader_dtor(glw_t *w)
 {
-  glw_view_loader_t *a = (void *)w;
-  rstr_release(a->url);
-  rstr_release(a->alt_url);
+  glw_view_loader_t *vl = (void *)w;
+  glw_scope_release(vl->scope);
+  rstr_release(vl->url);
+  rstr_release(vl->alt_url);
 }
 
 
@@ -261,10 +249,7 @@ set_source(glw_t *w, rstr_t *url, glw_style_t *origin)
     alt_url = NULL;
 
   if(url || alt_url) {
-    glw_view_create(w->glw_root, url, alt_url, w,
-                    a->prop_self_override ?: a->prop,
-                    a->prop_parent_override ?: a->prop_parent, a->args,
-                    a->prop_clone, a->prop_core, NULL, 0);
+    glw_view_create(w->glw_root, url, alt_url, w, a->scope, NULL, 0);
     a->loaded = 1;
     update_autohide(a);
     return;
@@ -339,43 +324,25 @@ glw_view_loader_set_float(glw_t *w, glw_attribute_t attrib, float value,
 /**
  *
  */
-static void
-glw_view_loader_set_roots(glw_t *w, prop_t *self, prop_t *parent, prop_t *clone,
-                          prop_t *core)
-{
-  glw_view_loader_t *vl = (void *)w;
-
-  vl->prop        = self;
-  vl->prop_parent = parent;
-  vl->prop_clone  = clone;
-  vl->prop_core   = core;
-}
-
-
-
-/**
- *
- */
 static int
 glw_view_loader_set_prop(glw_t *w, glw_attribute_t attrib, prop_t *p)
 {
   glw_view_loader_t *vl = (void *)w;
+  glw_scope_t *scope;
 
   switch(attrib) {
   case GLW_ATTRIB_ARGS:
-    //    prop_link_ex(p, vl->args, NULL, PROP_LINK_XREFED_IF_ORPHANED, 0);
-    prop_ref_dec(vl->args);
-    vl->args = prop_ref_inc(p);
-    return 0;
-
-  case GLW_ATTRIB_PROP_PARENT:
-    prop_ref_dec(vl->prop_parent_override);
-    vl->prop_parent_override = prop_ref_inc(p);
+    scope = glw_scope_dup(vl->scope, (1 << GLW_ROOT_ARGS));
+    scope->gs_roots[GLW_ROOT_ARGS].p = prop_ref_inc(p);
+    glw_scope_release(vl->scope);
+    vl->scope = scope;
     return 0;
 
   case GLW_ATTRIB_PROP_SELF:
-    prop_ref_dec(vl->prop_self_override);
-    vl->prop_self_override = prop_ref_inc(p);
+    scope = glw_scope_dup(vl->scope, (1 << GLW_ROOT_SELF));
+    scope->gs_roots[GLW_ROOT_SELF].p = prop_ref_inc(p);
+    glw_scope_release(vl->scope);
+    vl->scope = scope;
     return 0;
 
   default:
@@ -425,7 +392,6 @@ static glw_class_t glw_view_loader = {
   .gc_set_int = glw_view_loader_set_int,
   .gc_set_float = glw_view_loader_set_float,
   .gc_set_prop = glw_view_loader_set_prop,
-  .gc_set_roots = glw_view_loader_set_roots,
   .gc_layout = glw_loader_layout,
   .gc_render = glw_view_loader_render,
   .gc_retire_child = glw_view_loader_retire_child,

@@ -145,14 +145,14 @@ fa_imageloader_buf(buf_t *buf, char *errbuf, size_t errlen)
  * Faster than open+read+close.
  */
 static image_t *
-fa_imageloader2(const char *url, const char **vpaths,
+fa_imageloader2(const char *url, fa_resolver_t *far,
 		char *errbuf, size_t errlen, int *cache_control,
                 cancellable_t *c)
 {
   buf_t *buf;
 
   buf = fa_load(url,
-                FA_LOAD_VPATHS(vpaths),
+                FA_LOAD_RESOLVER(far),
                 FA_LOAD_ERRBUF(errbuf, errlen),
                 FA_LOAD_CACHE_CONTROL(cache_control),
                 FA_LOAD_CANCELLABLE(c),
@@ -184,7 +184,7 @@ jpeginfo_reader(void *handle, void *buf, int64_t offset, size_t size)
  */
 image_t *
 fa_imageloader(const char *url, const struct image_meta *im,
-	       const char **vpaths, char *errbuf, size_t errlen,
+	       fa_resolver_t *far, char *errbuf, size_t errlen,
 	       int *cache_control, cancellable_t *c)
 {
   uint8_t p[16];
@@ -200,14 +200,14 @@ fa_imageloader(const char *url, const struct image_meta *im,
 #endif
 
   if(!im->im_want_thumb)
-    return fa_imageloader2(url, vpaths, errbuf, errlen, cache_control, c);
+    return fa_imageloader2(url, far, errbuf, errlen, cache_control, c);
 
   fa_open_extra_t foe = {
     .foe_cancellable = c
   };
 
-  if((fh = fa_open_vpaths(url, vpaths, errbuf, errlen,
-			  FA_BUFFERED_SMALL, &foe)) == NULL)
+  if((fh = fa_open_resolver(url, far, errbuf, errlen,
+                            FA_BUFFERED_SMALL, &foe)) == NULL)
     return NULL;
 
   if(ONLY_CACHED(cache_control)) {
@@ -318,7 +318,7 @@ ifv_close(void)
   }
 
   if(ifv_fctx != NULL) {
-    fa_libav_close_format(ifv_fctx);
+    fa_libav_close_format(ifv_fctx, 0);
     ifv_fctx = NULL;
   }
 }
@@ -499,9 +499,9 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
 #if ENABLE_LIBAV_ATTACHMENT_POINTER
           int64_t offset = st->attached_offset;
           int size = st->attached_size;
-          fa_libav_close_format(fctx);  /* Close here because it will be parked
-                                         * by fa_buffer (and thus reused)
-                                         */
+          fa_libav_close_format(fctx, 0);/* Close here because it will be parked
+                                          * by fa_buffer (and thus reused)
+                                          */
           return thumb_from_attachment(url, offset, size, errbuf, errlen,
                                        cacheid, mtime);
 #else
@@ -510,7 +510,7 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
                                           (void *)&av_free);
           st->codec->extradata = NULL;
           st->codec->extradata_size = 0;
-          fa_libav_close_format(fctx);
+          fa_libav_close_format(fctx, 0);
           return thumb_from_buf(b, errbuf, errlen, cacheid, mtime);
 #endif
         }
@@ -521,19 +521,19 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
       }
     }
     if(ctx == NULL) {
-      fa_libav_close_format(fctx);
+      fa_libav_close_format(fctx, 0);
       return NULL;
     }
 
     AVCodec *codec = avcodec_find_decoder(ctx->codec_id);
     if(codec == NULL) {
-      fa_libav_close_format(fctx);
+      fa_libav_close_format(fctx, 0);
       snprintf(errbuf, errlen, "Unable to find codec");
       return NULL;
     }
 
     if(avcodec_open2(ctx, codec, NULL) < 0) {
-      fa_libav_close_format(fctx);
+      fa_libav_close_format(fctx, 0);
       snprintf(errbuf, errlen, "Unable to open codec");
       return NULL;
     }
