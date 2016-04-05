@@ -506,5 +506,3 @@ glw_propname_to_array(const char *pname[16], const token_t *a)
       pname[i++]  = rstr_get(t->t_pnvec[j]);
   pname[i] = NULL;
 }
-
-

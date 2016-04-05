@@ -108,7 +108,8 @@ static glw_class_t glw_view = {
  *
  */
 static void
-glw_view_error(glw_t *parent, const char *error, const char *file, int line)
+glw_view_error(glw_t *parent, const char *error, const char *file, int line,
+               glw_scope_t *scope)
 {
   char buf[256];
 
@@ -119,7 +120,7 @@ glw_view_error(glw_t *parent, const char *error, const char *file, int line)
   }
 
   glw_t *w = glw_create(parent->glw_root, glw_class_find_by_name("label"),
-                        parent, NULL, NULL, NULL, 0);
+                        parent, NULL, NULL, scope, NULL, 0);
   w->glw_class->gc_set_caption(w, buf, 0);
 }
 
@@ -169,12 +170,11 @@ gcv_release(glw_root_t *gr, glw_cached_view_t *gcv)
  */
 static void
 eval_loaded_view(glw_root_t *gr, glw_cached_view_t *gcv, glw_view_t *view,
-                 prop_t *prop_self, prop_t *prop_parent, prop_t *prop_args,
-                 prop_t *prop_clone, prop_t *prop_core)
+                 glw_scope_t *scope)
 {
   if(gcv->gcv_error) {
     glw_view_error(&view->w, gcv->gcv_error,
-                   gcv->gcv_error_file, gcv->gcv_error_line);
+                   gcv->gcv_error_file, gcv->gcv_error_line, scope);
     return;
   }
 
@@ -187,25 +187,23 @@ eval_loaded_view(glw_root_t *gr, glw_cached_view_t *gcv, glw_view_t *view,
   ec.rc = NULL;
   ec.w = &view->w;
   ec.ei = &ei;
-  view->viewprop =  prop_create_root("view");
 
-  ec.prop_self   = prop_self;
-  ec.prop_parent = prop_parent;
-  ec.prop_args   = prop_args;
-  ec.prop_clone  = prop_clone;
-  ec.prop_core   = prop_core;
-  ec.prop_view   = view->viewprop;
-  
+  view->viewprop =  prop_create_root(NULL);
+  ec.scope = glw_scope_dup(scope, (1 << GLW_ROOT_VIEW));
+  ec.scope->gs_roots[GLW_ROOT_VIEW].p = prop_ref_inc(view->viewprop);
+
   ec.sublist = &ec.w->glw_prop_subscriptions;
 
   if(glw_view_eval_block(t, &ec, NULL)) {
     glw_destroy_childs(ec.w);
-    glw_view_error(ec.w, ei.error, ei.file, ei.line);
+    glw_view_error(ec.w, ei.error, ei.file, ei.line, scope);
   }
   glw_view_free_chain(gr, t);
 
   if(unlikely(gr->gr_pending_focus != NULL))
     glw_focus_check_pending(ec.w->glw_parent);
+
+  glw_scope_release(ec.scope);
 }
 
 
@@ -224,14 +222,14 @@ gcv_load(glw_root_t *gr, glw_cached_view_t *gcv, int may_unlock)
 
   rstr_t *file = gcv->gcv_url;
   buf = fa_load(rstr_get(gcv->gcv_url),
-              FA_LOAD_VPATHS(gr->gr_vpaths),
+              FA_LOAD_RESOLVER(gr->gr_fa_resolver),
               FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
               NULL);
 
   if(buf == NULL && gcv->gcv_alturl != NULL) {
     file = gcv->gcv_alturl;
     buf = fa_load(rstr_get(gcv->gcv_alturl),
-                  FA_LOAD_VPATHS(gr->gr_vpaths),
+                  FA_LOAD_RESOLVER(gr->gr_fa_resolver),
                   FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
                   NULL);
   }
@@ -290,11 +288,7 @@ typedef struct glw_view_load_request {
   rstr_t *url;
   rstr_t *alturl;
   glw_t *w;
-  prop_t *prop;
-  prop_t *prop_parent;
-  prop_t *args;
-  prop_t *prop_clone;
-  prop_t *prop_core;
+  glw_scope_t *scope;
   glw_cached_view_t *gcv;
 } glw_view_load_request_t;
 
@@ -310,11 +304,7 @@ gvlr_destroy(glw_root_t *gr, glw_view_load_request_t *r)
   rstr_release(r->url);
   rstr_release(r->alturl);
   glw_unref(r->w);
-  prop_ref_dec(r->prop);
-  prop_ref_dec(r->prop_parent);
-  prop_ref_dec(r->args);
-  prop_ref_dec(r->prop_clone);
-  prop_ref_dec(r->prop_core);
+  glw_scope_release(r->scope);
   gcv_release(gr, r->gcv);
   free(r);
 }
@@ -364,10 +354,7 @@ glw_view_loader_eval(glw_root_t *gr)
     TAILQ_REMOVE(&gr->gr_view_eval_requests, r, link);
 
     if(!(r->w->glw_flags & GLW_DESTROYING))
-      eval_loaded_view(gr, r->gcv, (glw_view_t *)r->w,
-                       r->prop, r->prop_parent, r->args, r->prop_clone,
-                       r->prop_core);
-
+      eval_loaded_view(gr, r->gcv, (glw_view_t *)r->w, r->scope);
     gvlr_destroy(gr, r);
   }
 }
@@ -398,8 +385,7 @@ glw_view_loader_flush(glw_root_t *gr)
  */
 glw_t *
 glw_view_create(glw_root_t *gr, rstr_t *url, rstr_t *alturl, glw_t *parent,
-                prop_t *prop, prop_t *prop_parent, prop_t *args,
-                prop_t *prop_clone, prop_t *prop_core, rstr_t *file, int line)
+                glw_scope_t *scope, rstr_t *file, int line)
 {
   glw_cached_view_t *gcv;
 
@@ -409,7 +395,7 @@ glw_view_create(glw_root_t *gr, rstr_t *url, rstr_t *alturl, glw_t *parent,
     alturl = NULL;
   }
 
-  glw_t *w = glw_create(gr, &glw_view, parent, NULL, NULL, file, line);
+  glw_t *w = glw_create(gr, &glw_view, parent, NULL, NULL, scope, file, line);
 
   LIST_FOREACH(gcv, &gr->gr_views, gcv_link) {
     if(rstr_eq(gcv->gcv_url, url) && rstr_eq(gcv->gcv_alturl, alturl))
@@ -438,15 +424,11 @@ glw_view_create(glw_root_t *gr, rstr_t *url, rstr_t *alturl, glw_t *parent,
       w->glw_refcnt++;
       gcv->gcv_refcount++;
 
-      r->url         = rstr_dup(url);
-      r->alturl      = rstr_dup(alturl);
-      r->w           = w;
-      r->prop        = prop_ref_inc(prop);
-      r->prop_parent = prop_ref_inc(prop_parent);
-      r->args        = prop_ref_inc(args);
-      r->prop_clone  = prop_ref_inc(prop_clone);
-      r->prop_core   = prop_ref_inc(prop_core);
-      r->gcv         = gcv;
+      r->url    = rstr_dup(url);
+      r->alturl = rstr_dup(alturl);
+      r->w      = w;
+      r->scope  = glw_scope_retain(scope);
+      r->gcv    = gcv;
 
       TAILQ_INSERT_TAIL(&gr->gr_view_load_requests, r, link);
 
@@ -470,9 +452,7 @@ glw_view_create(glw_root_t *gr, rstr_t *url, rstr_t *alturl, glw_t *parent,
     LIST_INSERT_HEAD(&gr->gr_views, gcv, gcv_link);
   }
 
-  eval_loaded_view(gr, gcv, (glw_view_t *)w,
-                   prop, prop_parent, args, prop_clone, prop_core);
-
+  eval_loaded_view(gr, gcv, (glw_view_t *)w, scope);
   return w;
 }
 

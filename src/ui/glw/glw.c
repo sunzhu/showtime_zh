@@ -38,7 +38,7 @@
 
 #include "api/screenshot.h"
 
-
+#include "fileaccess/fileaccess.h"
 
 static void glw_focus_init_widget(glw_t *w, float weight);
 static void glw_focus_leave(glw_t *w);
@@ -200,6 +200,52 @@ glw_init2(glw_root_t *gr, int flags)
 }
 
 
+typedef struct skin_resolver {
+  fa_resolver_t super;
+  char *path;
+
+} skin_resolver_t;
+
+
+/**
+ *
+ */
+static void
+skin_resolver_cleanup(fa_resolver_t *super)
+{
+  skin_resolver_t *sr = (skin_resolver_t *)super;
+  free(sr->path);
+}
+
+
+/**
+ *
+ */
+static const char *
+skin_resolver_vpath(fa_resolver_t *super, const char *proto)
+{
+  skin_resolver_t *sr = (skin_resolver_t *)super;
+  if(!strcmp(proto, "skin"))
+    return sr->path;
+  return NULL;
+}
+
+
+
+/**
+ *
+ */
+static fa_resolver_t *
+create_skin_resolver(const char *skin)
+{
+  skin_resolver_t *sr = calloc(1, sizeof(skin_resolver_t));
+  sr->path = strdup(skin);
+  atomic_set(&sr->super.far_refcount, 1);
+  sr->super.far_cleanup = skin_resolver_cleanup;
+  sr->super.far_vpath = skin_resolver_vpath;
+  return &sr->super;
+}
+
 /**
  *
  */
@@ -245,18 +291,14 @@ glw_init4(glw_root_t *gr,
   gr->gr_user_underscan_h = INT32_MIN;
   gr->gr_user_underscan_v = INT32_MIN;
 
-  gr->gr_skin = strdup(skin);
-
-  gr->gr_vpaths[0] = "skin";
-  gr->gr_vpaths[1] = gr->gr_skin;
-  gr->gr_vpaths[2] = NULL;
+  gr->gr_fa_resolver = create_skin_resolver(skin);
 
   gr->gr_font_domain = freetype_get_context();
 
   glw_text_bitmap_init(gr);
 
   prop_setv(gr->gr_prop_ui, "skin", "path", NULL,
-            PROP_SET_STRING, gr->gr_skin);
+            PROP_SET_STRING, skin);
 
   gr->gr_pointer_visible    = prop_create(gr->gr_prop_ui, "pointerVisible");
   gr->gr_screensaver_active = prop_create(gr->gr_prop_ui, "screensaverActive");
@@ -368,7 +410,7 @@ glw_fini(glw_root_t *gr)
   free(gr->gr_render_jobs);
   free(gr->gr_render_order);
   free(gr->gr_vertex_buffer);
-  free(gr->gr_skin);
+  far_release(gr->gr_fa_resolver);
   rstr_release(gr->gr_pending_focus);
 }
 
@@ -406,17 +448,19 @@ glw_unload_universe(glw_root_t *gr)
 void
 glw_load_universe(glw_root_t *gr)
 {
-  prop_t *page = prop_create(gr->gr_prop_ui, "root");
   glw_unload_universe(gr);
 
   rstr_t *universe = rstr_alloc("skin://universe.view");
 
-  gr->gr_universe = glw_view_create(gr,
-                                    universe, NULL, NULL, page,
-                                    NULL, NULL, NULL, gr->gr_prop_core,
+  glw_scope_t *scope = glw_scope_create(gr->gr_fa_resolver);
+
+  scope->gs_roots[GLW_ROOT_CORE].p = prop_ref_inc(gr->gr_prop_core);
+
+  gr->gr_universe = glw_view_create(gr, universe, NULL, NULL, scope,
                                     NULL, 0);
 
   rstr_release(universe);
+  glw_scope_release(scope);
 }
 
 /**
@@ -484,7 +528,7 @@ glw_render_zoffset(glw_t *w, const glw_rctx_t *rc)
 glw_t *
 glw_create(glw_root_t *gr, const glw_class_t *class,
            glw_t *parent, glw_t *before, prop_t *originator,
-           rstr_t *file, int line)
+           glw_scope_t *scope, rstr_t *file, int line)
 {
   glw_t *w;
 
@@ -498,10 +542,9 @@ glw_create(glw_root_t *gr, const glw_class_t *class,
   w->glw_refcnt = 1;
   w->glw_alignment = class->gc_default_alignment;
   w->glw_flags2 = GLW2_ENABLED | GLW2_NAV_FOCUSABLE | GLW2_CURSOR;
-#ifdef DEBUG
   w->glw_file = rstr_dup(file);
   w->glw_line = line;
-#endif
+
   if(likely(parent != NULL))
     w->glw_styles = glw_styleset_retain(parent->glw_styles);
 
@@ -525,6 +568,8 @@ glw_create(glw_root_t *gr, const glw_class_t *class,
 
     glw_signal0(parent, GLW_SIGNAL_CHILD_CREATED, w);
   }
+
+  w->glw_scope = glw_scope_retain(scope);
 
   if(class->gc_ctor != NULL)
     class->gc_ctor(w);
@@ -721,15 +766,14 @@ glw_post_scene(glw_root_t *gr)
 void
 glw_unref(glw_t *w)
 {
-  if(w->glw_refcnt == 1) {
-    assert(w->glw_clone == NULL);
-#ifdef DEBUG
-    rstr_release(w->glw_file);
-#endif
-    free(w);
-  }
-  else
+  if(w->glw_refcnt > 1) {
     w->glw_refcnt--;
+    return;
+  }
+  assert(w->glw_clone == NULL);
+  rstr_release(w->glw_file);
+  glw_scope_release(w->glw_scope);
+  free(w);
 }
 
 
@@ -1624,7 +1668,8 @@ glw_focus_open_path_close_all_other(glw_t *w)
     if(c == w)
       continue;
     c->glw_flags |= GLW_FOCUS_BLOCKED;
-    if(c->glw_flags & GLW_IN_FOCUS_PATH) {
+
+    if(c->glw_flags & GLW_IN_FOCUS_PATH && p->glw_focused == c) {
       do_clear = 1;
     }
   }
@@ -1837,8 +1882,9 @@ glw_event_to_widget(glw_t *w, event_t *e)
 
   // First, descend in the view hierarchy
 
-  GLW_TRACE("Event '%s' route start at widget '%s'",
-            event_sprint(e), glw_get_name(w));
+  GLW_TRACE("Event '%s' route start at widget '%s'%s",
+            event_sprint(e), glw_get_name(w),
+            gr->gr_current_focus == NULL ? ", Nothing is focused" : "");
 
   while(1) {
     if(!glw_path_in_focus(w))
@@ -2726,12 +2772,8 @@ glw_get_name(glw_t *w)
 
   snprintf(buf, sizeof(buf), "%s @ %s:%d%s%s",
            gc->gc_name,
-#ifdef DEBUG
            rstr_get(w->glw_file),
            w->glw_line,
-#else
-           "?", 0,
-#endif
            extra ? " " : "",
            extra ? extra : "");
   return buf;
@@ -2761,12 +2803,8 @@ glw_get_path_r(char *buf, size_t buflen, glw_t *w)
 	   ident ? "(" : "",
 	   ident ?: "",
 	   ident ? ")" : "",
-#ifdef DEBUG
            rstr_get(w->glw_file),
            w->glw_line
-#else
-           "?", 0
-#endif
            );
 }
 

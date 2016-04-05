@@ -39,15 +39,11 @@ respond_error(glw_t *w, const token_t *t, const char *name)
     const glw_class_t *gc = w->glw_class;
     TRACE(TRACE_DEBUG, "GLW",
           "Widget %s "
-#ifdef DEBUG
           "(%s:%d) "
-#endif
           "assignment at %s:%d does not respond "
           "to attribute %s",
           gc->gc_name,
-#ifdef DEBUG
           rstr_get(w->glw_file), w->glw_line,
-#endif
           rstr_get(t->file), t->line, name);
 }
 
@@ -1363,8 +1359,6 @@ static const token_attrib_t attribtab[] = {
   {"effect",          set_transition_effect,  0},
 
   {"args",            set_args},
-  {"parent",          set_propref, GLW_ATTRIB_PROP_PARENT, NULL,
-   GLW_ATTRIB_FLAG_NO_SUBSCRIPTION},
   {"self",            set_propref, GLW_ATTRIB_PROP_SELF, NULL,
    GLW_ATTRIB_FLAG_NO_SUBSCRIPTION},
   {"itemModel",       set_propref, GLW_ATTRIB_PROP_ITEM_MODEL, NULL,

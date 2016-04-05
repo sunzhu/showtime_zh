@@ -66,6 +66,12 @@ typedef struct fa_protocol {
   void (*fap_close)(fa_handle_t *fh);
 
   /**
+   * Park filehandle, used by fa_buffer to park file handle which can
+   * later be reused
+   */
+  void (*fap_park)(fa_handle_t *fh);
+
+  /**
    * Read from file. Same semantics as POSIX read(2)
    */
   int (*fap_read)(fa_handle_t *fh, void *buf, size_t size);
@@ -239,7 +245,7 @@ typedef struct fa_protocol {
 
 
 char *fa_resolve_proto(const char *url, fa_protocol_t **p,
-                       const char **vpaths, char *errbuf, size_t errsize);
+                       fa_resolver_t *resolvers, char *errbuf, size_t errsize);
 
 void fap_release(fa_protocol_t *fap);
 
