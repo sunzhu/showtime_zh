@@ -145,14 +145,12 @@ fa_imageloader_buf(buf_t *buf, char *errbuf, size_t errlen)
  * Faster than open+read+close.
  */
 static image_t *
-fa_imageloader2(const char *url, fa_resolver_t *far,
-		char *errbuf, size_t errlen, int *cache_control,
-                cancellable_t *c)
+fa_imageloader2(const char *url, char *errbuf, size_t errlen,
+                int *cache_control, cancellable_t *c)
 {
   buf_t *buf;
 
   buf = fa_load(url,
-                FA_LOAD_RESOLVER(far),
                 FA_LOAD_ERRBUF(errbuf, errlen),
                 FA_LOAD_CACHE_CONTROL(cache_control),
                 FA_LOAD_CANCELLABLE(c),
@@ -184,8 +182,9 @@ jpeginfo_reader(void *handle, void *buf, int64_t offset, size_t size)
  */
 image_t *
 fa_imageloader(const char *url, const struct image_meta *im,
-	       fa_resolver_t *far, char *errbuf, size_t errlen,
-	       int *cache_control, cancellable_t *c)
+	       char *errbuf, size_t errlen,
+	       int *cache_control, cancellable_t *c,
+               backend_t *be)
 {
   uint8_t p[16];
   int r;
@@ -200,13 +199,13 @@ fa_imageloader(const char *url, const struct image_meta *im,
 #endif
 
   if(!im->im_want_thumb)
-    return fa_imageloader2(url, far, errbuf, errlen, cache_control, c);
+    return fa_imageloader2(url, errbuf, errlen, cache_control, c);
 
   fa_open_extra_t foe = {
     .foe_cancellable = c
   };
 
-  if((fh = fa_open_resolver(url, far, errbuf, errlen,
+  if((fh = fa_open_resolver(url, errbuf, errlen,
                             FA_BUFFERED_SMALL, &foe)) == NULL)
     return NULL;
 
@@ -461,10 +460,12 @@ fa_image_from_video2(const char *url, const image_meta_t *im,
     if(fh == NULL)
       return NULL;
 
+    int strategy = fa_libav_get_strategy_for_file(fh);
+
     AVIOContext *avio = fa_libav_reopen(fh, 0);
 
-    if((fctx = fa_libav_open_format(avio, url, NULL, 0, NULL, 0, 0,
-				    0)) == NULL) {
+    if((fctx = fa_libav_open_format(avio, url, NULL, 0, NULL,
+                                    strategy)) == NULL) {
       fa_libav_close(avio);
       snprintf(errbuf, errlen, "Unable to open format");
       return NULL;
