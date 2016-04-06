@@ -33,18 +33,46 @@
 /**
  *
  */
+rstr_t *
+glw_resolve_path(rstr_t *filename, rstr_t *at, glw_root_t *gr, int *flags)
+{
+  if(filename == NULL)
+    return NULL;
+
+  const char *x = mystrbegins(rstr_get(filename), "skin://");
+  if(x != NULL) {
+    char buf[PATH_MAX];
+    fa_pathjoin(buf, sizeof(buf), gr->gr_skin, x);
+    if(flags != NULL)
+      *flags = GLW_SOURCE_FLAG_ALWAYS_LOCAL;
+    return rstr_alloc(buf);
+  }
+
+  if(flags != NULL) {
+    const char *x = mystrbegins(rstr_get(filename), "dataroot://");
+    if(x != NULL) {
+      *flags = GLW_SOURCE_FLAG_ALWAYS_LOCAL;
+    }
+  }
+
+  return fa_absolute_path(filename, at);
+}
+
+
+
+
+/**
+ *
+ */
 static void
 respond_error(glw_t *w, const token_t *t, const char *name)
 {
-    const glw_class_t *gc = w->glw_class;
-    TRACE(TRACE_DEBUG, "GLW",
-          "Widget %s "
-          "(%s:%d) "
-          "assignment at %s:%d does not respond "
-          "to attribute %s",
-          gc->gc_name,
-          rstr_get(w->glw_file), w->glw_line,
-          rstr_get(t->file), t->line, name);
+  const glw_class_t *gc = w->glw_class;
+  TRACE(TRACE_DEBUG, "GLW", "Widget %s (%s:%d) "
+        "assignment at %s:%d does not respond to attribute %s",
+        gc->gc_name,
+        rstr_get(w->glw_file), w->glw_line,
+        rstr_get(t->file), t->line, name);
 }
 
 
@@ -204,9 +232,9 @@ set_font(glw_view_eval_context_t *ec, const token_attrib_t *a,
   else
     str = NULL;
 
-  str = str ? fa_absolute_path(str, t->file) : NULL;
-
   glw_t *w = ec->w;
+
+  str = glw_resolve_path(str, t->file, w->glw_root, NULL);
 
   if(w->glw_class->gc_set_rstr != NULL)
     w->glw_class->gc_set_rstr(w, GLW_ATTRIB_FONT, str, NULL);
@@ -230,10 +258,12 @@ set_fs(glw_view_eval_context_t *ec, const token_attrib_t *a,
   else
     str = NULL;
 
-  str = str ? fa_absolute_path(str, t->file) : NULL;
+  glw_t *w = ec->w;
 
-  if(ec->w->glw_class->gc_set_fs != NULL)
-    ec->w->glw_class->gc_set_fs(ec->w, str);
+  str = glw_resolve_path(str, t->file, w->glw_root, NULL);
+
+  if(w->glw_class->gc_set_fs != NULL)
+    w->glw_class->gc_set_fs(ec->w, str);
   rstr_release(str);
   return 0;
 }
@@ -1101,7 +1131,7 @@ set_alt(glw_view_eval_context_t *ec, const token_attrib_t *a,
     break;
   }
 
-  r = fa_absolute_path(r, t->file);
+  r = glw_resolve_path(r, t->file, w->glw_root, NULL);
 
   if(w->glw_class->gc_set_alt != NULL)
     w->glw_class->gc_set_alt(w, r);
@@ -1124,7 +1154,7 @@ set_source(glw_view_eval_context_t *ec, const token_attrib_t *a,
   switch(t->type) {
   default:
     if(w->glw_class->gc_set_source != NULL)
-      w->glw_class->gc_set_source(w, NULL, NULL);
+      w->glw_class->gc_set_source(w, NULL, 0, NULL);
     return 0;
 
   case TOKEN_VECTOR:
@@ -1140,10 +1170,11 @@ set_source(glw_view_eval_context_t *ec, const token_attrib_t *a,
     break;
   }
 
-  r = fa_absolute_path(r, t->file);
+  int flags = 0;
+  r = glw_resolve_path(r, t->file, w->glw_root, &flags);
 
   if(w->glw_class->gc_set_source != NULL)
-    w->glw_class->gc_set_source(w, r, NULL);
+    w->glw_class->gc_set_source(w, r, flags, NULL);
 
   glw_need_refresh(w->glw_root, 0);
   rstr_release(r);

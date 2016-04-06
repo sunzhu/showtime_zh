@@ -211,8 +211,9 @@ prune_image_cache(void)
  */
 image_t *
 backend_imageloader(rstr_t *url0, const image_meta_t *im0,
-		    struct fa_resolver *far, char *errbuf, size_t errlen,
-		    int *cache_control, cancellable_t *c)
+		    char *errbuf, size_t errlen,
+		    int *cache_control, cancellable_t *c,
+                    backend_t *be)
 {
   const char *url = rstr_get(url0);
   htsmsg_t *m = NULL;
@@ -328,15 +329,24 @@ backend_imageloader(rstr_t *url0, const image_meta_t *im0,
   hts_mutex_unlock(&imageloader_mutex);
 
   if(img == NULL) {
-    backend_t *nb = backend_canhandle(url);
-    if(nb == NULL || nb->be_imageloader == NULL) {
-      snprintf(errbuf, errlen, "No backend for URL");
-      img = NULL;
-    } else {
-      img = nb->be_imageloader(url, &im, far, errbuf,
-                               errlen, cache_control, c);
+
+    if(be != NULL) {
+      img = be->be_imageloader(url, &im, errbuf, errlen,
+                               cache_control, c, be);
+    }
+
+    if(img == NULL) {
+      be = backend_canhandle(url);
+      if(be == NULL || be->be_imageloader == NULL) {
+        snprintf(errbuf, errlen, "No backend for URL");
+        img = NULL;
+      } else {
+        img = be->be_imageloader(url, &im, errbuf, errlen,
+                                 cache_control, c, be);
+      }
     }
   }
+
   if(cancellable_is_cancelled(c)) {
     snprintf(errbuf, errlen, "Cancelled");
     if(img != NOT_MODIFIED)
@@ -546,5 +556,26 @@ backend_search(prop_t *model, const char *url, prop_t *loading)
   LIST_FOREACH(be, &backends, be_global_link)
     if(be->be_search != NULL)
       be->be_search(model, url, loading);
+}
+
+
+
+/**
+ *
+ */
+backend_t *
+backend_retain(backend_t *be)
+{
+  if(be != NULL)
+    atomic_inc(&be->be_refcount);
+  return be;
+}
+
+void backend_release(backend_t *be)
+{
+  if(be == NULL || atomic_dec(&be->be_refcount))
+    return;
+
+  be->be_destroy(be);
 }
 

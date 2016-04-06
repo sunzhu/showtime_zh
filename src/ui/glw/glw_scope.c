@@ -20,7 +20,7 @@
 
 
 #include "glw.h"
-#include "fileaccess/fileaccess.h"
+#include "backend/backend.h"
 
 /**
  *
@@ -31,11 +31,12 @@ glw_scope_dup(const glw_scope_t *src, int retain_mask)
   glw_scope_t *o = malloc(sizeof(glw_scope_t));
 
   memcpy(o, src, sizeof(glw_scope_t));
+  o->gs_backend = backend_retain(src->gs_backend);
+
   for(int i = 0; i < src->gs_num_roots; i++) {
     if(!((1 << i) & retain_mask))
       o->gs_roots[i].p = prop_ref_inc(o->gs_roots[i].p);
   }
-  o->gs_far = far_retain(src->gs_far);
   o->gs_refcount = 1;
   return o;
 }
@@ -45,11 +46,9 @@ glw_scope_dup(const glw_scope_t *src, int retain_mask)
  *
  */
 glw_scope_t *
-glw_scope_create(fa_resolver_t *far)
+glw_scope_create(void)
 {
   glw_scope_t *o = calloc(1, sizeof(glw_scope_t));
-
-  o->gs_far = far_retain(far);
 
   o->gs_roots[GLW_ROOT_SELF].name   = "self";
   o->gs_roots[GLW_ROOT_PARENT].name = "parent";
@@ -71,7 +70,7 @@ glw_scope_release(glw_scope_t *gs)
   if(gs->gs_refcount)
     return;
 
-  far_release(gs->gs_far);
+  backend_release(gs->gs_backend);
 
   for(int i = 0; i < gs->gs_num_roots; i++)
     prop_ref_dec(gs->gs_roots[i].p);

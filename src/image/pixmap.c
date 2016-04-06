@@ -1059,8 +1059,9 @@ main(int argc, char **argv)
  */
 static image_t *
 be_pixmap_loader(const char *url, const image_meta_t *im,
-                 struct fa_resolver *far, char *errbuf, size_t errlen,
-                 int *cache_control, cancellable_t *c)
+                 char *errbuf, size_t errlen,
+                 int *cache_control, cancellable_t *c,
+                 backend_t *be)
 {
   image_t *img;
   int w = im->im_req_width, h = im->im_req_height;
