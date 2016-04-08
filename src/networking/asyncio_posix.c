@@ -665,6 +665,23 @@ asyncio_thread(void *aux)
 }
 
 
+static void
+asyncio_do_shutdown(void *aux)
+{
+  fini_group(INIT_GROUP_ASYNCIO);
+}
+
+
+/**
+ *
+ */
+static void
+asyncio_shutdown(void *opaque, int retcode)
+{
+  asyncio_run_task(asyncio_do_shutdown, NULL);
+}
+
+
 /**
  *
  */
@@ -691,6 +708,8 @@ asyncio_start(void)
 {
   hts_thread_create_detached("asyncio", asyncio_thread,
                              NULL, THREAD_PRIO_MODEL);
+
+  shutdown_hook_add(asyncio_shutdown, NULL, 1);
 }
 
 /**
@@ -1392,11 +1411,13 @@ struct ip_mreq {
  *
  */
 int
-asyncio_udp_add_membership(asyncio_fd_t *af, const net_addr_t *group)
+asyncio_udp_add_membership(asyncio_fd_t *af, const net_addr_t *group,
+                           const net_addr_t *interface)
 {
-  struct ip_mreq imr;
-  memset(&imr, 0, sizeof(imr));
+  struct ip_mreq imr = {};
   memcpy(&imr.imr_multiaddr.s_addr, group->na_addr, 4);
+  if(interface != NULL)
+    memcpy(&imr.imr_interface.s_addr, interface->na_addr, 4);
   return setsockopt(af->af_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &imr,
                     sizeof(struct ip_mreq));
 }

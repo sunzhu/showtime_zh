@@ -37,6 +37,7 @@
 #include "fileaccess/fileaccess.h"
 #include "glw_text_bitmap.h"
 #include "prop/prop_window.h"
+#include "glw_texture.h"
 
 LIST_HEAD(clone_list, glw_clone);
 TAILQ_HEAD(vectorizer_element_queue, vectorizer_element);
@@ -2870,6 +2871,9 @@ glwf_coreAttach_dtor(glw_root_t *gr, struct token *self)
 {
   if(self->t_extra != NULL)
     prop_proxy_close(self->t_extra);
+
+  // Flush all textures which may have references to backend
+  glw_tex_flush_all(gr);
 }
 
 
@@ -2890,8 +2894,7 @@ glwf_coreAttach(glw_view_eval_context_t *ec, struct token *self,
     return -1;
 
   if(a1->type != TOKEN_RSTRING)
-    return glw_view_seterr(ec->ei, self,
-                           "coreAttach: Frist arg is not a string");
+    return 0;
 
   if((a2 = resolve_property_name2(ec, a2)) == NULL)
     return -1;
@@ -2903,6 +2906,8 @@ glwf_coreAttach(glw_view_eval_context_t *ec, struct token *self,
 
   if(self->t_extra == NULL) {
     self->t_extra = prop_proxy_connect(rstr_get(a1->t_rstring), a2->t_prop);
+  } else {
+    return 0;
   }
 
   n = *ec;
