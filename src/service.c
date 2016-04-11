@@ -58,7 +58,7 @@ static struct strtab status_tab[] = {
 static struct strtab origin_tab[] = {
 
   { "system",     SVC_ORIGIN_SYSTEM },
-  { "bookmark",   SVC_ORIGIN_BOOKMARK }, 
+  { "bookmark",   SVC_ORIGIN_BOOKMARK },
   { "discovered", SVC_ORIGIN_DISCOVERED },
   { "app",        SVC_ORIGIN_APP },
   { "media",      SVC_ORIGIN_MEDIA },
@@ -78,7 +78,7 @@ static void *service_probe_loop(void *aux);
 
 
 /**
- * 
+ *
  *  $global.services. ..
  *
  *     all - All services
@@ -123,7 +123,7 @@ service_init(void)
 
   pnf = prop_nf_create(enabled, all_services, NULL, 0);
   prop_nf_pred_int_add(pnf, "node.enabled",
-		       PROP_NF_CMP_EQ, 0, NULL, 
+		       PROP_NF_CMP_EQ, 0, NULL,
 		       PROP_NF_MODE_EXCLUDE);
 
   // $global.service.stable
@@ -132,7 +132,7 @@ service_init(void)
 
   pnf = prop_nf_create(tmp, all_services, NULL, 0);
   prop_nf_pred_int_add(pnf, "node.enabled",
-		       PROP_NF_CMP_EQ, 0, NULL, 
+		       PROP_NF_CMP_EQ, 0, NULL,
 		       PROP_NF_MODE_EXCLUDE);
 
   prop_t *stable = prop_create(gs, "stable");
@@ -145,7 +145,7 @@ service_init(void)
   pnf = prop_nf_create(discovered_nodes, all_services, NULL, 0);
 
   prop_nf_pred_str_add(pnf, "node.origin",
-		       PROP_NF_CMP_NEQ, "discovered", NULL, 
+		       PROP_NF_CMP_NEQ, "discovered", NULL,
 		       PROP_NF_MODE_EXCLUDE);
 }
 
@@ -153,7 +153,7 @@ service_init(void)
 /**
  *
  */
-void 
+void
 service_destroy(service_t *s)
 {
   hts_mutex_lock(&service_mutex);
@@ -161,22 +161,15 @@ service_destroy(service_t *s)
   free(s->s_url);
   free(s->s_title);
 
-  free(s->s_settings_path);
-
-  if(s->s_settings_store != NULL)
-    htsmsg_release(s->s_settings_store);
-
   if(s->s_setting_enabled != NULL)
     setting_destroy(s->s_setting_enabled);
   if(s->s_setting_title != NULL)
     setting_destroy(s->s_setting_title);
   if(s->s_setting_type != NULL)
     setting_destroy(s->s_setting_type);
-  if(s->s_setting_vfs != NULL)
-    setting_destroy(s->s_setting_vfs);
 
   prop_destroy(s->s_settings);
-  
+
 
 
   LIST_REMOVE(s, s_link);
@@ -264,7 +257,7 @@ service_create0(const char *id,
 
   if(prop_set_parent(s->s_root, all_services))
     abort();
-  
+
   hts_mutex_lock(&service_mutex);
   LIST_INSERT_HEAD(&services, s, s_link);
   s->s_need_probe = s->s_do_probe = probe;
@@ -309,18 +302,6 @@ service_createp(const char *id,
 }
 
 
-
-/**
- *
- */
-static void
-service_settings_saver(void *opaque, htsmsg_t *msg)
-{
-  service_t *s = opaque;
-  htsmsg_store_save(msg, s->s_settings_path);
-}
-
-
 /**
  *
  */
@@ -332,8 +313,7 @@ service_create_managed(const char *id0,
 		       const char *icon,
 		       int probe,
 		       int enabled,
-		       service_origin_t origin,
-		       const char *description)
+		       service_origin_t origin)
 {
 
   char *id = mystrdupa(id0);
@@ -343,27 +323,21 @@ service_create_managed(const char *id0,
 				 icon, probe, enabled, origin);
 
   s->s_title = strdup(title);
-  
-  char tmp[100];
 
-  snprintf(tmp, sizeof(tmp), "managed_service2/%s", id);
+  char store[100];
 
-  s->s_settings_path = strdup(tmp);
-  s->s_settings_store = htsmsg_store_load(tmp) ?: htsmsg_create_map();
+  snprintf(store, sizeof(store), "managed_service2/%s", id);
 
-  s->s_settings = settings_add_dir_cstr(gconf.settings_sd,
-					title, type, icon,
-					description, NULL);
+  s->s_settings = settings_add_dir(gconf.settings_sd,
+                                   prop_create(s->s_root, "title"),
+                                   type, icon, NULL, NULL);
 
   s->s_setting_enabled =
     setting_create(SETTING_BOOL, s->s_settings, SETTINGS_INITIAL_UPDATE,
 		   SETTING_TITLE(_p("Enabled on home screen")),
 		   SETTING_VALUE(enabled),
 		   SETTING_WRITE_PROP(prop_create(s->s_root, "enabled")),
-		   SETTING_HTSMSG_CUSTOM_SAVER("enabled",
-					       s->s_settings_store,
-					       service_settings_saver,
-					       s),
+                   SETTING_STORE(store, "enabled"),
 		   NULL);
 
   s->s_setting_title =
@@ -372,10 +346,7 @@ service_create_managed(const char *id0,
 		   SETTING_TITLE(_p("Name")),
 		   SETTING_VALUE(title),
 		   SETTING_WRITE_PROP(prop_create(s->s_root, "title")),
-		   SETTING_HTSMSG_CUSTOM_SAVER("title",
-					       s->s_settings_store,
-					       service_settings_saver,
-					       s),
+                   SETTING_STORE(store, "title"),
 		   NULL);
 
 
@@ -384,11 +355,9 @@ service_create_managed(const char *id0,
                      SETTING_TITLE(_p("Type")),
 		     SETTING_VALUE(type),
 		     SETTING_WRITE_PROP(prop_create(s->s_root, "type")),
-                     SETTING_HTSMSG_CUSTOM_SAVER("type",
-                                                 s->s_settings_store,
-                                                 service_settings_saver,
-                                                 s),
+                     SETTING_STORE(store, "type"),
                      NULL);
+
   return s;
 }
 
@@ -416,10 +385,14 @@ service_get_statustxt_prop(service_t *s)
 /**
  *
  */
-void 
+void
 service_set_type(service_t *s, rstr_t *type)
 {
-  prop_set_rstring(s->s_prop_type, type);
+  if(s->s_setting_type != NULL) {
+    // TODO, propagate thru setting
+  } else {
+    prop_set_rstring(s->s_prop_type, type);
+  }
 }
 
 
@@ -429,7 +402,11 @@ service_set_type(service_t *s, rstr_t *type)
 void
 service_set_title(service_t *s, rstr_t *title)
 {
-  prop_set_rstring(prop_create(s->s_root, "title"), title);
+  if(s->s_setting_title != NULL) {
+    // TODO, propagate thru setting
+  } else {
+    prop_set(s->s_root, "title", PROP_SET_RSTRING, title);
+  }
 }
 
 
@@ -439,7 +416,7 @@ service_set_title(service_t *s, rstr_t *title)
 void
 service_set_icon(service_t *s, rstr_t *icon)
 {
-  prop_set_rstring(prop_create(s->s_root, "icon"), icon);
+  prop_set(s->s_root, "icon", PROP_SET_RSTRING, icon);
 }
 
 
@@ -449,7 +426,11 @@ service_set_icon(service_t *s, rstr_t *icon)
 void
 service_set_enabled(service_t *s, int v)
 {
-  prop_set_int(prop_create(s->s_root, "enabled"), v);
+  if(s->s_setting_enabled != NULL) {
+    // TODO, propagate thru setting
+  } else {
+    prop_set(s->s_root, "enabled", PROP_SET_INT, v);
+  }
 }
 
 
@@ -459,7 +440,7 @@ service_set_enabled(service_t *s, int v)
 void
 service_set_url(service_t *s, rstr_t *url)
 {
-  prop_set_rstring(prop_create(s->s_root, "url"), url);
+  prop_set(s->s_root, "url", PROP_SET_RSTRING, url);
 
   hts_mutex_lock(&service_mutex);
   seturl(s, rstr_get(url));
@@ -492,7 +473,7 @@ service_probe_loop(void *aux)
   hts_mutex_lock(&service_mutex);
 
   while(1) {
-    
+
     LIST_FOREACH(s, &services, s_link) {
       if(s->s_need_probe)
 	break;
