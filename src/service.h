@@ -48,23 +48,15 @@ typedef struct service {
   int s_do_probe;
   int s_need_probe;
 
-  /** 
+  /**
    * Stuff for, so called, managed service follows
    */
-
-  char *s_settings_path;
-  struct htsmsg *s_settings_store;
 
   prop_t *s_settings;
 
   struct setting *s_setting_enabled;
-
   struct setting *s_setting_title;
   struct setting *s_setting_type;
-  struct setting *s_setting_vfs;
-
-  int s_vfs_id;
-
 
 } service_t;
 
@@ -124,8 +116,7 @@ service_t *service_create_managed(const char *id,
 				  const char *icon,
 				  int probe,
 				  int enabled,
-				  service_origin_t origin,
-				  const char *description);
+				  service_origin_t origin);
 
 void service_set_type(service_t *svc, rstr_t *type);
 

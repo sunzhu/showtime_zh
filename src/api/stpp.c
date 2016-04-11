@@ -41,6 +41,10 @@
 #include "usage.h"
 #include "settings.h"
 
+static int stpp_controller = 1;
+static int stpp_controllee = 1;
+
+
 RB_HEAD(stpp_subscription_tree, stpp_subscription);
 RB_HEAD(stpp_prop_tree, stpp_prop);
 LIST_HEAD(stpp_prop_list, stpp_prop);
@@ -1202,6 +1206,9 @@ stpp_input(http_connection_t *hc, int opcode,
 static int
 stpp_init(http_connection_t *hc)
 {
+  if(!stpp_controllee)
+    return 403;
+
   stpp_t *stpp = calloc(1, sizeof(stpp_t));
   stpp->stpp_hc = hc;
   http_set_opaque(hc, stpp);
@@ -1284,7 +1291,6 @@ static int
 be_stpp_open(prop_t *page, const char *url, int sync)
 {
   prop_t *model  = NULL;
-  url += strlen("stpp:");
   /*
   if(!strcmp(url, "browser")) {
     usage_page_open(sync, "STPP Browse");
@@ -1303,14 +1309,14 @@ be_stpp_open(prop_t *page, const char *url, int sync)
     prop_ref_dec(model);
 
   } else */
-  if(!strncmp(url, "url:", 4)) {
+  if(!strncmp(url, "stpp://", 7)) {
     model = prop_create_r(page, "model");
-    prop_set(model, "remoteurl", PROP_SET_STRING, url + 4);
+    prop_set(model, "remoteurl", PROP_SET_STRING, url);
 
-  } if(!strncmp(url, "id:", 3)) {
+  } if(!strncmp(url + 5, "id:", 3)) {
     uint8_t id[16];
-
-    if(hex2bin(id, sizeof(id), url + 3) != sizeof(id)) {
+    url += 8;
+    if(hex2bin(id, sizeof(id), url) != sizeof(id)) {
       nav_open_error(page, "Bad URL");
       return 0;
     }
@@ -1325,16 +1331,18 @@ be_stpp_open(prop_t *page, const char *url, int sync)
     if(sc == NULL) {
       nav_open_errorf(page, _("Device not available"));
     } else {
-      char url[64];
+      char newurl[64];
 
       model = prop_create_r(page, "model");
-      snprintf(url, sizeof(url), "stpp://%d.%d.%d.%d:%d",
+      snprintf(newurl, sizeof(newurl), "stpp://%d.%d.%d.%d:%d",
                sc->sc_addr.na_addr[0],
                sc->sc_addr.na_addr[1],
                sc->sc_addr.na_addr[2],
                sc->sc_addr.na_addr[3],
                sc->sc_addr.na_port);
-      prop_set(model, "remoteurl", PROP_SET_STRING, url);
+      prop_set(model, "remoteurl", PROP_SET_STRING, newurl);
+      TRACE(TRACE_DEBUG, "STPP", "%s (%s) resolved to %s",
+            url, sc->sc_name, newurl);
      }
     hts_mutex_unlock(&stpp_controllees_mutex);
   }
@@ -1390,8 +1398,6 @@ static rstr_t *stpp_system_name;
 #define STPP_ROLE_CONTROLLER 0x1
 #define STPP_ROLE_CONTROLLEE 0x2
 
-static int stpp_controller = 1;
-static int stpp_controllee = 1;
 
 
 typedef struct stppmsg {
@@ -1485,6 +1491,7 @@ stpp_verify_packet(const stppmsg_t *msg, int size)
 {
   return size < sizeof(stppmsg_t) ||
     memcmp(msg->magic, "STPP", 4) ||
+    msg->version != STPP_VERSION ||
     !memcmp(msg->deviceid, stpp_id, sizeof(stpp_id));
 }
 
@@ -1555,8 +1562,7 @@ stpp_udp_input(const stppmsg_t *msg, const net_addr_t *remote_addr)
       bin2hex(url + 8, sizeof(url) - 8, sc->sc_id, sizeof(sc->sc_id));
       sc->sc_service = service_create_managed(url, sc->sc_name, url,
                                               "movian", NULL, 0, 0,
-                                              SVC_ORIGIN_DISCOVERED,
-                                              NULL);
+                                              SVC_ORIGIN_DISCOVERED);
     } else {
       rstr_t *r = rstr_alloc(sc->sc_name);
       service_set_title(sc->sc_service, r);

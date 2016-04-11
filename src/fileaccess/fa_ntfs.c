@@ -194,7 +194,7 @@ ntfs_fsize(fa_handle_t *fh0)
  */
 static int
 ntfs_stat(struct fa_protocol *fap, const char *url, struct fa_stat *fs,
-	  char *errbuf, size_t errsize, int non_interactive)
+	  int flags, char *errbuf, size_t errsize)
 {
   struct stat st;
   if(ps3ntfs_stat(url, &st)) {
@@ -354,8 +354,7 @@ ntfs_periodic(struct callout *c, void *opaque)
       snprintf(url, sizeof(url), "%s://", d->mounts[j].name);
       d->services[j] = service_create_managed(url, d->mounts[j].name,
 					      url, "usb", NULL, 0, 1, 
-					      SVC_ORIGIN_MEDIA,
-					      "External NTFS volume");
+					      SVC_ORIGIN_MEDIA);
     }
   }
   callout_arm(&ntfs_callout, ntfs_periodic, NULL, 1);
