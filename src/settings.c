@@ -47,6 +47,7 @@
 static prop_t *settings_model;
 static prop_t *settings_nodes;
 
+static hts_mutex_t settings_mutex;
 
 /**
  *
@@ -1194,7 +1195,7 @@ setting_reset(setting_t *s)
 
     switch(s->s_type) {
     case SETTING_STRING:
-      prop_set_void(s->s_val);
+      prop_set_void_ex(s->s_val, s->s_sub);
       if(s->s_callback != NULL) {
         prop_callback_string_t *cb = s->s_callback;
         cb(s->s_opaque, rstr_get(s->s_default_str));
@@ -1206,7 +1207,7 @@ setting_reset(setting_t *s)
       break;
     case SETTING_INT:
     case SETTING_BOOL:
-      prop_set_int(s->s_val, s->s_default_int);
+      prop_set_int_ex(s->s_val, s->s_sub, s->s_default_int);
       if(s->s_callback != NULL) {
         prop_callback_int_t *cb = s->s_callback;
         cb(s->s_opaque, s->s_default_int);
@@ -1292,6 +1293,8 @@ settings_init(void)
 {
   prop_t *n, *d;
   prop_t *s1;
+
+  hts_mutex_init(&settings_mutex);
 
   prop_t *settings_root = prop_create(prop_get_global(), "settings");
   settings_model = prop_create(settings_root, "model");
@@ -1451,6 +1454,7 @@ add_dev_bool(const char *title, const char *id, int *val)
 {
   setting_create(SETTING_BOOL, gconf.settings_dev, SETTINGS_INITIAL_UPDATE,
                  SETTING_TITLE_CSTR(title),
+                 SETTING_VALUE(*val),
                  SETTING_WRITE_BOOL(val),
                  SETTING_STORE("dev", id),
                  NULL);
@@ -1523,10 +1527,10 @@ init_dev_settings(void)
 
   add_dev_bool("Always close pages when pressing back",
 	       "navalwaysclose", &gconf.enable_nav_always_close);
-#ifndef PS3
+
   add_dev_bool("Disable HTTP connection reuse",
 	       "nohttpreuse", &gconf.disable_http_reuse);
-#endif
+
 
   if(gconf.arch_dev_opts)
     gconf.arch_dev_opts(&add_dev_bool);
@@ -1630,6 +1634,8 @@ init_dev_settings(void)
 prop_t *
 setting_get_dir(const char *url)
 {
+  prop_t *r = NULL;
+  hts_mutex_lock(&settings_mutex);
   if(!strcmp(url, "settings:tv")) {
     static prop_t *tvsettings;
     if(tvsettings == NULL) {
@@ -1638,7 +1644,8 @@ setting_get_dir(const char *url)
                                     _p("Configure communications with your TV"),
                                     "settings:tv");
     }
-    return tvsettings;
+    r = tvsettings;
   }
-  return NULL;
+  hts_mutex_unlock(&settings_mutex);
+  return r;
 }
