@@ -56,7 +56,6 @@ typedef struct prop_vec {
 
 typedef enum {
   PROP_SET_VOID,
-  PROP_SET_STRING,
   PROP_SET_RSTRING,
   PROP_SET_CSTRING,
   PROP_SET_INT,
@@ -64,7 +63,6 @@ typedef enum {
   PROP_SET_DIR,
   PROP_SET_URI,
   PROP_SET_PROP,
-  PROP_ADOPT_RSTRING,
   PROP_ADD_CHILD,
   PROP_ADD_CHILD_BEFORE,
   PROP_ADD_CHILD_VECTOR,
@@ -74,7 +72,8 @@ typedef enum {
   PROP_MOVE_CHILD,
   PROP_SELECT_CHILD,
   PROP_REQ_NEW_CHILD,
-  PROP_REQ_DELETE_VECTOR,
+  PROP_REQ_DELETE_VECTOR, // Delete list of props, sent to props parent widget
+  PROP_REQ_DELETE,        // Delete this specific property
   PROP_DESTROYED,
   PROP_VALUE_PROP,
   PROP_EXT_EVENT,
@@ -84,6 +83,14 @@ typedef enum {
   PROP_WANT_MORE_CHILDS,
   PROP_SUGGEST_FOCUS,
   PROP_REQ_MOVE_CHILD,
+
+  // These are not real events but only used int prop_set()
+  PROP_SET_STRING,
+  PROP_SET_LINK,
+  PROP_ADOPT_RSTRING,
+
+#define PROP_INVALID_EVENTS PROP_SET_STRING ... PROP_ADOPT_RSTRING
+
 } prop_event_t;
 
 

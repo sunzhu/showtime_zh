@@ -170,7 +170,8 @@ service_destroy(service_t *s)
 
   prop_destroy(s->s_settings);
 
-
+  if(s->s_req_del_sub != NULL)
+    prop_unsubscribe(s->s_req_del_sub);
 
   LIST_REMOVE(s, s_link);
   s->s_zombie = 1;
@@ -208,6 +209,18 @@ seturl(service_t *s, const char *url)
     mystrset(&s->s_url, urlbuf);
   else
     mystrset(&s->s_url, url);
+}
+
+
+/**
+ *
+ */
+static void
+service_req_del_callback(void *opaque, prop_event_t event)
+{
+  service_t *s = opaque;
+  if(event == PROP_REQ_DELETE)
+    setting_set(s->s_setting_enabled, SETTING_BOOL, 0);
 }
 
 
@@ -358,6 +371,17 @@ service_create_managed(const char *id0,
                      SETTING_STORE(store, "type"),
                      NULL);
 
+  prop_set(s->s_root, "deleteText",
+           PROP_SET_LINK, _p("Remove from homepage"));
+
+  hts_mutex_lock(&service_mutex);
+  s->s_req_del_sub =
+    prop_subscribe(0,
+                   PROP_TAG_CALLBACK, service_req_del_callback, s,
+                   PROP_TAG_MUTEX, &service_mutex,
+                   PROP_TAG_ROOT, s->s_root,
+                   NULL);
+  hts_mutex_unlock(&service_mutex);
   return s;
 }
 
@@ -527,8 +551,8 @@ discovered_open_url(prop_t *page, const char *url, int sync)
 
   prop_t *model = prop_create_r(page, "model");
 
-  prop_link(_p("Discovered resources on local network"),
-	    prop_create(prop_create(model, "metadata"), "title"));
+  prop_setv(model, "metadata", "title", NULL,
+            PROP_SET_LINK, _p("Local network"));
 
   prop_set(model, "type",     PROP_SET_STRING, "directory");
 
