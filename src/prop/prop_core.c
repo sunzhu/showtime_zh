@@ -506,14 +506,14 @@ prop_notify_free_payload(prop_notify_t *n)
     prop_vec_release(n->hpn_propv);
     break;
 
-  case PROP_SET_STRING:
+  case PROP_INVALID_EVENTS:
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
   case PROP_WANT_MORE_CHILDS:
   case PROP_HAVE_MORE_CHILDS_YES:
   case PROP_HAVE_MORE_CHILDS_NO:
   case PROP_DESTROYED:
-  case PROP_ADOPT_RSTRING:
   case PROP_VALUE_PROP:
+  case PROP_REQ_DELETE:
     break;
   }
 }
@@ -798,6 +798,7 @@ notify_invoke(prop_sub_t *s, prop_notify_t *n)
     break;
  
   case PROP_DESTROYED:
+  case PROP_REQ_DELETE:
     if(pt != NULL)
       pt(s, n->hpn_event, s, s->hps_user_int);
     else
@@ -849,8 +850,8 @@ notify_invoke(prop_sub_t *s, prop_notify_t *n)
     prop_ref_dec(n->hpn_prop);
     break;
 
-  case PROP_SET_STRING:
-  case PROP_ADOPT_RSTRING:
+  case PROP_INVALID_EVENTS:
+    abort();
     break;
   }
 }
@@ -1413,6 +1414,27 @@ prop_notify_void(prop_sub_t *s)
   n->hpn_event = PROP_SET_VOID;
   n->hpn_prop_extra = NULL;
   prop_courier_enqueue(s, n);
+}
+
+
+/**
+ *
+ */
+static void
+prop_notify_simple(prop_t *p, prop_sub_t *skipme, const char *origin,
+                   prop_event_t e)
+{
+  prop_sub_t *s;
+
+  LIST_FOREACH(s, &p->hp_value_subscriptions, hps_value_prop_link) {
+    if(s == skipme)
+      continue;
+
+    prop_notify_t *n = prop_get_notify(s);
+    n->hpn_event = e;
+    courier_enqueue0(s, n, s->hps_flags & (PROP_SUB_EXPEDITE |
+                                           PROP_SUB_TRACK_DESTROY_EXP));
+  }
 }
 
 
@@ -4643,20 +4665,33 @@ prop_link0(prop_t *src, prop_t *dst, prop_sub_t *skipme, int hard, int debug)
     prop_print_tree0(src, 0, 7);
     printf("\n\n\n");
   }
-
 }
 
 
 /**
  *
  */
-void
-prop_link_ex(prop_t *src, prop_t *dst, prop_sub_t *skipme, int hard, int debug)
+static void
+prop_unlink_exl(prop_t *p, prop_sub_t *skipme)
 {
-  if(src == NULL || dst == NULL)
-    return;
+  assert(p->hp_type != PROP_PROXY);
 
-  hts_mutex_lock(&prop_mutex);
+  if(p->hp_type != PROP_ZOMBIE && p->hp_originator != NULL)
+    prop_unlink0(p, skipme, "prop_unlink()/childs", NULL);
+}
+
+
+/**
+ *
+ */
+static void
+prop_link_exl(prop_t *src, prop_t *dst, prop_sub_t *skipme,
+              int hard, int debug)
+{
+  if(src == NULL) {
+    prop_unlink_exl(dst, skipme);
+    return;
+  }
 
 
   if(src->hp_type == PROP_PROXY && dst->hp_type == PROP_PROXY) {
@@ -4673,7 +4708,21 @@ prop_link_ex(prop_t *src, prop_t *dst, prop_sub_t *skipme, int hard, int debug)
   } else {
     prop_link0(src, dst, skipme, hard, debug);
   }
-  
+}
+
+
+/**
+ *
+ */
+void
+prop_link_ex(prop_t *src, prop_t *dst, prop_sub_t *skipme,
+             int hard, int debug)
+{
+  if(dst == NULL)
+    return;
+
+  hts_mutex_lock(&prop_mutex);
+  prop_link_exl(src, dst, skipme, hard, debug);
   hts_mutex_unlock(&prop_mutex);
 }
 
@@ -4690,17 +4739,7 @@ prop_unlink_ex(prop_t *p, prop_sub_t *skipme)
     return;
 
   hts_mutex_lock(&prop_mutex);
-
-  assert(p->hp_type != PROP_PROXY);
-
-  if(p->hp_type == PROP_ZOMBIE) {
-    hts_mutex_unlock(&prop_mutex);
-    return;
-  }
-
-  if(p->hp_originator != NULL)
-    prop_unlink0(p, skipme, "prop_unlink()/childs", NULL);
-
+  prop_unlink_exl(p, skipme);
   hts_mutex_unlock(&prop_mutex);
 }
 
@@ -4981,10 +5020,18 @@ prop_request_delete(prop_t *c)
   prop_t *p;
   hts_mutex_lock(&prop_mutex);
 
+  if(c->hp_type == PROP_PROXY) {
+
+    hts_mutex_unlock(&prop_mutex);
+    return;
+  }
+
   if(c->hp_type != PROP_ZOMBIE) {
     p = c->hp_parent;
 
-    if(p->hp_type == PROP_DIR) {
+    prop_notify_simple(c, NULL, "prop_req_delete", PROP_REQ_DELETE);
+
+    if(p->hp_type == PROP_DIR) { // Must handle PROP_PROXY here
       prop_vec_t *pv = prop_vec_create(1);
       pv = prop_vec_append(pv, c);
       prop_notify_childv(pv, p, PROP_REQ_DELETE_VECTOR, NULL, NULL);
@@ -5381,6 +5428,9 @@ prop_seti(prop_sub_t *skipme, prop_t *p, va_list ap)
     break;
   case PROP_SET_PROP:
     prop_set_prop_exl(p, skipme, va_arg(ap, prop_t *));
+    break;
+  case PROP_SET_LINK:
+    prop_link_exl(va_arg(ap, prop_t *), p, skipme, 0, 0);
     break;
  default:
    fprintf(stderr, "Unable to handle event: %d\n", ev);

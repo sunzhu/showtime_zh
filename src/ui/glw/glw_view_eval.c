@@ -1737,12 +1737,14 @@ prop_callback_cloner(void *opaque, prop_event_t event, ...)
   case PROP_EXT_EVENT:
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
   case PROP_WANT_MORE_CHILDS:
-  case PROP_SET_STRING:
   case PROP_REQ_MOVE_CHILD:
-  case PROP_ADOPT_RSTRING:
   case PROP_VALUE_PROP:
+  case PROP_REQ_DELETE:
     break;
 
+  case PROP_INVALID_EVENTS:
+    abort();
+    break;
   }
 
   if(t != NULL) {
@@ -1833,6 +1835,7 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
   case PROP_SELECT_CHILD:
   case PROP_REQ_NEW_CHILD:
   case PROP_REQ_DELETE_VECTOR:
+  case PROP_REQ_DELETE:
   case PROP_DESTROYED:
   case PROP_EXT_EVENT:
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
@@ -1840,10 +1843,12 @@ prop_callback_value(void *opaque, prop_event_t event, ...)
   case PROP_HAVE_MORE_CHILDS_NO:
   case PROP_WANT_MORE_CHILDS:
   case PROP_SUGGEST_FOCUS:
-  case PROP_SET_STRING:
   case PROP_REQ_MOVE_CHILD:
-  case PROP_ADOPT_RSTRING:
   case PROP_VALUE_PROP:
+    break;
+
+  case PROP_INVALID_EVENTS:
+    abort();
     break;
   }
 
@@ -1908,6 +1913,7 @@ prop_callback_counter(void *opaque, prop_event_t event, ...)
   case PROP_SELECT_CHILD:
   case PROP_REQ_NEW_CHILD:
   case PROP_REQ_DELETE_VECTOR:
+  case PROP_REQ_DELETE:
   case PROP_DESTROYED:
   case PROP_EXT_EVENT:
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
@@ -1915,11 +1921,14 @@ prop_callback_counter(void *opaque, prop_event_t event, ...)
   case PROP_HAVE_MORE_CHILDS_NO:
   case PROP_WANT_MORE_CHILDS:
   case PROP_SUGGEST_FOCUS:
-  case PROP_SET_STRING:
   case PROP_REQ_MOVE_CHILD:
-  case PROP_ADOPT_RSTRING:
   case PROP_VALUE_PROP:
     break;
+
+  case PROP_INVALID_EVENTS:
+    abort();
+    break;
+
   }
 
   t = prop_callback_alloc_token(gr, gps, TOKEN_INT);
@@ -2002,6 +2011,7 @@ ve_cb(void *opaque, prop_event_t event, ...)
   case PROP_SELECT_CHILD:
   case PROP_REQ_NEW_CHILD:
   case PROP_REQ_DELETE_VECTOR:
+  case PROP_REQ_DELETE:
   case PROP_DESTROYED:
   case PROP_EXT_EVENT:
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
@@ -2009,11 +2019,14 @@ ve_cb(void *opaque, prop_event_t event, ...)
   case PROP_HAVE_MORE_CHILDS_NO:
   case PROP_WANT_MORE_CHILDS:
   case PROP_SUGGEST_FOCUS:
-  case PROP_SET_STRING:
   case PROP_REQ_MOVE_CHILD:
-  case PROP_ADOPT_RSTRING:
   case PROP_VALUE_PROP:
     break;
+
+  case PROP_INVALID_EVENTS:
+    abort();
+    break;
+
   }
 
   if(t != NULL) {
@@ -2316,14 +2329,17 @@ prop_callback_vectorizer(void *opaque, prop_event_t event, ...)
   case PROP_HAVE_MORE_CHILDS_NO:
   case PROP_REQ_NEW_CHILD:
   case PROP_REQ_DELETE_VECTOR:
+  case PROP_REQ_DELETE:
   case PROP_DESTROYED:
   case PROP_EXT_EVENT:
   case PROP_SUBSCRIPTION_MONITOR_ACTIVE:
   case PROP_WANT_MORE_CHILDS:
-  case PROP_SET_STRING:
   case PROP_REQ_MOVE_CHILD:
-  case PROP_ADOPT_RSTRING:
   case PROP_VALUE_PROP:
+    break;
+
+  case PROP_INVALID_EVENTS:
+    abort();
     break;
 
   }
