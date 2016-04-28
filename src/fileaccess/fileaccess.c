@@ -1523,7 +1523,8 @@ fa_load(const char *url, ...)
   loadarg_t *la;
   char **locationptr = NULL;
   int *cache_info_ptr = NULL;
-  int *protocol_code = NULL;
+  int protocol_code = 0;
+  int *protocol_codep = &protocol_code;
 
   va_list ap;
   va_start(ap, url);
@@ -1605,7 +1606,7 @@ fa_load(const char *url, ...)
       break;
 
     case FA_LOAD_TAG_PROTOCOL_CODE:
-      protocol_code = va_arg(ap, int *);
+      protocol_codep = va_arg(ap, int *);
       break;
     default:
       abort();
@@ -1682,7 +1683,7 @@ fa_load(const char *url, ...)
     data2 = fap->fap_load(fap, filename, errbuf, errlen,
 			  &etag, &mtime, &max_age, flags, cb, opaque, c,
                           request_headers, response_headers, locationptr,
-                          protocol_code);
+                          protocol_codep);
 
     fap_release(fap);
     free(filename);
@@ -1700,6 +1701,14 @@ fa_load(const char *url, ...)
       /* We have a cached entry and failed to load the new one.
          Return the cached entry anyway. It must be better than nothing
       */
+      if(*protocol_codep == 401 ||
+         *protocol_codep == 403 ||
+         *protocol_codep == 400) {
+        free(etag);
+        buf_release(buf);
+        return NULL;
+      }
+
       free(etag);
       if(cache_info_ptr != NULL)
         *cache_info_ptr = FA_CACHE_INFO_EXPIRED_FROM_CACHE;
