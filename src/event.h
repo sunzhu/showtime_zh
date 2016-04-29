@@ -183,12 +183,16 @@ TAILQ_HEAD(event_q, event);
 typedef struct event {
   struct prop *e_nav;
   void (*e_dtor)(struct event *e);
+  struct event *(*e_clone)(const struct event *src);
   TAILQ_ENTRY(event) e_link;
   int64_t e_timestamp;
+  float e_screen_x;  // Only valid if EVENT_SCREEN_POSITION is set
+  float e_screen_y;  // Only valid if EVENT_SCREEN_POSITION is set
   atomic_t e_refcount;
   int     e_flags;
-#define EVENT_KEYPRESS 0x1 // Came from user keypress
-#define EVENT_MOUSE    0x2 // Came from mouse input
+#define EVENT_KEYPRESS        0x1 // Came from user keypress
+#define EVENT_MOUSE           0x2 // Came from mouse input
+#define EVENT_SCREEN_POSITION 0x4 // e_screen_[xy] is valid
   event_type_t e_type;
 } event_t;
 
@@ -350,6 +354,10 @@ void event_generic_dtor(event_t *e);
 
 void *event_create(event_type_t type, size_t size);
 
+event_t *event_clone(const event_t *src);
+
+void event_apply_metadata(event_t *dst, const event_t *src);
+
 event_t *event_create_action(action_type_t action);
 
 event_t *event_create_action_multi(const action_type_t *actions,
@@ -365,7 +373,7 @@ void *event_create_int3(event_type_t type, int val1, int val2, int val3);
 
 void event_release(event_t *e);
 
-void event_addref(event_t *e);
+event_t *event_addref(event_t *e); // Rename to event_retain()
 
 event_t *event_create_str(event_type_t et, const char *url);
 

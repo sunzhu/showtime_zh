@@ -41,6 +41,7 @@ event_create(event_type_t type, size_t size)
   e->e_timestamp = arch_get_ts();
   e->e_nav = NULL;
   e->e_dtor = NULL;
+  e->e_clone = NULL;
   atomic_set(&e->e_refcount, 1);
   e->e_flags = 0;
   e->e_type = type;
@@ -76,10 +77,12 @@ event_create_int3(event_type_t type, int v1, int v2, int v3)
 /**
  *
  */
-void
+event_t *
 event_addref(event_t *e)
 {
-  atomic_inc(&e->e_refcount);
+  if(e != NULL)
+    atomic_inc(&e->e_refcount);
+  return e;
 }
 
 
@@ -89,6 +92,8 @@ event_addref(event_t *e)
 void
 event_release(event_t *e)
 {
+  if(e == NULL)
+    return;
   if(atomic_dec(&e->e_refcount))
     return;
   if(e->e_dtor != NULL)
@@ -204,6 +209,34 @@ action_type_t
 action_str2code(const char *str)
 {
   return str2val(str, actionnames);
+}
+
+/**
+ *
+ */
+void
+event_apply_metadata(event_t *dst, const event_t *src)
+{
+  if(src == NULL)
+    return;
+  dst->e_timestamp = src->e_timestamp;
+  if(src->e_flags & EVENT_SCREEN_POSITION) {
+    dst->e_flags |= EVENT_SCREEN_POSITION;
+    dst->e_screen_x = src->e_screen_x;
+    dst->e_screen_y = src->e_screen_y;
+  }
+}
+
+/**
+ *
+ */
+event_t *
+event_clone(const event_t *src)
+{
+  if(src->e_clone == NULL) {
+    return NULL;
+  }
+  return src->e_clone(src);
 }
 
 /**
@@ -464,6 +497,17 @@ event_prop_action_dtor(event_t *e)
 /**
  *
  */
+static event_t *
+event_prop_action_clone(const event_t *src)
+{
+  const event_prop_action_t *epa = (const event_prop_action_t *)src;
+  return event_create_prop_action(epa->p, epa->action);
+}
+
+
+/**
+ *
+ */
 event_t *
 event_create_prop_action(prop_t *p, rstr_t *action)
 {
@@ -472,6 +516,7 @@ event_create_prop_action(prop_t *p, rstr_t *action)
   e->p = prop_ref_inc(p);
   e->action = rstr_dup(action);
   e->h.e_dtor = event_prop_action_dtor;
+  e->h.e_clone = event_prop_action_clone;
   return &e->h;
 }
 
@@ -633,6 +678,11 @@ event_sprint(const event_t *e)
       snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "%s%s",
                i == 0 ? "" : ", ", action_code2str(eav->actions[i]));
     break;
+  case EVENT_PROP_ACTION:
+    {
+      const event_prop_action_t *epa = (const event_prop_action_t *)e;
+      return rstr_get(epa->action);
+    }
   default:
     snprintf(buf, sizeof(buf), "event<%d>", e->e_type);
     break;
