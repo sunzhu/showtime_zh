@@ -157,8 +157,9 @@ fa_imageloader2(const char *url, const char **vpaths,
                 FA_LOAD_CACHE_CONTROL(cache_control),
                 FA_LOAD_CANCELLABLE(c),
                 FA_LOAD_FLAGS(FA_NON_INTERACTIVE | FA_CONTENT_ON_ERROR),
+                FA_LOAD_NO_FALLBACK(),
                 NULL);
-  if(buf == NULL || buf == NOT_MODIFIED)
+  if(buf == NULL || buf == NOT_MODIFIED || buf == NO_LOAD_METHOD)
     return (image_t *)buf;
 
   image_t *img = fa_imageloader_buf(buf, errbuf, errlen);
@@ -199,8 +200,11 @@ fa_imageloader(const char *url, const struct image_meta *im,
     return fa_image_from_video(url, im, errbuf, errlen, cache_control, c);
 #endif
 
-  if(!im->im_want_thumb)
-    return fa_imageloader2(url, vpaths, errbuf, errlen, cache_control, c);
+  if(!im->im_want_thumb) {
+    image_t *img = fa_imageloader2(url, vpaths, errbuf, errlen, cache_control, c);
+    if(img != NO_LOAD_METHOD)
+      return img;
+  }
 
   fa_open_extra_t foe = {
     .foe_cancellable = c

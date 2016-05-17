@@ -1525,6 +1525,7 @@ fa_load(const char *url, ...)
   int *cache_info_ptr = NULL;
   int protocol_code = 0;
   int *protocol_codep = &protocol_code;
+  int no_fallback = 0;
 
   va_list ap;
   va_start(ap, url);
@@ -1608,6 +1609,11 @@ fa_load(const char *url, ...)
     case FA_LOAD_TAG_PROTOCOL_CODE:
       protocol_codep = va_arg(ap, int *);
       break;
+
+    case FA_LOAD_TAG_NO_FALLBACK:
+      no_fallback = 1;
+      break;
+
     default:
       abort();
     }
@@ -1750,6 +1756,9 @@ fa_load(const char *url, ...)
     }
     return data2;
   }
+
+  if(no_fallback)
+    return NO_LOAD_METHOD;
 
   fh = fap->fap_open(fap, filename, errbuf, errlen, 0, 0);
 #ifdef FA_DUMP
