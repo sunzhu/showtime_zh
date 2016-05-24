@@ -306,6 +306,14 @@ struct prop {
 
 
   /**
+   * These two are used to carry the have_more_childs information
+   * to subscriptions that arrive after the call to
+   * have_more_childs() call have been made.
+   */
+#define PROP_HAVE_MORE               0x1000
+#define PROP_HAVE_MORE_YES           0x2000
+
+  /**
    * Tags. Protected by prop_tag_mutex
    */
   struct prop_tag *hp_tags;
@@ -389,6 +397,11 @@ typedef struct prop_sub_dispatch {
   TAILQ_ENTRY(prop_sub_dispatch) psd_link;
 
   struct prop_sub_dispatch_queue psd_wait_queue;
+
+  // The refcount is only in use for subscriptions in
+  // PROP_SUB_DISPATCH_MODE_GROUP
+  int psd_refcount;
+
 } prop_sub_dispatch_t;
 
 
@@ -508,7 +521,11 @@ struct prop_sub {
    */
   uint8_t hps_pending_unlink : 1;
   uint8_t hps_multiple_origins : 1;
-  uint8_t hps_global_dispatch : 1;
+  uint8_t hps_dispatch_mode : 2;
+#define PROP_SUB_DISPATCH_MODE_COURIER 0
+#define PROP_SUB_DISPATCH_MODE_GLOBAL  1
+#define PROP_SUB_DISPATCH_MODE_GROUP   2
+
   uint8_t hps_proxy : 1;
 
   /**

@@ -146,6 +146,45 @@ es_dumpstack(duk_context *ctx)
 
 
 
+#define BUFNAME "\xff""ptr"
+
+/**
+ *
+ */
+static int
+ecmascript_buf_finalizer(duk_context *ctx)
+{
+  duk_get_prop_string(ctx, 0, BUFNAME);
+
+  if(duk_is_pointer(ctx, -1)) {
+    buf_release(duk_get_pointer(ctx, -1));
+  }
+  return 0;
+}
+
+
+/**
+ *
+ */
+void
+ecmascript_push_buf(duk_context *ctx, buf_t *b)
+{
+  duk_push_external_buffer(ctx);
+  duk_config_buffer(ctx, -1, (void *)buf_data(b), buf_len(b));
+
+  duk_push_buffer_object(ctx, -1, 0, buf_len(b), DUK_BUFOBJ_UINT8ARRAY);
+
+  duk_push_pointer(ctx, buf_retain(b));
+  duk_put_prop_string(ctx, -2, BUFNAME);
+
+  duk_push_c_function(ctx, ecmascript_buf_finalizer, 1);
+  duk_set_finalizer(ctx, -2);
+
+  duk_swap_top(ctx, -2);
+  duk_pop(ctx);
+}
+
+
 /**
  *
  */
@@ -210,6 +249,8 @@ es_resource_release(es_resource_t *er)
   if(atomic_dec(&er->er_refcount))
     return;
   es_context_release(er->er_ctx);
+  if(er->er_class->erc_finalizer != NULL)
+    er->er_class->erc_finalizer(er);
   free(er);
 }
 
@@ -241,11 +282,11 @@ es_resource_unlink(es_resource_t *er)
 /**
  *
  */
-void
+int
 es_resource_push(duk_context *ctx, es_resource_t *er)
 {
   es_resource_retain(er);
-  es_push_native_obj(ctx, &es_native_resource, er);
+  return es_push_native_obj(ctx, &es_native_resource, er);
 }
 
 
@@ -319,12 +360,26 @@ es_timestamp(duk_context *ctx)
 }
 
 
+static int
+es_random_bytes(duk_context *ctx)
+{
+  int len = duk_get_int(ctx, 0);
+  if(len > 65536)
+    duk_error(ctx, DUK_ERR_ERROR, "Too many bytes requested");
+
+  void *ptr = duk_push_fixed_buffer(ctx, len);
+  arch_get_random_bytes(ptr, len);
+  return 1;
+}
+
+
 
 static const duk_function_list_entry fnlist_core[] = {
   { "compile",                 es_compile,              1 },
   { "resourceDestroy",         es_resource_destroy_duk, 1 },
   { "sleep",                   es_sleep,                1 },
   { "timestamp",               es_timestamp,            0 },
+  { "randomBytes",             es_random_bytes,         1 },
   { NULL, NULL, 0}
 };
 
@@ -558,6 +613,8 @@ es_context_create(const char *id, int flags, const char *url,
 
   ec->ec_prop_unload_destroy = prop_vec_create(16);
 
+  ec->ec_prop_dispatch_group = prop_dispatch_group_create();
+
   ec->ec_duk = duk_create_heap(es_mem_alloc, es_mem_realloc, es_mem_free,
                                ec, NULL);
 
@@ -619,27 +676,33 @@ es_context_begin(es_context_t *ec)
 void
 es_context_end(es_context_t *ec, int do_gc)
 {
-  if(do_gc)
-    duk_gc(ec->ec_duk, 0);
+  if(ec->ec_duk != NULL) {
 
-  if(LIST_FIRST(&ec->ec_resources_permanent) == NULL) {
-    // No more permanent resources, attached. Terminate context
+    duk_set_top(ec->ec_duk, 0);
 
-    es_resource_t *er;
-    while((er = LIST_FIRST(&ec->ec_resources_volatile)) != NULL) {
-      assert(er->er_zombie == 0);
-      es_resource_destroy(er);
+    if(do_gc)
+      duk_gc(ec->ec_duk, 0);
+
+    if(LIST_FIRST(&ec->ec_resources_permanent) == NULL) {
+      // No more permanent resources, attached. Terminate context
+
+      es_resource_t *er;
+      while((er = LIST_FIRST(&ec->ec_resources_volatile)) != NULL) {
+        assert(er->er_zombie == 0);
+        es_resource_destroy(er);
+      }
+
+      duk_destroy_heap(ec->ec_duk);
+      ec->ec_duk = NULL;
+
+      prop_vec_destroy_entries(ec->ec_prop_unload_destroy);
+      prop_vec_release(ec->ec_prop_unload_destroy);
+
+      prop_dispatch_group_destroy(ec->ec_prop_dispatch_group);
+
+      TRACE(TRACE_DEBUG, rstr_get(ec->ec_id), "Unloaded");
     }
-
-    duk_destroy_heap(ec->ec_duk);
-    ec->ec_duk = NULL;
-
-    prop_vec_destroy_entries(ec->ec_prop_unload_destroy);
-    prop_vec_release(ec->ec_prop_unload_destroy);
-
-    TRACE(TRACE_DEBUG, rstr_get(ec->ec_id), "Unloaded");
   }
-
   hts_mutex_unlock(&ec->ec_mutex);
   es_context_release(ec);
 }
@@ -649,7 +712,8 @@ es_context_end(es_context_t *ec, int do_gc)
  *
  */
 void
-es_dump_err(duk_context *ctx)
+es_dump_err_ex(duk_context *ctx, const char *native_func,
+               const char *native_file, int native_line)
 {
   es_context_t *ec = es_get(ctx);
 
@@ -675,10 +739,18 @@ es_dump_err(duk_context *ctx)
   duk_get_prop_string(ctx, -5, "stack");
   const char *stack = duk_get_string(ctx, -1);
 
-  TRACE(TRACE_ERROR, rstr_get(ec->ec_id), "%s (%s) at %s:%d",
-        name, message, filename, line_no);
-
+  if(filename) {
+    TRACE(TRACE_ERROR, rstr_get(ec->ec_id), "%s (%s) at %s:%d",
+          name, message, filename, line_no);
+  } else {
+    TRACE(TRACE_ERROR, rstr_get(ec->ec_id), "%s (%s)",
+          name, message);
+  }
   TRACE(TRACE_ERROR, rstr_get(ec->ec_id), "STACK DUMP: %s", stack);
+
+  TRACE(TRACE_ERROR, rstr_get(ec->ec_id), "Native callsite %s() at %s:%d",
+        native_func, native_file, native_line);
+
   duk_pop_n(ctx, 5);
 }
 
@@ -920,7 +992,12 @@ ecmascript_init(void)
   if(gconf.load_ecmascript == NULL)
     return;
 
-  es_context_t *ec = es_context_create("cmdline", ECMASCRIPT_DEBUG,
+  int flags =
+    ECMASCRIPT_DEBUG |
+    ECMASCRIPT_FILE_BYPASS_ACL_READ |
+    ECMASCRIPT_FILE_BYPASS_ACL_WRITE;
+
+  es_context_t *ec = es_context_create("cmdline", flags,
                                        gconf.load_ecmascript, "/tmp");
   es_context_begin(ec);
 
@@ -963,6 +1040,23 @@ ecmascript_fini(void)
 
 
 INITME(INIT_GROUP_API, ecmascript_init, ecmascript_fini, 0);
+
+
+/**
+ *
+ */
+void
+ecmascript_load(const char *ctxid, int flags, const char *url,
+                const char *storage)
+{
+  es_context_t *ec = es_context_create(ctxid, flags, url, storage);
+  es_context_begin(ec);
+  es_exec(ec, url);
+  es_context_end(ec, 1);
+  es_context_release(ec);
+}
+
+
 
 /**
  *

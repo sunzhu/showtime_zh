@@ -23,13 +23,17 @@
 
 typedef struct glw_quad {
   glw_t w;
-  
+
   glw_rgb_t color;
   glw_renderer_t r;
   rstr_t *fs;
-  int recompile;
   int16_t q_padding[4];
+  int16_t border[4];
   glw_program_args_t gpa;
+  int16_t width;
+  int16_t height;
+  char recompile;
+  char relayout;
 } glw_quad_t;
 
 
@@ -42,7 +46,7 @@ static void
 glw_quad_render(glw_t *w, const glw_rctx_t *rc)
 {
   glw_quad_t *q = (glw_quad_t *)w;
-  
+
   if(q->recompile) {
     glw_destroy_program(w->glw_root, q->gpa.gpa_prog);
     q->gpa.gpa_prog = glw_make_program(w->glw_root, NULL, rstr_get(q->fs));
@@ -52,19 +56,6 @@ glw_quad_render(glw_t *w, const glw_rctx_t *rc)
   glw_rctx_t rc0 = *rc;
   glw_reposition(&rc0, q->q_padding[0], rc->rc_height - q->q_padding[1],
 		 rc->rc_width - q->q_padding[2], q->q_padding[3]);
-
-  if(!glw_renderer_initialized(&q->r)) {
-    glw_renderer_init_quad(&q->r);
-    glw_renderer_vtx_pos(&q->r, 0, -1, -1, 0);
-    glw_renderer_vtx_pos(&q->r, 1,  1, -1, 0);
-    glw_renderer_vtx_pos(&q->r, 2,  1,  1, 0);
-    glw_renderer_vtx_pos(&q->r, 3, -1,  1, 0);
-
-    glw_renderer_vtx_st(&q->r, 0,  0,  1);
-    glw_renderer_vtx_st(&q->r, 1,  1,  1);
-    glw_renderer_vtx_st(&q->r, 2,  1,  0);
-    glw_renderer_vtx_st(&q->r, 3,  0,  0);
-  }
 
   glw_renderer_draw(&q->r, w->glw_root, &rc0,
 		    NULL, NULL,
@@ -79,24 +70,89 @@ glw_quad_render(glw_t *w, const glw_rctx_t *rc)
 static void
 glw_quad_layout(glw_t *w, const glw_rctx_t *rc)
 {
+  glw_quad_t *q = (glw_quad_t *)w;
+
+  if(!glw_renderer_initialized(&q->r)) {
+    glw_renderer_init_quad(&q->r);
+    glw_renderer_vtx_pos(&q->r, 0, -1, -1, 0);
+    glw_renderer_vtx_pos(&q->r, 1,  1, -1, 0);
+    glw_renderer_vtx_pos(&q->r, 2,  1,  1, 0);
+    glw_renderer_vtx_pos(&q->r, 3, -1,  1, 0);
+
+    glw_renderer_vtx_st(&q->r, 0,  0,  1);
+    glw_renderer_vtx_st(&q->r, 1,  1,  1);
+    glw_renderer_vtx_st(&q->r, 2,  1,  0);
+    glw_renderer_vtx_st(&q->r, 3,  0,  0);
+  }
+
 }
 
+
+static uint16_t borderobject[] = {
+  4, 1, 0,
+  4, 5, 1,
+  5, 2, 1,
+  5, 6, 2,
+  6, 7, 2,
+  2, 7, 3,
+  8, 5, 4,
+  8, 9, 5,
+  10, 7, 6,
+  10, 11, 7,
+  12, 13, 8,
+  8, 13, 9,
+  13, 10, 9,
+  13, 14, 10,
+  14, 11, 10,
+  14, 15, 11,
+};
 
 /**
  *
  */
-static int
-glw_quad_callback(glw_t *w, void *opaque, glw_signal_t signal,
-		  void *extra)
+static void
+glw_border_layout(glw_t *w, const glw_rctx_t *rc)
 {
-  return 0;
+  glw_quad_t *q = (glw_quad_t *)w;
+
+  if(!glw_renderer_initialized(&q->r)) {
+    glw_renderer_init(&q->r, 16, 16, borderobject);
+  } else if(q->width == rc->rc_width && q->height == rc->rc_height
+            && !q->relayout) {
+    return;
+  }
+
+  q->width = rc->rc_width;
+  q->height = rc->rc_height;
+  q->relayout = 0;
+
+  float v[4][2];
+
+  v[0][0] = -1.0f;
+  v[1][0] = GLW_MIN(-1.0f + 2.0f * q->border[0] / rc->rc_width, 0.0f);
+  v[2][0] = GLW_MAX( 1.0f - 2.0f * q->border[2] / rc->rc_width, 0.0f);
+  v[3][0] = 1.0f;
+
+  v[0][1] = 1.0f;
+  v[1][1] = GLW_MAX( 1.0f - 2.0f * q->border[1] / rc->rc_height, 0.0f);
+  v[2][1] = GLW_MIN(-1.0f + 2.0f * q->border[3] / rc->rc_height, 0.0f);
+  v[3][1] = -1.0f;
+
+  int i = 0;
+  for(int y = 0; y < 4; y++) {
+    for(int x = 0; x < 4; x++) {
+      glw_renderer_vtx_pos(&q->r, i, v[x][0], v[y][1], 0.0f);
+      i++;
+    }
+  }
 }
+
 
 
 /**
  *
  */
-static void 
+static void
 glw_quad_init(glw_t *w)
 {
   glw_quad_t *q = (void *)w;
@@ -126,7 +182,7 @@ glw_quad_set_float3(glw_t *w, glw_attribute_t attrib, const float *vector,
 /**
  *
  */
-static void 
+static void
 glw_quad_set_fs(glw_t *w, rstr_t *vs)
 {
   glw_quad_t *q = (glw_quad_t *)w;
@@ -158,10 +214,14 @@ quad_set_int16_4(glw_t *w, glw_attribute_t attrib, const int16_t *v,
   glw_quad_t *q = (glw_quad_t *)w;
 
   switch(attrib) {
-  case GLW_ATTRIB_PADDING:
-    if(!glw_attrib_set_int16_4(q->q_padding, v))
+  case GLW_ATTRIB_BORDER:
+    if(!glw_attrib_set_int16_4(q->border, v))
       return 0;
+    q->relayout = 1;
     return 1;
+
+  case GLW_ATTRIB_PADDING:
+    return glw_attrib_set_int16_4(q->q_padding, v);
   default:
     return -1;
   }
@@ -174,16 +234,25 @@ static glw_class_t glw_quad = {
   .gc_ctor = glw_quad_init,
   .gc_layout = glw_quad_layout,
   .gc_render = glw_quad_render,
-  .gc_signal_handler = glw_quad_callback,
   .gc_set_float3 = glw_quad_set_float3,
   .gc_dtor = glw_quad_dtor,
   .gc_set_fs = glw_quad_set_fs,
   .gc_set_int16_4 = quad_set_int16_4,
 };
-
-
-
 GLW_REGISTER_CLASS(glw_quad);
+
+static glw_class_t glw_border = {
+  .gc_name = "border",
+  .gc_instance_size = sizeof(glw_quad_t),
+  .gc_ctor = glw_quad_init,
+  .gc_layout = glw_border_layout,
+  .gc_render = glw_quad_render,
+  .gc_set_float3 = glw_quad_set_float3,
+  .gc_dtor = glw_quad_dtor,
+  .gc_set_fs = glw_quad_set_fs,
+  .gc_set_int16_4 = quad_set_int16_4,
+};
+GLW_REGISTER_CLASS(glw_border);
 
 
 
@@ -227,114 +296,3 @@ static glw_class_t glw_linebox = {
 GLW_REGISTER_CLASS(glw_linebox);
 
 
-
-
-
-#if 0
-
-
-typedef struct glw_raster {
-  glw_t w;
-  
-  glw_rgb_t color;
-  glw_renderer_t r;
-  glw_backend_texture_t tex;
-  int width, height;
-
-} glw_raster_t;
-
-
-
-static const uint8_t rastermap[] = {
-  255,255,255, 255,255,255, 255,255,255, 255,255,255,
-  255,255,255,0,0,0, 0,0,0, 0,0,0,
-  255,255,255,0,0,0, 0,0,0, 0,0,0,
-  255,255,255,0,0,0, 0,0,0, 0,0,0
-};
-
-#define RASTER_TILE_SIZE 4 
-
-static void
-glw_raster_render(glw_t *w, const glw_rctx_t *rc)
-{
-  glw_raster_t *q = (void *)w;
-
-#if 0
-  printf("RASTER W=%d H=%d\n", rc->rc_width, rc->rc_height);
-  int i;
-  for(i = 0; i < 16; i++) {
-    printf("%f%c", rc->rc_be.gbr_mtx[i], "\t\t\t\n"[i&3]);
-  }
-#endif
-
-  if(!glw_is_tex_inited(&q->tex))
-    glw_tex_upload(w->glw_root, &q->tex, rastermap, GLW_TEXTURE_FORMAT_RGB,
-		   RASTER_TILE_SIZE, RASTER_TILE_SIZE,  GLW_TEX_REPEAT);
-
-
-  if(!glw_renderer_initialized(&q->r))
-    glw_renderer_init_quad(&q->r);
-
-  if(q->width != rc->rc_width || q->height != rc->rc_height) {
-    q->width  = rc->rc_width;
-    q->height = rc->rc_height;
-
-    glw_renderer_vtx_pos(&q->r, 0, -1, -1, 0);
-    glw_renderer_vtx_st (&q->r, 0, 0, rc->rc_height / (float)RASTER_TILE_SIZE);
-
-    glw_renderer_vtx_pos(&q->r, 1,  1, -1, 0);
-    glw_renderer_vtx_st (&q->r, 1, rc->rc_width / (float)RASTER_TILE_SIZE, rc->rc_height / (float)RASTER_TILE_SIZE);
-
-    glw_renderer_vtx_pos(&q->r, 2,  1,  1, 0);
-    glw_renderer_vtx_st (&q->r, 2, rc->rc_width / (float)RASTER_TILE_SIZE, 0);
-
-    glw_renderer_vtx_pos(&q->r, 3, -1,  1, 0);
-    glw_renderer_vtx_st (&q->r, 3, 0, 0);
-  }
-
-  glw_renderer_draw(&q->r, w->glw_root, rc, &q->tex,
-		    &q->color, NULL, rc->rc_alpha * w->glw_alpha, 0, NULL);
-}
-
-
-/**
- *
- */ 
-static void 
-glw_raster_ctor(glw_t *w)
-{
-  glw_raster_t *q = (void *)w;
-  q->color.r = 1.0;
-  q->color.g = 1.0;
-  q->color.b = 1.0;
-}
-
-
-/**
- *
- */
-static void 
-glw_raster_set_rgb(glw_t *w, const float *rgb)
-{
-  glw_raster_t *q = (void *)w;
-  q->color.r = rgb[0];
-  q->color.g = rgb[1];
-  q->color.b = rgb[2];
-}
-
-
-/**
- *
- */
-static glw_class_t glw_raster = {
-  .gc_name = "raster",
-  .gc_instance_size = sizeof(glw_raster_t),
-  .gc_render = glw_raster_render,
-  .gc_ctor = glw_raster_ctor,
-  .gc_set_rgb = glw_raster_set_rgb,
-};
-
-
-
-GLW_REGISTER_CLASS(glw_raster);
-#endif

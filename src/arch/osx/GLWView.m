@@ -128,7 +128,6 @@ glw_in_fullwindow(void *opaque, int val)
 - (void)hideCursor
 {
   glw_pointer_event_t gpe = {0};
-
   if(!is_key_window)
     return;
 
@@ -538,7 +537,7 @@ glw_in_fullwindow(void *opaque, int val)
 /**
  *
  */
-- (id)initWithFrame:(NSRect)frameRect :(struct glw_root *)root :(bool)fs
+- (id)initWithFrame:(NSRect)frameRect :(struct glw_root *)root
 {
   NSOpenGLPixelFormat *wpf;
   NSOpenGLPixelFormatAttribute attribs_windowed[] = {
@@ -548,25 +547,19 @@ glw_in_fullwindow(void *opaque, int val)
     NSOpenGLPFASingleRenderer,
     0 };
 
-  NSOpenGLPixelFormatAttribute attribs_fs[] = {
-    NSOpenGLPFADoubleBuffer,
-    0 };
-
-  wpf = [[NSOpenGLPixelFormat alloc]
-	  initWithAttributes: fs ? attribs_fs : attribs_windowed];
+  wpf = [[NSOpenGLPixelFormat alloc] initWithAttributes:attribs_windowed];
 
   if(wpf == nil) {
-    NSLog(@"Unable to create windowed pixel format.");
+    NSLog(@"Unable to create pixel format.");
     exit(0);
   }
   self = [super initWithFrame:frameRect pixelFormat:wpf];
   if(self == nil) {
-    NSLog(@"Unable to create a windowed OpenGL context.");
+    NSLog(@"Unable to create a OpenGL context.");
     exit(0);
   }
 
   [self setWantsBestResolutionOpenGLSurface:YES];
-
   [wpf release];
 
   gr = root;
@@ -640,6 +633,22 @@ glw_in_fullwindow(void *opaque, int val)
   event_release(e);
   return YES;
 }
+
+
+
+- (void) paste: (NSNotification *)not
+{
+  NSPasteboard *pb = [NSPasteboard generalPasteboard];
+
+  NSString *str = [pb stringForType:NSPasteboardTypeString];
+  if(str) {
+    const char *cstr = [str UTF8String];
+    event_t *e = event_create_str(EVENT_INSERT_STRING, cstr);
+    prop_send_ext_event(eventSink, e);
+    event_release(e);
+  }
+}
+
 
 /**
  *

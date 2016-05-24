@@ -288,7 +288,6 @@ fader(glw_root_t *gr, glw_renderer_cache_t *grc,
 
 
     if(ar > 0) {
-      grc->grc_colored = 1;
       glw_vec4_mul_c3(c1, 1 + D1 / ar);
       glw_vec4_mul_c3(c2, 1 + D2 / ar);
       glw_vec4_mul_c3(c3, 1 + D3 / ar);
@@ -975,7 +974,7 @@ add_job(glw_root_t *gr,
         const float *vertices,
         int num_vertices,
         const uint16_t *indices,
-        int num_triangles,
+        int num_indices,
         int flags,
         glw_program_args_t *gpa,
         const glw_rctx_t *rc,
@@ -1044,7 +1043,6 @@ add_job(glw_root_t *gr,
 
   if(rgb_off != NULL) {
     rj->rgb_off = *rgb_off;
-    flags |= GLW_RENDER_COLOR_OFFSET;
   } else {
     rj->rgb_off.r = 0;
     rj->rgb_off.g = 0;
@@ -1054,11 +1052,44 @@ add_job(glw_root_t *gr,
   rj->blur = blur;
   rj->blendmode = gr->gr_blendmode;
   rj->frontface = gr->gr_frontface;
+  rj->flags = flags;
 
-  int vnum = indices ? num_triangles * 3 : num_vertices;
 
-  if(gr->gr_vertex_offset + vnum > gr->gr_vertex_buffer_capacity) {
-    gr->gr_vertex_buffer_capacity = 100 + vnum +
+  // -------- Copy indices ---------------
+  if(indices == NULL)
+    num_indices = num_vertices;
+
+  if(gr->gr_index_offset + num_indices > gr->gr_index_buffer_capacity) {
+    gr->gr_index_buffer_capacity = 100 + num_indices +
+      gr->gr_index_buffer_capacity * 2;
+
+    gr->gr_index_buffer = realloc(gr->gr_index_buffer,
+                                  sizeof(uint16_t) *
+                                  gr->gr_index_buffer_capacity);
+  }
+
+  uint16_t *idst = gr->gr_index_buffer + gr->gr_index_offset;
+
+
+  if(indices == NULL) {
+    for(int i = 0; i < num_indices; i++) {
+      idst[i] = i + gr->gr_vertex_offset;
+    }
+  } else {
+    for(int i = 0; i < num_indices; i++) {
+      idst[i] = indices[i] + gr->gr_vertex_offset;
+    }
+  }
+
+  rj->index_offset = gr->gr_index_offset;
+  rj->num_indices      = num_indices;
+  gr->gr_index_offset += num_indices;
+
+
+  // -------- Copy vertices ---------------
+
+  if(gr->gr_vertex_offset + num_vertices > gr->gr_vertex_buffer_capacity) {
+    gr->gr_vertex_buffer_capacity = 100 + num_vertices +
       gr->gr_vertex_buffer_capacity * 2;
 
     gr->gr_vertex_buffer = realloc(gr->gr_vertex_buffer,
@@ -1067,22 +1098,14 @@ add_job(glw_root_t *gr,
   }
 
   float *vdst = gr->gr_vertex_buffer + gr->gr_vertex_offset * VERTEX_SIZE;
+  memcpy(vdst, vertices, num_vertices * VERTEX_SIZE * sizeof(float));
 
-  if(indices != NULL) {
-    int i;
-    for(i = 0; i < num_triangles * 3; i++) {
-      const float *v = &vertices[indices[i] * VERTEX_SIZE];
-      memcpy(vdst, v, VERTEX_SIZE * sizeof(float));
-      vdst += VERTEX_SIZE;
-    }
-  } else {
-    memcpy(vdst, vertices, num_vertices * VERTEX_SIZE * sizeof(float));
-  }
-
-  rj->flags = flags;
   rj->vertex_offset = gr->gr_vertex_offset;
-  rj->num_vertices = vnum;
-  gr->gr_vertex_offset += vnum;
+  rj->num_vertices      = num_vertices;
+  gr->gr_vertex_offset += num_vertices;
+
+  // --
+
   gr->gr_num_render_jobs++;
 }
 
@@ -1102,8 +1125,7 @@ glw_renderer_draw(glw_renderer_t *gr, glw_root_t *root,
 {
   rgb_mul = rgb_mul ?: &white;
 
-  int flags =
-    gr->gr_color_attributes ? GLW_RENDER_COLOR_ATTRIBUTES : 0;
+  int flags = 0;
 
   if(root->gr_need_sw_clip
 #if NUM_FADERS > 0
@@ -1131,9 +1153,6 @@ glw_renderer_draw(glw_renderer_t *gr, glw_root_t *root,
     if(grc->grc_blurred)
       flags |= GLW_RENDER_BLUR_ATTRIBUTE;
 
-    if(grc->grc_colored)
-      flags |= GLW_RENDER_COLOR_ATTRIBUTES;
-
 #if NUM_STENCILERS > 0
     if(root->gr_stencil_width)
       tex2 = root->gr_stencil_texture;
@@ -1145,7 +1164,7 @@ glw_renderer_draw(glw_renderer_t *gr, glw_root_t *root,
   } else {
     add_job(root, &rc->rc_mtx, tex, tex2, rgb_mul, rgb_off, alpha, blur,
             gr->gr_vertices, gr->gr_num_vertices,
-            gr->gr_indices,  gr->gr_num_triangles,
+            gr->gr_indices,  gr->gr_num_triangles * 3,
             flags, gpa, rc, GLW_DRAW_TRIANGLES, rc->rc_zindex);
   }
   gr->gr_dirty = 0;
@@ -1188,7 +1207,7 @@ glw_line(glw_root_t *root, const glw_rctx_t *rc,
   add_job(root, &rc->rc_mtx, NULL, NULL, &white, NULL, 1, 0,
           &line_vertices[0][0], 2,
           NULL, 0,
-          0, NULL, rc, GLW_DRAW_LINE_LOOP, INT16_MAX);
+          0, NULL, rc, GLW_DRAW_LINES, INT16_MAX);
 }
 
 

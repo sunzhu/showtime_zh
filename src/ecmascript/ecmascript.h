@@ -30,6 +30,7 @@ struct es_resource;
 struct rstr;
 struct prop;
 struct prop_vec;
+struct buf;
 
 #define ST_ERROR_PROP_ZOMBIE 0x8000
 #define ST_ERROR_SQLITE_BASE 0x10000
@@ -100,6 +101,8 @@ typedef struct es_context {
 
   struct prop_vec *ec_prop_unload_destroy;
 
+  void *ec_prop_dispatch_group;
+
 } es_context_t;
 
 
@@ -113,6 +116,8 @@ typedef struct es_resource_class {
   void (*erc_destroy)(struct es_resource *er);
 
   void (*erc_info)(struct es_resource *er, char *buf, size_t buflen);
+
+  void (*erc_finalizer)(struct es_resource *er);
 
 } es_resource_class_t;
 
@@ -134,7 +139,10 @@ es_context_t *es_get(duk_context *ctx);
 
 void es_dumpstack(duk_context *ctx);
 
-void es_dump_err(duk_context *ctx);
+void es_dump_err_ex(duk_context *ctx, const char *func,
+                    const char *file, int line);
+
+#define es_dump_err(ctx) es_dump_err_ex(ctx, __FUNCTION__, __FILE__, __LINE__)
 
 int es_get_err_code(duk_context *ctx);
 
@@ -175,7 +183,7 @@ void es_resource_unlink(es_resource_t *er);
 void *es_resource_create(es_context_t *ec, const es_resource_class_t *erc,
                          int permanent);
 
-void es_resource_push(duk_context *ctx, es_resource_t *er);
+int es_resource_push(duk_context *ctx, es_resource_t *er);
 
 void *es_resource_get(duk_context *ctx, int obj_idx,
                       const es_resource_class_t *erc);
@@ -236,6 +244,8 @@ struct rstr *es_prop_to_rstr(duk_context *ctx, int obj_idx, const char *id);
 
 struct prop *es_stprop_get(duk_context *ctx, int val_index);
 
+void ecmascript_push_buf(duk_context *ctx, struct buf *b);
+
 
 /**
  * Rooted objects
@@ -266,6 +276,14 @@ void ecmascript_search(struct prop *model, const char *query,
 int es_hook_invoke(const char *type,
                    int (*push_args)(duk_context *duk, void *opaque),
                    void *opaque);
+
+/**
+ * Create a new context, load and execute script given by url
+ *
+ * flags are ECMASCRIPT_ -flags
+ */
+void ecmascript_load(const char *ctxid, int flags, const char *url,
+                     const char *storage);
 
 /**
  *

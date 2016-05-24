@@ -31,6 +31,7 @@ struct glw_backend_texture;
 
 #define GLW_DRAW_TRIANGLES REALITY_TRIANGLES
 #define GLW_DRAW_LINE_LOOP REALITY_LINE_LOOP
+#define GLW_DRAW_LINES     REALITY_LINES
 
 
 /**
@@ -131,6 +132,7 @@ typedef struct {
 
   int grtt_width;
   int grtt_height;
+  char grtt_opaque;
 
 } glw_rtt_t;
 
