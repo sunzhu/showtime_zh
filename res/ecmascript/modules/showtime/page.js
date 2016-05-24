@@ -48,23 +48,36 @@ Item.prototype.disable = function() {
   this.root.enabled = false;
 }
 
-Item.prototype.addOptAction = function(title, action) {
+Item.prototype.destroyOption = function(item) {
+  prop.destroy(item);
+}
+
+Item.prototype.addOptAction = function(title, func, subtype) {
   var node = prop.createRoot();
   node.type = 'action';
   node.metadata.title = title;
   node.enabled = true;
-  node.action = action;
+  node.subtype = subtype;
 
+  prop.subscribe(node.eventSink, function(type, val) {
+    if(type == "action" && val.indexOf('Activate') != -1)
+      func();
+  }, {
+    autoDestroy: true,
+    actionAsArray: true,
+  });
   prop.setParent(node, this.root.options);
+  return node;
 }
 
 
-Item.prototype.addOptURL = function(title, url) {
+Item.prototype.addOptURL = function(title, url, subtype) {
   var node = prop.createRoot();
   node.type = 'location';
   node.metadata.title = title;
   node.enabled = true;
   node.url = url;
+  node.subtype = subtype
 
   prop.setParent(node, this.root.options);
 }
@@ -168,6 +181,14 @@ function Page(root, sync, flat) {
     entries: {
       get: function()  { return root.entries; },
       set: function(v) { root.entries = v; }
+    },
+
+    paginator: {
+      get: function()  { return this.paginator_; },
+      set: function(v) {
+        this.paginator_ = v;
+        this.haveMore(true);
+      }
     }
 
   });

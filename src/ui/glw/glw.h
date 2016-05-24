@@ -74,6 +74,33 @@ LIST_HEAD(glw_video_list, glw_video);
 LIST_HEAD(glw_style_list, glw_style);
 TAILQ_HEAD(glw_view_load_request_queue, glw_view_load_request);
 
+
+typedef struct glw_vertex {
+  float x, y, z;
+} glw_vertex_t;
+
+typedef struct glw_rgb {
+  float r, g, b;
+} glw_rgb_t;
+
+static inline int glw_rgb_cmp(const glw_rgb_t *x, const glw_rgb_t *y)
+{
+  return x->r == y->r && x->g == y->g && x->b == y->b;
+}
+
+static inline void glw_rgb_cpy(glw_rgb_t *x, const glw_rgb_t *y)
+{
+  x->r = y->r;
+  x->g = y->g;
+  x->b = y->b;
+}
+
+typedef struct glw_rect {
+  int x1, x2;
+  int y1, y2;
+} glw_rect_t;
+
+
 // ------------------- Backends -----------------
 
 #if CONFIG_GLW_BACKEND_OPENGL || ENABLE_GLW_BACKEND_OPENGL_ES
@@ -137,8 +164,6 @@ typedef enum {
   GLW_ATTRIB_TRANSITION_EFFECT,
   GLW_ATTRIB_EXPANSION,
   GLW_ATTRIB_CHILD_ASPECT,
-  GLW_ATTRIB_CHILD_HEIGHT,
-  GLW_ATTRIB_CHILD_WIDTH,
   GLW_ATTRIB_CHILD_TILES_X,
   GLW_ATTRIB_CHILD_TILES_Y,
   GLW_ATTRIB_ALPHA_EDGES,
@@ -173,6 +198,8 @@ typedef enum {
   GLW_ATTRIB_PADDING,
   GLW_ATTRIB_FONT,
   GLW_ATTRIB_TENTATIVE_VALUE,
+  GLW_ATTRIB_BACKGROUND_COLOR,
+  GLW_ATTRIB_BACKGROUND_ALPHA,
   GLW_ATTRIB_num,
 } glw_attribute_t;
 
@@ -188,19 +215,6 @@ typedef enum {
 #define GTB_OSK_PASSWORD     0x40   /* Password for on screen keyboard */
 #define GTB_FILE_REQUEST     0x80   /* Edit should ask for a file */
 #define GTB_DIR_REQUEST      0x100  /* Edit should ask for a directory */
-
-typedef struct glw_vertex {
-  float x, y, z;
-} glw_vertex_t;
-
-typedef struct glw_rgb {
-  float r, g, b;
-} glw_rgb_t;
-
-typedef struct glw_rect {
-  int x1, x2;
-  int y1, y2;
-} glw_rect_t;
 
 /**
  * Image flags
@@ -530,6 +544,11 @@ typedef struct glw_class {
    * (ie, texture is loaded, etc)
    */
   glw_widget_status_t (*gc_status)(struct glw *w);
+
+  /**
+   * Return 1 if color is known, 0 othersize
+   */
+  int (*gc_primary_color)(struct glw *w, float *rgb);
 
   /**
    *
@@ -986,18 +1005,12 @@ typedef struct glw_root {
   int gr_vertex_buffer_capacity;
   int gr_vertex_offset;
 
+  uint16_t *gr_index_buffer;
+  int gr_index_buffer_capacity;
+  int gr_index_offset;
+
   int gr_blendmode;
   int gr_frontface;
-
-#define GLW_RENDER_COLOR_ATTRIBUTES 0x1 /* set if the color attributes
-					   are != [1,1,1,1] */
-
-#define GLW_RENDER_BLUR_ATTRIBUTE   0x2 /* set if pos.w != 1 (sharpness)
-					 * ie, the triangle should be blurred
-					 */
-
-#define GLW_RENDER_COLOR_OFFSET     0x4
-
 
   float *gr_vtmp_buffer;  // temporary buffer for emitting vertices
   int gr_vtmp_cur;
@@ -1531,6 +1544,11 @@ void glw_line(glw_root_t *root, const glw_rctx_t *rc,
 void glw_renderer_render(glw_root_t *gr);
 
 void glw_render_zoffset(glw_t *w, const glw_rctx_t *rc);
+
+static inline int glw_debug(glw_t *w)
+{
+  return w->glw_flags2 & GLW2_DEBUG;
+}
 
 static inline void glw_render0(glw_t *w, const glw_rctx_t *rc)
 {

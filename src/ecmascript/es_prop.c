@@ -31,6 +31,7 @@ typedef struct es_prop_sub {
   es_resource_t eps_super;
   prop_sub_t *eps_sub;
   char eps_autodestry;
+  char eps_action_as_array;
 } es_prop_sub_t;
 
 static void
@@ -125,7 +126,8 @@ es_prop_print_duk(duk_context *ctx)
 static int
 es_prop_create_duk(duk_context *ctx)
 {
-  es_stprop_push(ctx, prop_create_root(NULL));
+  const char *str = duk_get_string(ctx, 0);
+  es_stprop_push(ctx, prop_create_root(str));
   return 1;
 }
 
@@ -473,6 +475,7 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
   int destroy = 0;
   const  event_t *e;
   prop_t *p1, *p2;
+  prop_vec_t *pv;
   duk_context *ctx = ec->ec_duk;
 
   es_push_root(ctx, eps);
@@ -557,6 +560,67 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
     }
     break;
 
+  case PROP_ADD_CHILD:
+    duk_push_string(ctx, "addchild");
+    p1 = va_arg(ap, prop_t *);
+    nargs = 2;
+    es_stprop_push(ctx, p1);
+    break;
+
+  case PROP_ADD_CHILD_BEFORE:
+    duk_push_string(ctx, "addchildbefore");
+    p1 = va_arg(ap, prop_t *);
+    p2 = va_arg(ap, prop_t *);
+    nargs = 3;
+    es_stprop_push(ctx, p1);
+    es_stprop_push(ctx, p2);
+    break;
+
+  case PROP_ADD_CHILD_VECTOR:
+  case PROP_ADD_CHILD_VECTOR_DIRECT:
+    duk_push_string(ctx, "addchilds");
+
+    pv = va_arg(ap, prop_vec_t *);
+    duk_push_array(ctx);
+
+    for(int i = 0; i < prop_vec_len(pv); i++) {
+      es_stprop_push(ctx, prop_vec_get(pv, i));
+      duk_put_prop_index(ctx, -2, i);
+    }
+    nargs = 2;
+    break;
+
+  case PROP_ADD_CHILD_VECTOR_BEFORE:
+    duk_push_string(ctx, "addchildsbefore");
+
+    pv = va_arg(ap, prop_vec_t *);
+    p2 = va_arg(ap, prop_t *);
+    duk_push_array(ctx);
+    for(int i = 0; i < prop_vec_len(pv); i++) {
+      es_stprop_push(ctx, prop_vec_get(pv, i));
+      duk_put_prop_index(ctx, -2, i);
+    }
+    es_stprop_push(ctx, p2);
+    nargs = 3;
+    break;
+
+  case PROP_DEL_CHILD:
+    duk_push_string(ctx, "delchild");
+    p1 = va_arg(ap, prop_t *);
+    es_stprop_push(ctx, p1);
+    nargs = 2;
+    break;
+
+  case PROP_MOVE_CHILD:
+    duk_push_string(ctx, "movechild");
+    p1 = va_arg(ap, prop_t *);
+    p2 = va_arg(ap, prop_t *);
+    es_stprop_push(ctx, p1);
+    es_stprop_push(ctx, p2);
+    nargs = 3;
+    break;
+
+
   case PROP_EXT_EVENT:
     e = va_arg(ap, const event_t *);
 
@@ -564,14 +628,30 @@ es_sub_cb(void *opaque, prop_event_t event, ...)
       const event_payload_t *ep = (const event_payload_t *)e;
       nargs = 2;
       duk_push_string(ctx, "action");
-      duk_push_string(ctx, ep->payload);
+
+      if(eps->eps_action_as_array) {
+        duk_push_array(ctx);
+        duk_push_string(ctx, ep->payload);
+        duk_put_prop_index(ctx, -2, 0);
+      } else {
+        duk_push_string(ctx, ep->payload);
+      }
 
     } else if(e->e_type == EVENT_ACTION_VECTOR) {
       const event_action_vector_t *eav = (const event_action_vector_t *)e;
       assert(eav->num > 0);
       nargs = 2;
       duk_push_string(ctx, "action");
-      duk_push_string(ctx, action_code2str(eav->actions[0]));
+
+      if(eps->eps_action_as_array) {
+        duk_push_array(ctx);
+        for(int i = 0; i < eav->num; i++) {
+          duk_push_string(ctx, action_code2str(eav->actions[i]));
+          duk_put_prop_index(ctx, -2, i);
+        }
+      } else {
+        duk_push_string(ctx, action_code2str(eav->actions[0]));
+      }
 
     } else if(e->e_type == EVENT_UNICODE) {
       const event_int_t *eu = (const event_int_t *)e;
@@ -644,13 +724,20 @@ es_prop_subscribe(duk_context *ctx)
   if(es_prop_is_true(ctx, 2, "noInitialUpdate"))
     flags |= PROP_SUB_NO_INITIAL_UPDATE;
 
+  if(es_prop_is_true(ctx, 2, "earlyChildDelete"))
+    flags |= PROP_SUB_EARLY_DEL_CHILD;
+
+  if(es_prop_is_true(ctx, 2, "actionAsArray"))
+    eps->eps_action_as_array = 1;
+
   eps->eps_sub =
       prop_subscribe(flags,
-                   PROP_TAG_ROOT, p,
-                   PROP_TAG_LOCKMGR, ecmascript_context_lockmgr,
-                   PROP_TAG_MUTEX, ec,
-                   PROP_TAG_CALLBACK, es_sub_cb, eps,
-                   NULL);
+                     PROP_TAG_ROOT, p,
+                     PROP_TAG_LOCKMGR, ecmascript_context_lockmgr,
+                     PROP_TAG_MUTEX, ec,
+                     PROP_TAG_CALLBACK, es_sub_cb, eps,
+                     PROP_TAG_DISPATCH_GROUP, ec->ec_prop_dispatch_group,
+                     NULL);
 
   es_resource_push(ctx, &eps->eps_super);
   return 1;
@@ -871,11 +958,55 @@ es_prop_set_clip_range(duk_context *ctx)
   return 0;
 }
 
+
+/**
+ *
+ */
+static int
+es_prop_tag_set(duk_context *ctx)
+{
+  es_prop_sub_t *eps = es_resource_get(ctx, 0, &es_resource_prop_sub);
+  prop_t *a = es_stprop_get(ctx, 1);
+  void *v = malloc(1);
+  prop_tag_set(a, eps, v);
+  es_root_register(ctx, 2, v);
+  return 0;
+}
+
+/**
+ *
+ */
+static int
+es_prop_tag_clear(duk_context *ctx)
+{
+  es_prop_sub_t *eps = es_resource_get(ctx, 0, &es_resource_prop_sub);
+  prop_t *a = es_stprop_get(ctx, 1);
+  void *v = prop_tag_clear(a, eps);
+  es_push_root(ctx, v);
+  es_root_unregister(ctx, v);
+  free(v);
+  return 1;
+}
+
+/**
+ *
+ */
+static int
+es_prop_tag_get(duk_context *ctx)
+{
+  es_prop_sub_t *eps = es_resource_get(ctx, 0, &es_resource_prop_sub);
+  prop_t *a = es_stprop_get(ctx, 1);
+  void *v = prop_tag_get(a, eps);
+  es_push_root(ctx, v);
+  return 1;
+}
+
+
 static const duk_function_list_entry fnlist_prop[] = {
 
   { "print",               es_prop_print_duk,             1 },
   { "release",             es_prop_release_duk,           1 },
-  { "create",              es_prop_create_duk,            0 },
+  { "create",              es_prop_create_duk,            1 },
   { "getValue",            es_prop_get_value_duk,         1 },
   { "getName",             es_prop_get_name_duk,          1 },
   { "getChild",            es_prop_get_child_duk,         2 },
@@ -902,6 +1033,9 @@ static const duk_function_list_entry fnlist_prop[] = {
   { "unloadDestroy",       es_prop_unload_destroy,        1 },
   { "isZombie",            es_prop_is_zombie,             1 },
   { "setClipRange",        es_prop_set_clip_range,        3 },
+  { "tagSet",              es_prop_tag_set,               3 },
+  { "tagClear",            es_prop_tag_clear,             2 },
+  { "tagGet",              es_prop_tag_get,               2 },
   { NULL, NULL, 0}
 };
 

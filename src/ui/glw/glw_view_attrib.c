@@ -1342,6 +1342,7 @@ static const token_attrib_t attribtab[] = {
   {"size",            set_number, GLW_ATTRIB_SIZE},
   {"maxWidth",        set_number, GLW_ATTRIB_MAX_WIDTH},
   {"alphaSelf",       set_number, GLW_ATTRIB_ALPHA_SELF},
+  {"bgalpha",         set_number, GLW_ATTRIB_BACKGROUND_ALPHA},
   {"saturation",      set_number, GLW_ATTRIB_SATURATION},
   {"time",            set_number, GLW_ATTRIB_TIME},
   {"transitionTime",  set_number, GLW_ATTRIB_TRANSITION_TIME},
@@ -1360,9 +1361,6 @@ static const token_attrib_t attribtab[] = {
   {"fill",            set_number, GLW_ATTRIB_FILL},
   {"childScale",      set_number, GLW_ATTRIB_CHILD_SCALE},
 
-  {"childWidth",      set_number, GLW_ATTRIB_CHILD_WIDTH},
-  {"childHeight",     set_number, GLW_ATTRIB_CHILD_HEIGHT},
-
   {"childTilesX",     set_number, GLW_ATTRIB_CHILD_TILES_X},
   {"childTilesY",     set_number, GLW_ATTRIB_CHILD_TILES_Y},
 
@@ -1378,6 +1376,7 @@ static const token_attrib_t attribtab[] = {
   {"scaling",         set_float3, GLW_ATTRIB_SCALING},
   {"color1",          set_float3, GLW_ATTRIB_COLOR1},
   {"color2",          set_float3, GLW_ATTRIB_COLOR2},
+  {"bgcolor",         set_float3, GLW_ATTRIB_BACKGROUND_COLOR},
 
   {"rotation",        set_float4, GLW_ATTRIB_ROTATION},
   {"plane",           set_float4, GLW_ATTRIB_PLANE},

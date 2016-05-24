@@ -598,21 +598,20 @@ plugin_load(const char *url, char *errbuf, size_t errlen, int flags)
 
     int version = htsmsg_get_u32_or_default(ctrl, "apiversion", 1);
 
-    int flags = 0;
+    int pflags = 0;
     if(htsmsg_get_u32_or_default(ctrl, "debug", 0) || flags & PLUGIN_LOAD_DEBUG)
-      flags |= ECMASCRIPT_DEBUG;
+      pflags |= ECMASCRIPT_DEBUG;
 
     htsmsg_t *e = htsmsg_get_map(ctrl, "entitlements");
     if(e != NULL) {
       if(htsmsg_get_u32_or_default(e, "bypassFileACLRead", 0))
-        flags |= ECMASCRIPT_FILE_BYPASS_ACL_READ;
+        pflags |= ECMASCRIPT_FILE_BYPASS_ACL_READ;
       if(htsmsg_get_u32_or_default(e, "bypassFileACLWrite", 0))
-        flags |= ECMASCRIPT_FILE_BYPASS_ACL_WRITE;
+        pflags |= ECMASCRIPT_FILE_BYPASS_ACL_WRITE;
     }
-
     hts_mutex_unlock(&plugin_mutex);
     r = ecmascript_plugin_load(id, fullpath, errbuf, errlen, version,
-                               buf_cstr(b), flags);
+                               buf_cstr(b), pflags);
     hts_mutex_lock(&plugin_mutex);
     if(!r)
       pl->pl_unload = plugin_unload_ecmascript;
@@ -877,6 +876,14 @@ plugin_load_repo(void)
       }
     }
   }
+
+
+  const char *cc = htsmsg_get_str(msg, "cc");
+  if(cc != NULL) {
+    TRACE(TRACE_DEBUG, "GEO", "Current country: %s", cc);
+    prop_setv(prop_get_global(), "location", "cc", NULL, PROP_SET_STRING, cc);
+  }
+
   htsmsg_release(msg);
   return 0;
 }
@@ -1380,8 +1387,9 @@ open_categories(prop_t *model)
   add_category(nodes, PLUGIN_CAT_VIDEO, "movie");
   add_category(nodes, PLUGIN_CAT_MUSIC, "audiotrack");
   add_category(nodes, PLUGIN_CAT_SUBTITLES, "subtitles");
+  add_category(nodes, PLUGIN_CAT_OTHER, "other");
 #if !defined(PS3)
-  add_category(nodes, PLUGIN_CAT_GLWOSK, NULL);
+  add_category(nodes, PLUGIN_CAT_GLWOSK, "keyboard");
 #endif
   prop_ref_dec(nodes);
 }

@@ -142,6 +142,7 @@ void prop_init_late(void);
 #define PROP_SUB_TRACK_DESTROY_EXP    0x80
 #define PROP_SUB_SEND_VALUE_PROP      0x100
 #define PROP_SUB_NO_INITIAL_UPDATE    0x200
+#define PROP_SUB_EARLY_DEL_CHILD      0x400
 // Remember that flags field is uint16_t in prop_i.h so don't go above 0x8000
 // for persistent flags
 
@@ -169,7 +170,9 @@ enum {
   PROP_TAG_CALLBACK_DESTROYED,
   PROP_TAG_SET_INT,
   PROP_TAG_SET_FLOAT,
+  PROP_TAG_SET_RSTR,
   PROP_TAG_COURIER,
+  PROP_TAG_DISPATCH_GROUP,
   PROP_TAG_ROOT,
   PROP_TAG_NAMED_ROOT,
   PROP_TAG_ROOT_VECTOR,
@@ -494,6 +497,11 @@ void prop_unmark(prop_t *p);
 int prop_is_marked(prop_t *p);
 
 void prop_destroy_marked_childs(prop_t *p);
+
+
+void *prop_dispatch_group_create(void);
+
+void prop_dispatch_group_destroy(void *group);
 
 /**
  * Property tags

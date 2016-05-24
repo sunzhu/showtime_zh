@@ -53,7 +53,9 @@ extern const char *app_dataroot(void);
 
 #define BYPASS_CACHE  ((int *)-1)
 #define DISABLE_CACHE ((int *)-2)
-#define NOT_MODIFIED ((void *)-1)
+
+#define NOT_MODIFIED   ((void *)-1)
+#define NO_LOAD_METHOD ((void *)-2)
 
 
 #define ONLY_CACHED(p) ((p) != BYPASS_CACHE && (p) != NULL)
@@ -294,7 +296,7 @@ typedef struct gconf {
   hts_mutex_t state_mutex;
   hts_cond_t state_cond;
 
-  int state_plugins_loaded;
+  int navigator_can_start;
 
   int fa_allow_delete;
   int fa_kvstore_as_xattr;

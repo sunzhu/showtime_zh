@@ -2445,7 +2445,7 @@ subscribe_prop(glw_view_eval_context_t *ec, struct token *self, int type)
       sub_cloner_t *sc = calloc(1, sizeof(sub_cloner_t));
       gps = &sc->sc_sub;
 
-      sc->sc_have_more = 2;
+      sc->sc_pending_more = 1;
 
       sc->sc_originating_prop =
         prop_ref_inc(ec->scope->gs_roots[GLW_ROOT_SELF].p);
@@ -3531,17 +3531,14 @@ glwf_navOpen(glw_view_eval_context_t *ec, struct token *self,
   if((a = token_resolve(ec, argv[0])) == NULL)
     return -1;
 
-  if(a->type == TOKEN_VOID)
-    url = NULL;
-  else if(a->type == TOKEN_RSTRING)
+  if(a->type == TOKEN_RSTRING)
     url = rstr_get(a->t_rstring);
   else if(a->type == TOKEN_CSTRING)
     url = a->t_cstring;
   else if(a->type == TOKEN_URI)
     url = rstr_get(a->t_uri);
   else
-    return glw_view_seterr(ec->ei, a, "navOpen(): "
-			    "First argument is not a string, link or (void)");
+    url = NULL;
 
   if(argc > 1) {
     if((b = token_resolve(ec, argv[1])) == NULL)
@@ -4856,6 +4853,58 @@ glwf_value2size(glw_view_eval_context_t *ec, struct token *self,
 }
 
 
+/**
+ * Int to string
+ */
+static int
+glwf_value2quantity(glw_view_eval_context_t *ec, struct token *self,
+                    token_t **argv, unsigned int argc)
+{
+  token_t *a = argv[0];
+  token_t *r;
+  char tmp[30];
+  const char *str = NULL;
+  double s = 0;
+
+  a = token_resolve(ec, a);
+
+  if(a == NULL) {
+    str = "";
+  } else {
+    switch(a->type) {
+    case TOKEN_RSTRING:
+      str = rstr_get(a->t_rstring);
+      break;
+    case TOKEN_FLOAT:
+      s = a->t_float;
+      break;
+    case TOKEN_INT:
+      s = a->t_int;
+      break;
+    default:
+      str = "";
+      break;
+    }
+
+    if(str == NULL) {
+      if(s > 1000 * 1000) {
+	snprintf(tmp, sizeof(tmp), "%.1fM", s / 1000000.0);
+      } else if(s > 1000) {
+	snprintf(tmp, sizeof(tmp), "%.1fk", s / 1000.0);
+      } else {
+	snprintf(tmp, sizeof(tmp), "%d", (int)s);
+      }
+      str = tmp;
+    }
+  }
+
+  r = eval_alloc(self, ec, TOKEN_RSTRING);
+  r->t_rstring = rstr_alloc(str);
+  eval_push(ec, r);
+  return 0;
+}
+
+
 
 /**
  * Create a new child under the given property
@@ -5798,6 +5847,39 @@ glwf_isError(glw_view_eval_context_t *ec, struct token *self,
   }
 
   ec->dynamic_eval |= GLW_VIEW_EVAL_OTHER;
+  eval_push(ec, r);
+  return 0;
+}
+
+
+/**
+ * Return primary color for a widget (only works on image widgets)
+ */
+static int
+glwf_primary_color(glw_view_eval_context_t *ec, struct token *self,
+                   token_t **argv, unsigned int argc)
+{
+  token_t *r;
+  glw_t *w = ec->w;
+  const glw_class_t *gc = w->glw_class;
+
+  if(gc->gc_primary_color == NULL) {
+    r = eval_alloc(self, ec, TOKEN_VOID);
+  } else {
+    float rgb[3];
+    int valid = gc->gc_primary_color(w, rgb);
+    if(valid && rgb[0] && rgb[1] && rgb[2]) {
+      r = eval_alloc(self, ec, TOKEN_VECTOR_FLOAT);
+      r->t_elements = 3;
+      r->t_float_vector[0] = rgb[0];
+      r->t_float_vector[1] = rgb[1];
+      r->t_float_vector[2] = rgb[2];
+    } else {
+      r = eval_alloc(self, ec, TOKEN_VOID);
+    }
+    ec->dynamic_eval |= GLW_VIEW_EVAL_OTHER;
+  }
+
   eval_push(ec, r);
   return 0;
 }
@@ -7104,6 +7186,30 @@ glwf_inject_events(glw_view_eval_context_t *ec, struct token *self,
 }
 
 
+static int
+glwf_rgb_to_string(glw_view_eval_context_t *ec, struct token *self,
+                   token_t **argv, unsigned int argc)
+{
+  token_t *a = argv[0];
+  token_t *r;
+  if((a = token_resolve(ec, a)) == NULL)
+    return -1;
+
+  if(a->type == TOKEN_VECTOR_FLOAT) {
+    char output[32];
+    snprintf(output, sizeof(output), "#%02x%02x%02x",
+             (int)(a->t_float_vector[0] * 255.0f),
+             (int)(a->t_float_vector[1] * 255.0f),
+             (int)(a->t_float_vector[2] * 255.0f));
+    r = eval_alloc(self, ec, TOKEN_RSTRING);
+    r->t_rstring = rstr_alloc(output);
+  } else {
+    r = eval_alloc(self, ec, TOKEN_VOID);
+  }
+  eval_push(ec, r);
+  return 0;
+}
+
 
 
 #ifndef NDEBUG
@@ -7165,6 +7271,7 @@ static const token_func_t funcvec[] = {
   {"isVoid", 1, glwf_isvoid},
   {"value2duration", -1, glwf_value2duration},
   {"value2size", 1, glwf_value2size},
+  {"value2quantity", 1, glwf_value2quantity},
   {"createChild", 1, glwf_createchild},
   {"delete", 1, glwf_delete},
   {"isFocused", 0, glwf_isFocused},
@@ -7190,6 +7297,7 @@ static const token_func_t funcvec[] = {
   {"isLoading", 0, glwf_isLoading},
   {"isLoaded", 0, glwf_isLoaded},
   {"isError", 0, glwf_isError},
+  {"primaryColor", 0, glwf_primary_color},
   {"suggestFocus", 1, glwf_suggestFocus},
   {"count", 1, glwf_count},
   {"vectorize", 1, glwf_vectorize},
@@ -7222,6 +7330,8 @@ static const token_func_t funcvec[] = {
   {"timeAgo", 1, glwf_timeAgo},
   {"lookup", 2, glwf_lookup, glwf_null_ctor, glwf_lookup_dtor},
   {"injectEventsFrom", 1, glwf_inject_events},
+  {"RGBToString", 1, glwf_rgb_to_string},
+
 #ifndef NDEBUG
   {"dumpDynamicStatements", 0, glwf_dumpdynamicstatements},
 #endif

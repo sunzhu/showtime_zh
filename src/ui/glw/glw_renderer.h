@@ -18,6 +18,17 @@
  *  For more information, contact andreas@lonelycoder.com
  */
 #pragma once
+
+
+#define GLW_RENDER_BLUR_ATTRIBUTE   0x1 /* set if pos.w != 1 (sharpness)
+					 * ie, the triangle should be blurred
+					 */
+
+#define GLW_RENDER_OPAQUE           0x2 // Can be rendered without blending
+
+#define GLW_RENDER_DEBUG            0x4 // Turn on various debug
+
+
 #define VERTEX_SIZE 12 // Number of floats per vertex
 
 /**
@@ -58,7 +69,6 @@ typedef struct glw_renderer_cache {
   float grc_fader_blur[NUM_FADERS];
 
   char grc_blurred;
-  char grc_colored;
   uint16_t grc_num_vertices;
 
   float *grc_vertices;
@@ -68,22 +78,20 @@ typedef struct glw_renderer_cache {
  * Renderer
  */
 typedef struct glw_renderer {
+  float *gr_vertices;
+  uint16_t *gr_indices;
+#define GLW_RENDERER_CACHES 2
+  glw_renderer_cache_t *gr_cache[GLW_RENDERER_CACHES];
+
+
   uint16_t gr_num_vertices;
   uint16_t gr_num_triangles;
 
-  float *gr_vertices;
-  uint16_t *gr_indices;
-
-  char gr_static_indices;
-  char gr_dirty;
-  char gr_color_attributes;
   unsigned char gr_framecmp;
   unsigned char gr_cacheptr;
-
-
-#define GLW_RENDERER_CACHES 4
-
-  glw_renderer_cache_t *gr_cache[GLW_RENDERER_CACHES];
+  char gr_static_indices : 1;
+  char gr_dirty : 1;
+  char gr_color_attributes : 1;
 
 } glw_renderer_t;
 
@@ -111,14 +119,17 @@ typedef struct glw_render_job {
   float alpha;
   float blur;
   int vertex_offset;
+  int index_offset;
   int16_t num_vertices;
+  int16_t num_indices;
   int16_t width;
   int16_t height;
   int16_t primitive_type;
   char blendmode;
-  char frontface;
-  char eyespace;
   char flags;
+  char eyespace : 1;
+  char frontface : 1;
+  char opaque ;
 } glw_render_job_t;
 
 
