@@ -32,6 +32,7 @@
 #include "charset_detector.h"
 #include "big5.h"
 #include "gb2312.h"
+#include "arch/arch.h"
 
 #include <libavformat/avformat.h> // for av_url_split()
 
@@ -1636,19 +1637,10 @@ utf16_to_utf8(buf_t *b)
 rstr_t *
 get_random_string(void)
 {
-  sha1_decl(shactx);
   uint8_t d[20];
   char buf[40];
-  static uint64_t seed;
-  int i;
-  seed ^= arch_get_ts();
-
-  sha1_init(shactx);
-  sha1_update(shactx, (void *)&seed, sizeof(uint64_t));
-  sha1_final(shactx, d);
-  memcpy(&seed, d, sizeof(uint64_t));
-
-  for(i = 0; i < 20; i++) {
+  arch_get_random_bytes(d, sizeof(d));
+  for(int i = 0; i < 20; i++) {
     buf[i * 2 + 0] = "0123456789abcdef"[d[i] & 0xf];
     buf[i * 2 + 1] = "0123456789abcdef"[d[i] >> 4];
   }
