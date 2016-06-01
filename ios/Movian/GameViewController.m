@@ -31,6 +31,91 @@
 
 @end
 
+
+@interface GLWView: GLKView <UIKeyInput>
+@property (nonatomic) prop_t *eventSink;
+@property (nonatomic) glw_rect_t rect;
+@property (nonatomic) int oskscroll;
+@end
+
+@implementation GLWView
+
+- (void)insertText:(NSString *)text {
+  const char *cstr = [text UTF8String];
+  event_t *e;
+  if(!strcmp(cstr, "\n")) {
+    [self resignFirstResponder];
+    e = event_create_action(ACTION_ENTER);
+  } else {
+    e = event_create_str(EVENT_INSERT_STRING, cstr);
+  }
+  
+  prop_send_ext_event(self.eventSink, e);
+  event_release(e);
+}
+
+- (void)deleteBackward {
+  event_t *e = event_create_action(ACTION_BS);
+  prop_send_ext_event(self.eventSink, e);
+  event_release(e);
+}
+
+- (BOOL)hasText {
+  return YES;
+}
+- (BOOL)canBecomeFirstResponder {
+  return YES;
+}
+
+- (void)openOSKforWidget:(struct glw *)w position:(const glw_rect_t *)rect
+{
+  self.rect = *rect;
+  [self becomeFirstResponder];
+}
+
+- (void)keyboardWasShown:(NSNotification*)aNotification
+{
+  NSDictionary* info = [aNotification userInfo];
+  CGSize kbSize = [[info objectForKey:UIKeyboardFrameBeginUserInfoKey] CGRectValue].size;
+
+  int h = self.frame.size.height - kbSize.height;
+  int h2 = self.rect.y2 / self.contentScaleFactor;
+
+  self.oskscroll = (h2 - h) * self.contentScaleFactor;
+  if(self.oskscroll < 0)
+    self.oskscroll = 0;
+}
+
+
+- (void)keyboardWillBeHidden:(NSNotification*)aNotification
+{
+  self.oskscroll = 0;
+}
+
+@end
+
+
+
+
+
+static void
+openosk(struct glw_root *gr,
+        const char *title, const char *str, struct glw *w,
+        int password)
+{
+  GLWView *view = (__bridge GLWView *)(gr->gr_window);
+  
+  if(!w->glw_matrix)
+    return;
+  glw_rect_t r;
+  glw_project_matrix(&r, w->glw_matrix, gr);
+  
+  [view openOSKforWidget:w position:&r];
+}
+
+
+
+
 @implementation GameViewController
 
 - (void)viewDidLoad
@@ -43,7 +128,7 @@
     NSLog(@"Failed to create ES context");
   }
   
-  GLKView *view = (GLKView *)self.view;
+  GLWView *view = (GLWView *)self.view;
   view.context = self.context;
   view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
   self.preferredFramesPerSecond = 60;
@@ -52,9 +137,13 @@
   
   self.gr = calloc(1, sizeof(glw_root_t));
   glw_root_t *gr = self.gr;
-  gr->gr_private = (__bridge void *)(self.context);
+  
+  gr->gr_private = (__bridge void *)self.context;
   gr->gr_prop_ui = prop_create_root("ui");
   gr->gr_prop_nav = nav_spawn();
+  gr->gr_window = (__bridge void *)view;
+  
+  view.eventSink = prop_create(gr->gr_prop_ui, "eventSink");
 
   int flags = 0;
 #if TARGET_OS_TV
@@ -62,6 +151,10 @@
 #endif
   glw_init2(gr, flags);
 
+  
+  gr->gr_open_osk = openosk;
+
+  
   glw_opengl_init_context(gr);
 
   glw_lock(gr);
@@ -87,7 +180,31 @@
   r.direction = UISwipeGestureRecognizerDirectionDown;
   [self.view addGestureRecognizer:r];
 #endif
+  
+  [[NSNotificationCenter defaultCenter] addObserver:self.view
+                                           selector:@selector(keyboardWasShown:)
+                                               name:UIKeyboardDidShowNotification object:nil];
+  
+  [[NSNotificationCenter defaultCenter] addObserver:self.view
+                                           selector:@selector(keyboardWillBeHidden:)
+                                               name:UIKeyboardWillHideNotification object:nil];
+
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(becomeActive)
+                                               name:@"appDidBecomeActive"
+                                             object:nil];
+
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(resignActive)
+                                               name:@"appDidResignActive"
+                                             object:nil];
+  
+  self.pauseOnWillResignActive = NO;
+  self.resumeOnDidBecomeActive = NO;
+  
 }
+
+
 
 - (void)dealloc
 {    
@@ -232,6 +349,11 @@
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
 {
+  if([self.view isFirstResponder]) {
+    [self.view resignFirstResponder];
+    return;
+  }
+
   if ([touches count] < 1) return;
   CGPoint point = [[touches anyObject] locationInView:[self view]];
   self.touch_start_pos = point;
@@ -306,12 +428,11 @@ denormal_ftz(void)
 
 
 
-- (void)glkView:(GLKView *)view drawInRect:(CGRect)rect
+- (void)glkView:(GLWView *)view drawInRect:(CGRect)rect
 {
   glw_root_t *gr = self.gr;
 
   denormal_ftz();
-  
   glw_lock(gr);
   
   gr->gr_width  = (int)view.drawableWidth;
@@ -321,6 +442,7 @@ denormal_ftz(void)
 
   int refresh = gr->gr_need_refresh;
   gr->gr_need_refresh = 0;
+
   if(gr->gr_width > 1 && gr->gr_height > 1 && gr->gr_universe) {
     
     if(refresh) {
@@ -330,7 +452,7 @@ denormal_ftz(void)
       glw_layout0(gr->gr_universe, &rc);
       
       if(refresh & GLW_REFRESH_FLAG_RENDER) {
-        glViewport(0, 0, gr->gr_width, gr->gr_height);
+        glViewport(0, view.oskscroll, gr->gr_width, gr->gr_height);
         glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
         glw_render0(gr->gr_universe, &rc);
       }
@@ -350,8 +472,18 @@ denormal_ftz(void)
     e->e_flags |= EVENT_KEYPRESS;
     glw_inject_event(gr, e);
   }
+}
 
 
+- (void)becomeActive
+{
+  glw_need_refresh(self.gr, 0);
+  self.paused = NO;
+}
+
+- (void)resignActive
+{
+  self.paused = YES;
 }
 
 

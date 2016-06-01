@@ -64,6 +64,21 @@ dump_context(htsbuf_queue_t *out, es_context_t *ec)
 
   htsbuf_qprintf(out, "  Memory usage, current: %zd bytes, peak: %zd\n",
                  ec->ec_mem_active, ec->ec_mem_peak);
+  htsbuf_qprintf(out, "  Rooted Ecmascript objects: %d\n",
+                 ec->ec_rooted_objects);
+
+  htsbuf_qprintf(out, "  Native objects referenced:\n",
+                 ec->ec_rooted_objects);
+  for(int i = 0; i < ECMASCRIPT_MAX_NATIVE_CLASSES; i++) {
+    if(ec->ec_native_instances[i] != 0) {
+      const char *name = ecmascript_native_class_name(i);
+      if(name)
+        htsbuf_qprintf(out, "    %s: %d active\n",
+                       name, ec->ec_native_instances[i]);
+
+    }
+  }
+
 
   htsbuf_qprintf(out, "  Attached permanent resources:\n");
   dump_resource_list(out, &ec->ec_resources_permanent);
@@ -98,6 +113,37 @@ dumpstats(http_connection_t *hc, const char *remain, void *opaque,
 }
 
 
+
+/**
+ *
+ */
+static int
+dogc(http_connection_t *hc, const char *remain, void *opaque,
+     http_cmd_t method)
+{
+  int i;
+
+  htsbuf_queue_t out;
+  htsbuf_queue_init(&out, 0);
+
+  es_context_t **vec = ecmascript_get_all_contexts();
+
+  for(i = 0; vec[i] != NULL; i++) {
+    es_context_t *ec = vec[i];
+    hts_mutex_lock(&ec->ec_mutex);
+    duk_gc(ec->ec_duk, 0);
+    hts_mutex_unlock(&ec->ec_mutex);
+  }
+
+  ecmascript_release_context_vector(vec);
+
+  htsbuf_qprintf(&out, "OK\n");
+
+  return http_send_reply(hc, 0,
+                         "text/plain; charset=utf-8", NULL, NULL, 0, &out);
+}
+
+
 /**
  *
  */
@@ -105,6 +151,7 @@ static void
 ecmascript_stats_init(void)
 {
   http_path_add("/api/ecmascript/stats", NULL, dumpstats, 1);
+  http_path_add("/api/ecmascript/gc", NULL, dogc, 1);
 }
 
 INITME(INIT_GROUP_API, ecmascript_stats_init, NULL, 0);

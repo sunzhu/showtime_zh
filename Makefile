@@ -25,7 +25,7 @@ include ${C}/config.default
 BUILDDIR ?= ${C}/build.${BUILD}
 
 # All targets deps on Makefile, but we can comment that out during dev:ing
-ALLDEPS=${BUILDDIR}/config.mak Makefile src/arch/${OS}/${OS}.mk
+ALLDEPS=${BUILDDIR}/config.mak Makefile src/arch/${PLATFORM}/${PLATFORM}.mk
 
 ALLDEPS += ${STAMPS}
 
@@ -727,6 +727,7 @@ SRCS += ext/duktape/duktape.c \
 	src/ecmascript/es_hook.c \
 	src/ecmascript/es_timer.c \
 	src/ecmascript/es_subtitles.c \
+	src/ecmascript/es_scrobble.c \
 
 SRCS-$(CONFIG_METADATA) += src/ecmascript/es_metadata.c
 
@@ -766,7 +767,7 @@ ${BUILDDIR}/support/dataroot/%.o : CFLAGS = -O2
 ##############################################################
 ##############################################################
 
-include src/arch/${OS}/${OS}.mk
+include src/arch/${PLATFORM}/${PLATFORM}.mk
 
 
 # Various transformations
