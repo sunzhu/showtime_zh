@@ -39,7 +39,7 @@ struct buf;
 LIST_HEAD(es_resource_list, es_resource);
 LIST_HEAD(es_context_list, es_context);
 
-
+#define ECMASCRIPT_MAX_NATIVE_CLASSES 16
 
 /**
  * Native class
@@ -50,6 +50,7 @@ typedef struct ecmascript_native_class {
   void (*release)(void *ptr);
 } ecmascript_native_class_t;
 
+const char *ecmascript_native_class_name(int id);
 void ecmascript_register_native_class(ecmascript_native_class_t *c);
 
 #define ES_NATIVE_CLASS(nam, fn)                                  \
@@ -102,6 +103,10 @@ typedef struct es_context {
   struct prop_vec *ec_prop_unload_destroy;
 
   void *ec_prop_dispatch_group;
+
+  int ec_native_instances[ECMASCRIPT_MAX_NATIVE_CLASSES];
+
+  int ec_rooted_objects;
 
 } es_context_t;
 
@@ -245,6 +250,9 @@ struct rstr *es_prop_to_rstr(duk_context *ctx, int obj_idx, const char *id);
 struct prop *es_stprop_get(duk_context *ctx, int val_index);
 
 void ecmascript_push_buf(duk_context *ctx, struct buf *b);
+
+struct htsmsg_field;
+void es_push_htsmsg_field(duk_context *ctx, const struct htsmsg_field *f);
 
 
 /**
