@@ -110,12 +110,11 @@ pixmap_rescale_swscale(const AVPicture *pict, int src_pix_fmt,
     return fulhack(pict, src_w, src_h, dst_w, dst_h, with_alpha, margin);
 
   default:
-#ifndef __ANDROID__
-    if(!with_alpha)
-      dst_pix_fmt = AV_PIX_FMT_RGB24;
-    else
+#ifdef __PPC__
+    dst_pix_fmt = AV_PIX_FMT_RGB24;
+#else
+    dst_pix_fmt = AV_PIX_FMT_BGR32;
 #endif
-      dst_pix_fmt = AV_PIX_FMT_BGR32;
     break;
   }
 
