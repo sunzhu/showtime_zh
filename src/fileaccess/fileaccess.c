@@ -1476,10 +1476,11 @@ fileaccess_init(void)
                  SETTING_VALUE(1),
                  SETTING_HTSMSG("browsearchives", store, "faconf"),
                  NULL);
-
+#if ENABLE_BITTORRENT
   gconf.settings_bittorrent =
     settings_add_dir(gconf.settings_general, _p("BitTorrent"),
                      NULL, NULL, NULL, "settings:bittorrent");
+#endif
   return 0;
 }
 
