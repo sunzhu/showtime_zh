@@ -23,92 +23,93 @@ PLUGINREPO="https://movian.tv/api/plugins/plugins-v1.json"
 LINKER="\${CC}" # Default is to link with c-compiler
 
 CONFIG_LIST="
- libasound
- libpulse
- libfreetype
- libjpeg
- libpthread
- zlib
- dvd
- glw
- glw_frontend_x11
- glw_frontend_wii
- glw_frontend_ps3
- glw_frontend_cocoa
- glw_backend_opengl
- glw_backend_gx
- glw_backend_rsx
- glw_backend_opengl_es
- glw_rec
- gu
- libogc
- lirc
- libcec
- stdin
- release
+ airplay
+ audiotest
  avahi
+ bittorrent
+ bookmarks
  bonjour
- nvctrl
- libgme
- libxss
- libxv
- openssl
- polarssl
+ bspatch
+ bughunt
+ cedar
  commoncrypto
+ connman
+ dvd
+ emu_thread_specifics
+ fsevents
+ ftpclient
+ ftpserver
+ glw
+ glw_backend_gx
+ glw_backend_opengl
+ glw_backend_opengl_es
+ glw_backend_rsx
+ glw_frontend_cocoa
+ glw_frontend_ps3
+ glw_frontend_wii
+ glw_frontend_x11
+ glw_rec
+ glw_settings
+ gu
+ gumbo
+ hls
+ htsp
+ httpserver
+ icecast
+ inotify
+ kvstore
+ libasound
+ libav
+ libav_attachment_pointer
+ libcec
+ libfontconfig
+ libfreetype
+ libgme
+ libjpeg
+ libntfs
+ libogc
+ libpthread
+ libpulse
  librtmp
  libx11
  libxext
- locatedb
- spotlight
- vdpau
- libxxf86vm
  libxrandr
- httpserver
- timegm
- inotify
- fsevents
- realpath
- emu_thread_specifics
- libfontconfig
- sqlite_vfs
- sqlite_locking
- sqlite_internal
- libav
- libav_attachment_pointer
- tlsf
- airplay
- webpopup
- webkit
- valgrind
- xmp
- bughunt
- bspatch
- connman
- libntfs
- cedar
- audiotest
- metadata
- sqlite
- kvstore
- ftpclient
- ftpserver
- upnp
- bittorrent
- hls
- icecast
- usagereport
- nativesmb
- rar
- playqueue
- sid
- htsp
+ libxss
+ libxv
+ libxxf86vm
+ lirc
+ locatedb
  media_settings
- glw_settings
+ metadata
+ nativesmb
  netlog
- gumbo
- upgrade
+ nvctrl
+ openssl
+ playqueue
  plugins
+ polarssl
+ rar
+ realpath
+ release
+ sid
+ spotlight
+ sqlite
+ sqlite_internal
+ sqlite_locking
+ sqlite_vfs
+ stdin
  stpp
+ timegm
+ tlsf
+ upgrade
+ upnp
+ usagereport
+ valgrind
+ vdpau
+ webkit
+ webpopup
+ xmp
+ zlib
 "
 
 
@@ -642,28 +643,29 @@ EOF
 # Default enables
 #
 
-enable libav
-enable xmp
 enable audiotest
-enable metadata
-enable sqlite
-enable kvstore
+enable bittorrent
+enable bookmarks
 enable ftpclient
 enable ftpserver
-enable upnp
-enable bittorrent
-enable hls
-enable icecast
-enable usagereport
-enable nativesmb
-enable rar
-enable playqueue
-enable sid
-enable htsp
-enable media_settings
 enable glw_settings
-enable netlog
 enable gumbo
-enable upgrade
+enable hls
+enable htsp
+enable icecast
+enable kvstore
+enable libav
+enable media_settings
+enable metadata
+enable nativesmb
+enable netlog
+enable playqueue
 enable plugins
+enable rar
+enable sid
+enable sqlite
 enable stpp
+enable upgrade
+enable upnp
+enable usagereport
+enable xmp

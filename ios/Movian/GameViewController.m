@@ -73,6 +73,8 @@
   [self becomeFirstResponder];
 }
 
+#if TARGET_OS_IOS == 1
+
 - (void)keyboardWasShown:(NSNotification*)aNotification
 {
   NSDictionary* info = [aNotification userInfo];
@@ -91,6 +93,7 @@
 {
   self.oskscroll = 0;
 }
+#endif
 
 @end
 
@@ -112,6 +115,15 @@ openosk(struct glw_root *gr,
   
   [view openOSKforWidget:w position:&r];
 }
+
+static void
+glw_in_fullwindow(void *opaque, int val)
+{
+  [UIApplication sharedApplication].idleTimerDisabled = val ? YES : NO;
+}
+
+
+
 
 
 
@@ -144,6 +156,14 @@ openosk(struct glw_root *gr,
   gr->gr_window = (__bridge void *)view;
   
   view.eventSink = prop_create(gr->gr_prop_ui, "eventSink");
+  
+  prop_subscribe(0,
+                 PROP_TAG_NAME("ui", "fullwindow"),
+                 PROP_TAG_COURIER, gr->gr_courier,
+                 PROP_TAG_CALLBACK_INT, glw_in_fullwindow, NULL,
+                 PROP_TAG_ROOT, gr->gr_prop_ui,
+                 NULL);
+
 
   int flags = 0;
 #if TARGET_OS_TV
@@ -152,8 +172,9 @@ openosk(struct glw_root *gr,
   glw_init2(gr, flags);
 
   
+#if TARGET_OS_IOS == 1
   gr->gr_open_osk = openosk;
-
+#endif
   
   glw_opengl_init_context(gr);
 
@@ -181,6 +202,7 @@ openosk(struct glw_root *gr,
   [self.view addGestureRecognizer:r];
 #endif
   
+#if TARGET_OS_IOS == 1
   [[NSNotificationCenter defaultCenter] addObserver:self.view
                                            selector:@selector(keyboardWasShown:)
                                                name:UIKeyboardDidShowNotification object:nil];
@@ -189,6 +211,8 @@ openosk(struct glw_root *gr,
                                            selector:@selector(keyboardWillBeHidden:)
                                                name:UIKeyboardWillHideNotification object:nil];
 
+#endif
+  
   [[NSNotificationCenter defaultCenter] addObserver:self
                                            selector:@selector(becomeActive)
                                                name:@"appDidBecomeActive"
@@ -198,10 +222,9 @@ openosk(struct glw_root *gr,
                                            selector:@selector(resignActive)
                                                name:@"appDidResignActive"
                                              object:nil];
-  
+
   self.pauseOnWillResignActive = NO;
   self.resumeOnDidBecomeActive = NO;
-  
 }
 
 

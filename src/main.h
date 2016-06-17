@@ -256,13 +256,14 @@ typedef struct gconf {
   int enable_touch_debug;
   int enable_MediaCodec_debug;
 
+#if ENABLE_BITTORRENT
   int enable_torrent_debug;
   int enable_torrent_tracker_debug;
   int enable_torrent_diskio_debug;
   int enable_torrent_peer_connection_debug;
   int enable_torrent_peer_upload_debug;
   int enable_torrent_peer_download_debug;
-
+#endif
 
   char **devplugins;
   const char *plugin_repo;
@@ -284,12 +285,9 @@ typedef struct gconf {
 
   struct prop *settings_apps;
   struct prop *settings_sd;
-  struct prop *settings_general;
   struct prop *settings_dev;
   struct prop *settings_network;
   struct prop_concat *settings_look_and_feel;
-  struct prop *settings_bittorrent;
-
   struct setting *setting_av_volume; // Maybe move to audio.h
   struct setting *setting_av_sync;   // Maybe move to audio.h
 

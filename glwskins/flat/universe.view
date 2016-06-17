@@ -1,7 +1,7 @@
 setDefaultFont("skin://fonts/RobotoCondensed-Regular.ttf");
 
 $ui.sizeOffset = 4;
-$ui.xmargin = select($ui.aspect > 1, $ui.width / 50, 0);
+$ui.xmargin = select($ui.aspect > 1, $ui.width / 50, 0.2em);
 $ui.showTopIcons = $ui.pointerVisible || $ui.touch;
 $ui.showAllPlaydeckButtons = 0;
 
@@ -38,6 +38,9 @@ style(NavSelectedTextSecondary, {
   color: select(isNavFocused(), 0.9, 0.7);
 });
 
+$ui.color1 = "#4192ff";
+$ui.color2 = "#306cbe";
+$ui.color3 = "#c2ddff";
 
 widget(container_z, {
 
@@ -226,20 +229,18 @@ widget(container_z, {
             alpha: 0.8;
           });
 
-          widget(container_x, {
-            padding: 0.1em;
-            weight: 0.87;
-            widget(bar, {
-              color1: [0.3, 0.3, 0.3];
-              color2: [0.7, 0.8, 0.5];
-              fill: ($core.audio.mastervolume + 75) / 75;
-            });
+          widget(border, {
+            color: $ui.color3;
+            border: 1;
+            margin: -1;
+          });
 
+          widget(container_x, {
+            padding: 1;
             widget(bar, {
-              weight: 0.13;
-              color1: [0.7, 0.8, 0.5];
-              color2: [1.0, 0.8, 0.6];
-              fill: $core.audio.mastervolume / 12;
+              color1: $ui.color1;
+              color2: $ui.color2;
+              fill: ($core.audio.mastervolume + 75) / 87;
             });
           });
 
@@ -286,11 +287,5 @@ widget(container_z, {
         shadow: true;
       });
     });
-  });
-
-  label({
-    hidden: true;
-    size: 1em;
-    caption: $ui.aspect;
   });
 });
