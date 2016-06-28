@@ -141,7 +141,7 @@ glw_update_size(glw_root_t *gr)
   int base_size = bs1; // MIN(bs1, bs2);
 
   val = GLW_CLAMP(base_size + glw_settings.gs_size +
-                  gr->gr_skin_scale_adjustment, 8, 40);
+                  gr->gr_skin_scale_adjustment, 8, 80);
 
   if(gr->gr_current_size != val) {
     gr->gr_current_size = val;
@@ -2225,7 +2225,8 @@ glw_pointer_event(glw_root_t *gr, glw_pointer_event_t *gpe)
     if(glw_pointer_event0(gr, c, gpe, &hover, p, dir))
       break;
 
-  if(gpe->type == GLW_POINTER_MOTION_UPDATE)
+  if(gpe->type == GLW_POINTER_MOTION_UPDATE ||
+     gpe->type == GLW_POINTER_MOTION_REFRESH)
     glw_root_set_hover(gr, hover);
 }
 
