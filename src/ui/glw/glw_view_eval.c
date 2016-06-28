@@ -1126,7 +1126,7 @@ static uint8_t signal_to_eval_mask[GLW_SIGNAL_num] = {
 /**
  *
  */
-static __inline void
+static void
 run_dynamics(glw_t *w, glw_view_eval_context_t *ec, int mask)
 {
   ec->mask = mask;
@@ -4258,11 +4258,10 @@ glwf_scurve(glw_view_eval_context_t *ec, struct token *self,
     int cur   = gr->gr_frame_start - s->starttime;
 
     float x = (float)cur / s->total;
-
     v = GLW_S(x);
     s->current = GLW_LERP(v, s->startval, s->target);
     ec->dynamic_eval |= GLW_VIEW_EVAL_LAYOUT;
-    glw_schedule_refresh(gr, s->deadline);
+    glw_need_refresh(gr, 0);
   } else {
     s->current = s->target;
   }
