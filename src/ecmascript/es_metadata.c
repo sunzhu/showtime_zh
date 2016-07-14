@@ -73,13 +73,12 @@ es_video_metadata_bind_duk(duk_context *ctx)
   rstr_t *url = rstr_alloc(urlstr);
   rstr_t *title;
   rstr_t *filename = es_prop_to_rstr(ctx, 2, "filename");
-  int year         = es_prop_to_int(ctx, 2, "year", 0);
+  int year         = es_prop_to_int(ctx, 2, "year", -1);
 
   if(filename != NULL) {
     // Raw filename case
     title = metadata_remove_postfix_rstr(filename);
     rstr_release(filename);
-    year = -1;
   } else {
     title = es_prop_to_rstr(ctx, 2, "title");
   }
@@ -87,7 +86,7 @@ es_video_metadata_bind_duk(duk_context *ctx)
   int season    = es_prop_to_int(ctx,  2, "season", -1);
   int episode   = es_prop_to_int(ctx,  2, "episode", -1);
   rstr_t *imdb  = es_prop_to_rstr(ctx, 2, "imdb");
-  int duration  = es_prop_to_int(ctx,  2, "duration", 0);
+  int duration  = es_prop_to_int(ctx,  2, "duration", -1);
 
   em->mlv =
     metadata_bind_video_info(url, title, imdb, duration, root, NULL, 0, 0,

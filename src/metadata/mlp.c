@@ -431,7 +431,7 @@ struct metadata_lazy_video {
   prop_sub_t *mlv_trig_desc;
   prop_sub_t *mlv_trig_rating;
 
-  float mlv_duration;
+  int mlv_duration;
   unsigned char mlv_type;
   unsigned char mlv_lonely : 1;
   unsigned char mlv_passive : 1;
@@ -571,7 +571,7 @@ is_qtype_compat(int qa, int qb)
 static int64_t
 query_by_filename_or_dirname(void *db, const metadata_lazy_video_t *mlv,
 			     const metadata_source_funcs_t *msf, int *qtype,
-                             float duration, int lonely)
+                             int duration, int lonely)
 {
   int year;
   rstr_t *title;
@@ -582,8 +582,10 @@ query_by_filename_or_dirname(void *db, const metadata_lazy_video_t *mlv,
   if(!metadata_filename_to_episode(rstr_get(mlv->mlv_filename),
 				   &season, &episode, &title)) {
 
-    if(msf->query_by_episode == NULL)
+    if(msf->query_by_episode == NULL) {
+      rstr_release(title);
       return METADATA_PERMANENT_ERROR;
+    }
 
     if(title == NULL) {
       if(mlv->mlv_folder != NULL)
@@ -721,6 +723,32 @@ set_cast_n_crew(prop_t *p, metadata_t *md)
 /**
  *
  */
+static void
+set_artwork(prop_t *p, const char *name, rstr_vec_t *vec)
+{
+  char plural[32];
+  if(vec == NULL)
+    return;
+  prop_set(p, name, PROP_SET_RSTRING, vec->v[0]);
+
+  snprintf(plural, sizeof(plural), "%ss", name);
+
+  prop_t *v = prop_create_r(p, plural);
+  prop_mark_childs(v);
+  for(int i = 0; i < vec->size; i++) {
+    prop_t *x = prop_create_r(v, rstr_get(vec->v[i]));
+    prop_unmark(x);
+    prop_set(x, "url", PROP_SET_RSTRING, vec->v[i]);
+    prop_ref_dec(x);
+  }
+  prop_destroy_marked_childs(v);
+  prop_ref_dec(v);
+}
+
+
+/**
+ *
+ */
 static int
 mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
 {
@@ -779,7 +807,7 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
    *
    */
 
-  const float duration = mlv->mlv_duration;
+  int duration = mlv->mlv_duration;
   const int lonely = mlv->mlv_lonely;
 
   rstr_t *custom_title;
@@ -805,7 +833,7 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
 
 
   METADATA_TRACE("Processing '%s' "
-                 "custom_title=%s imdbid=%s lonely=%s duration=%f%s",
+                 "custom_title=%s imdbid=%s lonely=%s duration=%d%s",
                  rstr_get(mlv->mlv_url),
                  rstr_get(custom_title),
                  rstr_get(imdb_id),
@@ -819,12 +847,14 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
    * If duration is low skip this unless user have specified a custom query
    * or if we have an IMDB ID
    */
-  if(duration < METADATA_DURATION_LIMIT &&
+  if(duration != -1 && duration < METADATA_DURATION_LIMIT &&
      sq == NULL &&
      rstr_get(imdb_id) == NULL) {
     goto bad;
   }
 
+  if(duration == -1)
+    duration = 0;
 
   if(!refresh) {
     /**
@@ -1076,11 +1106,13 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
       if(ms != NULL)
         prop_set(mlv->mlv_m, "source", PROP_SET_STRING, ms->ms_description);
 
-      prop_set(mlv->mlv_m, "icon",        PROP_SET_RSTRING, md->md_icon);
       prop_set(mlv->mlv_m, "tagline",     PROP_SET_RSTRING, md->md_tagline);
       prop_set(mlv->mlv_m, "description", PROP_SET_RSTRING, md->md_description);
-      prop_set(mlv->mlv_m, "backdrop",    PROP_SET_RSTRING, md->md_backdrop);
       prop_set(mlv->mlv_m, "genre",       PROP_SET_RSTRING, md->md_genre);
+
+      set_artwork(mlv->mlv_m, "icon",     md->md_icons);
+      set_artwork(mlv->mlv_m, "backdrop", md->md_backdrops);
+      set_artwork(mlv->mlv_m, "thumb",    md->md_thumbs);
 
       prop_set(mlv->mlv_m, "year",
                md->md_year ? PROP_SET_INT : PROP_SET_VOID,
@@ -1109,15 +1141,15 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
 
         prop_set(pepi, "number",     PROP_SET_INT,     md->md_idx);
         prop_set(pepi, "title",      PROP_SET_RSTRING, md->md_title);
-        prop_set(pepi, "backdrop",   PROP_SET_RSTRING, md->md_backdrop);
-        prop_set(pepi, "bannerWide", PROP_SET_RSTRING, md->md_banner_wide);
-        prop_set(pepi, "icon",       PROP_SET_RSTRING, md->md_icon);
+        set_artwork(pepi, "backdrop",   md->md_backdrops);
+        set_artwork(pepi, "wideBanner", md->md_wide_banners);
+        set_artwork(pepi, "icon",       md->md_icons);
 
         prop_set(psea, "number",     PROP_SET_INT,     season->md_idx);
         prop_set(psea, "title",      PROP_SET_RSTRING, season->md_title);
-        prop_set(psea, "backdrop",   PROP_SET_RSTRING, season->md_backdrop);
-        prop_set(psea, "bannerWide", PROP_SET_RSTRING, season->md_banner_wide);
-        prop_set(psea, "icon",       PROP_SET_RSTRING, season->md_icon);
+        set_artwork(psea, "backdrop",   season->md_backdrops);
+        set_artwork(psea, "wideBanner", season->md_wide_banners);
+        set_artwork(psea, "icon",       season->md_icons);
 
         set_cast_n_crew(psea, season);
 
@@ -1126,9 +1158,11 @@ mlv_get_video_info0(void *db, metadata_lazy_video_t *mlv, int refresh)
           series = season->md_parent;
 
           prop_set(pser, "title",      PROP_SET_RSTRING, series->md_title);
-          prop_set(pser, "backdrop",   PROP_SET_RSTRING, series->md_backdrop);
-          prop_set(pser, "bannerWide", PROP_SET_RSTRING, series->md_banner_wide);
-          prop_set(pser, "icon",       PROP_SET_RSTRING, series->md_icon);
+
+          set_artwork(pser, "backdrop",   series->md_backdrops);
+          set_artwork(pser, "wideBanner", series->md_wide_banners);
+          set_artwork(pser, "icon",       series->md_icons);
+
           set_cast_n_crew(pser, series);
         }
 
@@ -1811,7 +1845,7 @@ mlv_options_cb(void *opaque, prop_event_t event, ...)
  */
 metadata_lazy_video_t *
 metadata_bind_video_info(rstr_t *url, rstr_t *filename,
-			 rstr_t *imdb_id, float duration,
+			 rstr_t *imdb_id, int duration,
 			 prop_t *root,
 			 rstr_t *folder, int lonely, int passive,
 			 int year, int season, int episode,
@@ -1891,7 +1925,7 @@ mlv_set_imdb_id(metadata_lazy_video_t *mlv, rstr_t *imdb_id)
  *
  */
 void
-mlv_set_duration(metadata_lazy_video_t *mlv, float duration)
+mlv_set_duration(metadata_lazy_video_t *mlv, int duration)
 {
   hts_mutex_lock(&metadata_mutex);
   if(mlv->mlv_duration != duration) {
@@ -1925,7 +1959,7 @@ mlv_set_lonely(metadata_lazy_video_t *mlv, int lonely)
  */
 int
 mlv_direct_query(void *db, rstr_t *url, rstr_t *filename,
-                 const char *imdb_id, float duration, const char *folder,
+                 const char *imdb_id, int duration, const char *folder,
                  int lonely)
 {
   metadata_lazy_video_t mlv;

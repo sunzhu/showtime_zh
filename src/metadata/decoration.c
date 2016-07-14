@@ -74,6 +74,7 @@ struct deco_browse {
   int db_pending_flags;
 #define DB_PENDING_DEFERRED_ALBUM_ANALYSIS 0x1
 #define DB_PENDING_DEFERRED_VIDEO_ANALYSIS 0x2
+#define DB_PENDING_DEFERRED_UPDATE         0x4
 
 #define DB_PENDING_DEFERRED_FULL_ANALYSIS 0xffffffff
 
@@ -248,6 +249,17 @@ stem_analysis(deco_browse_t *db, deco_stem_t *ds)
   }
 }
 
+/**
+ *
+ */
+static void
+set_contents(deco_browse_t *db, const char *contents, int cacheok)
+{
+  kv_url_opt_set(db->db_url, KVSTORE_DOMAIN_SYS, "contents",
+                 KVSTORE_SET_STRING, cacheok ? contents : NULL);
+  prop_set_string(db->db_prop_contents, contents);
+}
+
 
 /**
  *
@@ -267,7 +279,7 @@ update_contents(deco_browse_t *db)
     if(db->db_current_contents == DB_CONTENTS_IMAGES)
       return;
     db->db_current_contents = DB_CONTENTS_IMAGES;
-    prop_set_string(db->db_prop_contents, "images");
+    set_contents(db, "images", 1);
     if(!(db->db_flags & DECO_FLAGS_NO_AUTO_SORTING)) {
       prop_nf_sort(db->db_pnf, "node.metadata.timestamp", 0, 1, NULL, 0);
       prop_nf_sort(db->db_pnf, NULL, 0, 2, NULL, 0);
@@ -280,15 +292,15 @@ update_contents(deco_browse_t *db)
       return;
     db->db_current_contents = DB_CONTENTS_ALBUM;
 
-    prop_set_string(db->db_prop_contents, "album");
+    set_contents(db, "album", 1);
 
     if(!(db->db_flags & DECO_FLAGS_NO_AUTO_SORTING)) {
       prop_nf_sort(db->db_pnf, "node.metadata.track", 0, 1, NULL, 0);
       prop_nf_sort(db->db_pnf, NULL, 0, 2, NULL, 0);
 
       if(!db->db_audio_filter)
-        db->db_audio_filter = 
-          prop_nf_pred_str_add(db->db_pnf, "node.type", 
+        db->db_audio_filter =
+          prop_nf_pred_str_add(db->db_pnf, "node.type",
                                PROP_NF_CMP_NEQ, "audio", NULL,
                                PROP_NF_MODE_EXCLUDE);
     }
@@ -300,7 +312,7 @@ update_contents(deco_browse_t *db)
       return;
     db->db_current_contents = DB_CONTENTS_TV_SEASON;
 
-    prop_set_string(db->db_prop_contents, "tvseason");
+    set_contents(db, "tvseason", 0);
     if(!(db->db_flags & DECO_FLAGS_NO_AUTO_SORTING)) {
       prop_nf_sort(db->db_pnf, "node.metadata.episode.number", 0, 1, NULL, 0);
       prop_nf_sort(db->db_pnf, NULL, 0, 2, NULL, 0);
@@ -309,7 +321,7 @@ update_contents(deco_browse_t *db)
   }
 
   db->db_current_contents = 0;
-  prop_set_void(db->db_prop_contents);
+  set_contents(db, NULL, 1);
   prop_nf_sort(db->db_pnf, NULL, 0, 1, NULL, 0);
   prop_nf_sort(db->db_pnf, NULL, 0, 2, NULL, 0);
 }
@@ -326,8 +338,8 @@ type_analysis(deco_browse_t *db)
   } else {
     db->db_contents_mask &= ~DB_CONTENTS_IMAGES;
   }
-
-  update_contents(db);
+  db->db_pending_flags |= DB_PENDING_DEFERRED_UPDATE;
+  deco_pendings = 1;
 }
 
 
@@ -344,7 +356,7 @@ typedef struct deco_artist {
 /**
  *
  */
-static int 
+static int
 artist_compar(const void *A, const void *B)
 {
   const deco_artist_t *a = *(const deco_artist_t **)A;
@@ -371,14 +383,14 @@ album_analysis(deco_browse_t *db)
   LIST_INIT(&artists);
   db->db_contents_mask &= ~DB_CONTENTS_ALBUM;
 
-  if(!(db->db_types[CONTENT_AUDIO] > 1 && 
+  if(!(db->db_types[CONTENT_AUDIO] > 1 &&
        db->db_types[CONTENT_VIDEO] == 0 &&
        db->db_types[CONTENT_ARCHIVE] == 0 &&
        db->db_types[CONTENT_DIR] == 0 &&
        db->db_types[CONTENT_ALBUM] == 0 &&
        db->db_types[CONTENT_PLUGIN] == 0))
     return;
-  
+
   LIST_FOREACH(di, &db->db_items_per_ct[CONTENT_AUDIO], di_type_link) {
     if(di->di_album == NULL)
       goto cleanup;
@@ -390,7 +402,7 @@ album_analysis(deco_browse_t *db)
       v = di->di_album;
     else if(strcmp(rstr_get(v), rstr_get(di->di_album)))
       goto cleanup;
-    
+
     if(di->di_artist == NULL)
       continue;
 
@@ -398,7 +410,7 @@ album_analysis(deco_browse_t *db)
       if(!strcmp(rstr_get(da->da_artist), rstr_get(di->di_artist)))
 	break;
     }
-    
+
     if(da == NULL) {
       da = malloc(sizeof(deco_artist_t));
       da->da_count = 1;
@@ -431,7 +443,7 @@ album_analysis(deco_browse_t *db)
 
     if(da->da_count * 2 >= item_count) {
       prop_set(m, "album_name", PROP_SET_RSTRING, da->da_artist);
-      
+
       prop_t *p = prop_create_r(m, "album_art");
       metadata_bind_albumart(p, da->da_artist, v);
       prop_ref_dec(p);
@@ -523,7 +535,7 @@ video_analysis(deco_browse_t *db)
       }
     }
   }
-  
+
   di = LIST_FIRST(&db->db_items_per_ct[CONTENT_VIDEO]);
 
   prop_t *x = prop_create_r(db->db_prop_model, "season");
@@ -569,7 +581,7 @@ stem_get(deco_browse_t *db, const char *str)
     if(!strcmp(ds->ds_stem, str))
       return ds;
   }
-  
+
   ds = calloc(1, sizeof(deco_stem_t));
   ds->ds_stem = strdup(str);
   LIST_INSERT_HEAD(&db->db_stems[hash], ds, ds_link);
@@ -616,7 +628,7 @@ di_set_url(deco_item_t *di, rstr_t *str)
     return;
 
   s = strdup(rstr_get(str));
-  
+
   p = strrchr(s, '.');
   if(p != NULL) {
     if(strchr(p, '/') == NULL)
@@ -626,7 +638,7 @@ di_set_url(deco_item_t *di, rstr_t *str)
   }
 
   deco_stem_t *ds = stem_get(db, s);
-  
+
   LIST_INSERT_HEAD(&ds->ds_items, di, di_stem_link);
   di->di_ds = ds;
   di->di_postfix = p ? strdup(p) : NULL;
@@ -770,7 +782,7 @@ di_set_type(deco_item_t *di, const char *str)
   switch(di->di_type) {
 
   case CONTENT_AUDIO:
-    di->di_sub_album = 
+    di->di_sub_album =
       prop_subscribe(PROP_SUB_DIRECT_UPDATE,
 		     PROP_TAG_NAME("node", "metadata", "album"),
 		     PROP_TAG_CALLBACK_RSTR, di_set_album, di,
@@ -778,7 +790,7 @@ di_set_type(deco_item_t *di, const char *str)
 		     PROP_TAG_COURIER, deco_courier,
 		     NULL);
 
-    di->di_sub_artist = 
+    di->di_sub_artist =
       prop_subscribe(PROP_SUB_DIRECT_UPDATE,
 		     PROP_TAG_NAME("node", "metadata", "artist"),
 		     PROP_TAG_CALLBACK_RSTR, di_set_artist, di,
@@ -790,7 +802,7 @@ di_set_type(deco_item_t *di, const char *str)
     break;
 
   case CONTENT_VIDEO:
-    di->di_sub_duration = 
+    di->di_sub_duration =
       prop_subscribe(0,
 		     PROP_TAG_NAME("node", "metadata", "duration"),
 		     PROP_TAG_CALLBACK_INT, di_set_duration, di,
@@ -798,7 +810,7 @@ di_set_type(deco_item_t *di, const char *str)
 		     PROP_TAG_COURIER, deco_courier,
 		     NULL);
 
-    di->di_sub_series = 
+    di->di_sub_series =
       prop_subscribe(PROP_SUB_DIRECT_UPDATE,
 		     PROP_TAG_NAME("node", "metadata", "series", "title"),
 		     PROP_TAG_CALLBACK_RSTR, di_set_series, di,
@@ -806,7 +818,7 @@ di_set_type(deco_item_t *di, const char *str)
 		     PROP_TAG_COURIER, deco_courier,
 		     NULL);
 
-    di->di_sub_season = 
+    di->di_sub_season =
       prop_subscribe(PROP_SUB_DIRECT_UPDATE,
 		     PROP_TAG_NAME("node", "metadata", "season", "number"),
 		     PROP_TAG_CALLBACK_INT, di_set_season, di,
@@ -854,7 +866,7 @@ deco_browse_add_node(deco_browse_t *db, prop_t *p, deco_item_t *before)
     TAILQ_INSERT_TAIL(&db->db_items, di, di_link);
   }
 
-  di->di_sub_url = 
+  di->di_sub_url =
     prop_subscribe(0,
 		   PROP_TAG_NAME("node", "url"),
 		   PROP_TAG_CALLBACK_RSTR, di_set_url, di,
@@ -862,7 +874,7 @@ deco_browse_add_node(deco_browse_t *db, prop_t *p, deco_item_t *before)
 		   PROP_TAG_COURIER, deco_courier,
 		   NULL);
 
-  di->di_sub_filename = 
+  di->di_sub_filename =
     prop_subscribe(0,
 		   PROP_TAG_NAME("node", "filename"),
 		   PROP_TAG_CALLBACK_RSTR, di_set_filename, di,
@@ -870,7 +882,7 @@ deco_browse_add_node(deco_browse_t *db, prop_t *p, deco_item_t *before)
 		   PROP_TAG_COURIER, deco_courier,
 		   NULL);
 
-  di->di_sub_type = 
+  di->di_sub_type =
     prop_subscribe(0,
 		   PROP_TAG_NAME("node", "type"),
 		   PROP_TAG_CALLBACK_STRING, di_set_type, di,
@@ -1022,7 +1034,7 @@ deco_browse_node_cb(void *opaque, prop_event_t event, ...)
     p1 = va_arg(ap, prop_t *);
     deco_browse_del_node(db, prop_tag_clear(p1, db));
     break;
-    
+
   case PROP_SET_DIR:
   case PROP_WANT_MORE_CHILDS:
   case PROP_HAVE_MORE_CHILDS_YES:
@@ -1224,6 +1236,11 @@ decorated_browse_create(prop_t *model, struct prop_nf *pnf, prop_t *items,
                    SETTING_CALLBACK(erase_playinfo, db),
                    NULL);
   prop_ref_dec(options);
+
+  rstr_t *contents = kv_url_opt_get_rstr(url, KVSTORE_DOMAIN_SYS, "contents");
+  prop_set_rstring(db->db_prop_contents, contents);
+  rstr_release(contents);
+
   hts_mutex_unlock(&deco_mutex);
   return db;
 }
@@ -1313,7 +1330,7 @@ load_nfo(deco_item_t *di)
 
     rstr_set(&di->di_ds->ds_imdb_id, r);
     rstr_set(&di->di_db->db_imdb_id, r);
-    
+
     rstr_release(r);
   }
   buf_release(b);
