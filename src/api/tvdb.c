@@ -42,10 +42,7 @@ static char tvdb_language[3];
 static void
 update_cfgid(void)
 {
-  if(!strcmp(tvdb_language, "en"))
-    tvdb->ms_cfgid = 0; // For legacy reasons
-  else
-    tvdb->ms_cfgid = tvdb_language[0] | (tvdb_language[1] << 8);
+  tvdb->ms_cfgid = (1 << 24) | tvdb_language[0] | (tvdb_language[1] << 8);
 }
 
 
@@ -370,6 +367,7 @@ tvdb_query_by_episode(void *db, const char *item_url,
   result = fa_load("http://www.thetvdb.com/api/GetSeries.php",
                    FA_LOAD_ERRBUF(errbuf, sizeof(errbuf)),
                    FA_LOAD_QUERY_ARG("seriesname", title),
+                   FA_LOAD_QUERY_ARG("language", "all"),
                    FA_LOAD_FLAGS(FA_COMPRESSION),
                    NULL);
 
@@ -469,7 +467,7 @@ tvdb_query_by_episode(void *db, const char *item_url,
 	char url[256];
 	snprintf(url, sizeof(url), "http://www.thetvdb.com/banners/%s", thumb);
 
-	metadb_insert_videoart(db, itemid, url, METADATA_IMAGE_POSTER, 0, 0,
+	metadb_insert_videoart(db, itemid, url, METADATA_IMAGE_THUMB, 0, 0,
 			       1, NULL, 0);
       }
     }
@@ -533,11 +531,17 @@ tvdb_init(void)
   if(tvdb == NULL)
     return;
 
+  prop_t *globallang = prop_create_multi(prop_get_global(), "i18n",
+                                         "iso639_1", NULL);
+
   setting_create(SETTING_STRING, tvdb->ms_settings, SETTINGS_INITIAL_UPDATE,
                  SETTING_TITLE(_p("Language (ISO 639-1 code)")),
                  SETTING_STORE("tvdb", "language"),
+                 SETTING_VALUE_PROP(globallang),
                  SETTING_CALLBACK(set_lang, NULL),
                  NULL);
+
+  prop_ref_dec(globallang);
 }
 
 INITME(INIT_GROUP_API, tvdb_init, NULL, 0);

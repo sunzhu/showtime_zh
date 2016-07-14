@@ -108,6 +108,7 @@ typedef enum {
   METADATA_IMAGE_BACKDROP = 2,
   METADATA_IMAGE_PORTRAIT = 3,
   METADATA_IMAGE_BANNER_WIDE = 4,
+  METADATA_IMAGE_THUMB = 5,
 } metadata_image_type_t;
 
 
@@ -176,9 +177,10 @@ typedef struct metadata {
   rstr_t *md_manufacturer;
   rstr_t *md_equipment;
 
-  rstr_t *md_backdrop;
-  rstr_t *md_icon;
-  rstr_t *md_banner_wide;
+  rstr_vec_t *md_backdrops;
+  rstr_vec_t *md_icons;
+  rstr_vec_t *md_wide_banners;
+  rstr_vec_t *md_thumbs;
 
   rstr_t *md_ext_id;
 
@@ -439,7 +441,7 @@ void metadata_bind_albumart(struct prop *prop, rstr_t *artist, rstr_t *album);
 
 metadata_lazy_video_t *metadata_bind_video_info(rstr_t *url, rstr_t *filename,
 						rstr_t *imdb_id,
-                                                float duration,
+                                                int duration,
 						struct prop *root,
 						rstr_t *parent, int lonely,
 						int passive,
@@ -452,12 +454,12 @@ void mlv_unbind(metadata_lazy_video_t *mlv, int cleanup);
 
 void mlv_set_imdb_id(metadata_lazy_video_t *mlv, rstr_t *imdb_id);
 
-void mlv_set_duration(metadata_lazy_video_t *mlv, float duration);
+void mlv_set_duration(metadata_lazy_video_t *mlv, int duration);
 
 void mlv_set_lonely(metadata_lazy_video_t *mlv, int lonely);
 
 int mlv_direct_query(void *db, rstr_t *url, rstr_t *filename,
-                     const char *imdb_id, float duration, const char *folder,
+                     const char *imdb_id, int duration, const char *folder,
                      int lonely);
 
 /**
