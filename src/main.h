@@ -235,6 +235,7 @@ typedef struct gconf {
   int enable_http_debug;
   int disable_http_reuse;
   int enable_experimental;
+  int enable_indexer;
   int enable_detailed_avdiff;
   int enable_hls_debug;
   int enable_ftp_client_debug;
@@ -327,6 +328,9 @@ typedef struct gconf {
 
   void (*arch_dev_opts)(void (*addopt)(const char *title, const char *id,
                                        int *valp));
+
+  void (*clipboard_set)(const char *str);
+  rstr_t *(*clipboard_get)(void);
 
 } gconf_t;
 
