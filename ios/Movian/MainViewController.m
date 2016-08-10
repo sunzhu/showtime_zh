@@ -1,5 +1,5 @@
 //
-//  GameViewController.m
+//  MainViewController.m
 //  Movian
 //
 //  Created by Andreas Öman on 03/06/15.
@@ -8,7 +8,7 @@
 
 
 
-#import "GameViewController.h"
+#import "MainViewController.h"
 #import <OpenGLES/ES2/glext.h>
 #include <fenv.h>
 
@@ -16,7 +16,9 @@
 #include "ui/longpress.h"
 #include "navigator.h"
 
-@interface GameViewController () {
+#include "media/media.h"
+
+@interface MainViewController () {
   lphelper_t longpress;
 }
 @property (strong, nonatomic) EAGLContext *context;
@@ -128,7 +130,7 @@ glw_in_fullwindow(void *opaque, int val)
 
 
 
-@implementation GameViewController
+@implementation MainViewController
 
 - (void)viewDidLoad
 {
@@ -227,10 +229,8 @@ glw_in_fullwindow(void *opaque, int val)
   self.resumeOnDidBecomeActive = NO;
 }
 
-
-
 - (void)dealloc
-{    
+{
     [self tearDownGL];
     
     if ([EAGLContext currentContext] == self.context) {
@@ -276,7 +276,7 @@ glw_in_fullwindow(void *opaque, int val)
 {
   glw_root_t *gr = self.gr;
   glw_lock(gr);
-
+  
   event_t *e = event_create_action(type);
   e->e_flags |= EVENT_KEYPRESS;
   glw_inject_event(gr, e);
@@ -502,11 +502,13 @@ denormal_ftz(void)
 {
   glw_need_refresh(self.gr, 0);
   self.paused = NO;
+  media_global_hold(0, MP_HOLD_OS);
 }
 
 - (void)resignActive
 {
   self.paused = YES;
+  media_global_hold(1, MP_HOLD_OS);
 }
 
 
