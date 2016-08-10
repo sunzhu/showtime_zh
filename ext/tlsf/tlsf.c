@@ -583,7 +583,7 @@ static void* block_prepare_used(pool_t* pool, block_header_t* block, size_t size
 	{
 		block_trim_free(pool, block, size);
 		block_mark_as_used(block);
-                pool->used += size;
+                pool->used += block_size(block);
 		p = block_to_ptr(block);
 	}
 	return p;
@@ -840,8 +840,6 @@ tlsf_pool tlsf_create(void* mem, size_t bytes)
 
 void tlsf_destroy(tlsf_pool pool)
 {
-	/* Nothing to do. */
-	pool = pool;
 }
 
 void* tlsf_malloc(tlsf_pool tlsf, size_t size)

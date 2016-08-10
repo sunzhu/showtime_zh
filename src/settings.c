@@ -1612,8 +1612,11 @@ init_dev_settings(void)
   add_dev_bool("Debug CEC",
 	       "cecdebug", &gconf.enable_cec_debug);
 #endif
-  add_dev_bool("Debug directory listing",
+  add_dev_bool("Debug directory listings",
 	       "fascannerdebug", &gconf.enable_fa_scanner_debug);
+
+  add_dev_bool("Debug library indexer",
+	       "indexerdebug", &gconf.enable_indexer_debug);
 
   add_dev_bool("Debug SMB/CIFS (Windows File Sharing)",
 	       "smbdebug", &gconf.enable_smb_debug);
@@ -1699,7 +1702,8 @@ setting_get_dir(const char *key)
 
     static prop_t *general;
 
-    static prop_t *actions;
+    static prop_t *misc;
+    static prop_t *resets;
     static prop_t *filebrowse;
     static prop_t *plugins;
     static prop_t *runcontrol;
@@ -1712,15 +1716,16 @@ setting_get_dir(const char *key)
       prop_concat_t *pc = prop_concat_create(prop_create(general, "nodes"));
 
 
-      actions    = addgroup(pc, NULL);
+      misc       = addgroup(pc, NULL);
       upgrade    = addgroup(pc, _p("Software upgrade"));
       filebrowse = addgroup(pc, _p("File browsing"));
       runcontrol = addgroup(pc, _p("Starting and stopping"));
       plugins    = addgroup(pc, _p("Plugins"));
+      resets     = addgroup(pc, _p("Reset"));
     }
 
-    if(!strcmp(k2, "actions")) {
-      r = actions;
+    if(!strcmp(k2, "resets")) {
+      r = resets;
     } else if(!strcmp(k2, "runcontrol")) {
       r = runcontrol;
     } else if(!strcmp(k2, "upgrade")) {
@@ -1729,6 +1734,8 @@ setting_get_dir(const char *key)
       r = filebrowse;
     } else if(!strcmp(k2, "plugins")) {
       r = plugins;
+    } else if(!strcmp(k2, "misc")) {
+      r = misc;
     } else {
 
       printf("setting key lookup \"%s\" not found\n", k2);

@@ -654,7 +654,11 @@ audio_decode_thread(void *aux)
       if(ac->ac_deliver_locked != NULL) {
         r = ac->ac_deliver_locked(ad, samples, ad->ad_pts, ad->ad_epoch);
         if(r) {
-          hts_cond_wait(&mq->mq_avail, &mp->mp_mutex);
+          if(r == -1) {
+            hts_cond_wait(&mq->mq_avail, &mp->mp_mutex);
+          } else {
+            hts_cond_wait_timeout(&mq->mq_avail, &mp->mp_mutex, r);
+          }
           continue;
         }
       } else {
@@ -686,7 +690,7 @@ audio_decode_thread(void *aux)
     }
 
     mq->mq_packets_current--;
-    mp->mp_buffer_current -= mb->mb_size;
+    mp->mp_buffer_current -= mb_buffered_size(mb);
 
     if(mb->mb_data_type == MB_CTRL_UNBLOCK) {
       assert(blocked);
@@ -702,7 +706,7 @@ audio_decode_thread(void *aux)
         if(r) {
           TAILQ_INSERT_HEAD(&mq->mq_q_data, mb, mb_link);
           mq->mq_packets_current++;
-          mp->mp_buffer_current += mb->mb_size;
+          mp->mp_buffer_current += mb_buffered_size(mb);
 
           hts_cond_wait(&mq->mq_avail, &mp->mp_mutex);
           continue;
@@ -720,7 +724,7 @@ audio_decode_thread(void *aux)
 	if(audio_process_audio(ad, mb)) {
           hts_mutex_lock(&mp->mp_mutex);
           mq->mq_packets_current++;
-          mp->mp_buffer_current += mb->mb_size;
+          mp->mp_buffer_current += mb_buffered_size(mb);
           TAILQ_INSERT_HEAD(&mq->mq_q_data, mb, mb_link);
           continue;
         }
