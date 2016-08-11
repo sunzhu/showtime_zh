@@ -29,9 +29,6 @@
 #include "video/h264_annexb.h"
 #include "video/h264_parser.h"
 
-#define AVC_REORDER_SIZE 32
-#define AVC_REORDER_MASK (AVC_REORDER_SIZE-1)
-
 extern JavaVM *JVM;
 extern jclass STCore;
 
@@ -309,7 +306,7 @@ avc_get_output_buffers(JNIEnv *env, android_video_codec_t *avc)
 
 
 
-static void
+static int
 fill_frame_info_from_pts(frame_info_t *fi,
                          video_decoder_t *vd,
                          android_video_codec_t *avc,
@@ -319,19 +316,22 @@ fill_frame_info_from_pts(frame_info_t *fi,
   fi->fi_dar_den = avc->avc_out_height;
   fi->fi_pts = pts;
 
-  for(int i = 0; i < AVC_REORDER_SIZE; i++) {
-    const media_buf_meta_t *mbm = &vd->vd_reorder[i];
+  for(int i = 0; i < VIDEO_DECODER_REORDER_SIZE; i++) {
+    media_buf_meta_t *mbm = &vd->vd_reorder[i];
     if(mbm->mbm_pts == pts) {
       fi->fi_epoch = mbm->mbm_epoch;
       fi->fi_user_time = mbm->mbm_user_time;
       fi->fi_drive_clock = mbm->mbm_drive_clock;
       fi->fi_duration = mbm->mbm_duration;
+      fi->fi_pts = mbm->mbm_pts;
       AVC_TRACE("Dequeue buffer reorderslot:0x%lx -> %d "
                 "PTS=%"PRId64" duration=%d",
                 (long)pts, i, fi->fi_pts, fi->fi_duration);
-      return;
+      mbm->mbm_pts = PTS_UNSET;
+      return mbm->mbm_skip;
     }
   }
+  return 0;
 }
 
 
@@ -420,7 +420,7 @@ store_metadata(video_decoder_t *vd, struct media_buf *mb,
   copy_mbm_from_mb(mbm, mb);
   AVC_TRACE("Enqueue buffer reorderslot:%d PTS=%"PRId64,
             vd->vd_reorder_ptr, mbm->mbm_pts);
-  vd->vd_reorder_ptr = (vd->vd_reorder_ptr + 1) & AVC_REORDER_MASK;
+  vd->vd_reorder_ptr = (vd->vd_reorder_ptr + 1) & VIDEO_DECODER_REORDER_MASK;
   int is_bframe = 0;
 
   switch(mc->codec_id) {
@@ -463,6 +463,12 @@ android_codec_decode(struct media_codec *mc, struct video_decoder *vd,
   (*JVM)->GetEnv(JVM, (void **)&env, JNI_VERSION_1_6);
 
   (*env)->PushLocalFrame(env, 64);
+
+  if(avc->avc_annexb.extradata != NULL && !avc->avc_annexb.extradata_injected) {
+    avc_enq(env, avc, avc->avc_annexb.extradata,
+            avc->avc_annexb.extradata_size, 0, 0, 10000);
+    avc->avc_annexb.extradata_injected = 1;
+  }
 
   uint8_t *data = mb->mb_data;
   size_t size = mb->mb_size;
@@ -524,7 +530,7 @@ android_codec_decode_locked(struct media_codec *mc, struct video_decoder *vd,
     (*env)->PushLocalFrame(env, 64);
 
     frame_info_t fi = {};
-    fill_frame_info_from_pts(&fi, vd, avc, pts);
+    int skip = fill_frame_info_from_pts(&fi, vd, avc, pts);
 
     int64_t now = arch_get_avtime();
     media_pipe_t *mp = vd->vd_mp;
@@ -536,11 +542,12 @@ android_codec_decode_locked(struct media_codec *mc, struct video_decoder *vd,
     int64_t wt =  fi.fi_pts + rtd;
     static int64_t ptsdelta;
 
-    AVC_TRACE("Release buffer %5d @ %10lld (+%lld) in %16lld rtd=%lld",
-              idx, fi.fi_pts, fi.fi_pts - ptsdelta, wt - now, rtd);
-    ptsdelta = fi.fi_pts;
 
-    if(epoch == fi.fi_epoch) {
+    if(epoch == fi.fi_epoch && (wt - now) > 10000LL && !skip) {
+
+      AVC_TRACE("Display buffer %5d @ %10lld (+%lld) in %16lld rtd=%lld",
+                idx, fi.fi_pts, fi.fi_pts - ptsdelta, wt - now, rtd);
+
       (*env)->CallVoidMethod(env, avc->avc_decoder,
                              avc->avc_releaseOutputBufferTimed,
                              idx, wt * 1000LL);
@@ -551,11 +558,17 @@ android_codec_decode_locked(struct media_codec *mc, struct video_decoder *vd,
                                        fi.fi_pts, fi.fi_drive_clock);
 
     } else {
+      AVC_TRACE("   Skip buffer %5d @ %10lld (+%lld) in %16lld rtd=%lld",
+                idx, fi.fi_pts, fi.fi_pts - ptsdelta, wt - now, rtd);
+
       (*env)->CallVoidMethod(env, avc->avc_decoder,
                              avc->avc_releaseOutputBuffer,
                              idx, 0);
       check_exception(env, "releaseOutputBuffer");
     }
+
+    ptsdelta = fi.fi_pts;
+
     hts_mutex_lock(&vd->vd_mp->mp_mutex);
 
     (*env)->PopLocalFrame(env, NULL);
@@ -572,15 +585,30 @@ android_codec_decode_locked(struct media_codec *mc, struct video_decoder *vd,
 
   hts_mutex_unlock(&vd->vd_mp->mp_mutex);
 
-  uint8_t *data = mb->mb_data;
-  size_t size = mb->mb_size;
+  int rval;
 
-  if(avc->avc_annexb.extradata_injected)
+  uint8_t *data;
+  size_t size;
+  int64_t pts;
+  int flags;
+
+  if(avc->avc_annexb.extradata != NULL && !avc->avc_annexb.extradata_injected) {
+    data = avc->avc_annexb.extradata;
+    size = avc->avc_annexb.extradata_size;
+    pts = 0;
+    flags = 1;
+    rval = 1;
+    avc->avc_annexb.extradata_injected = 1;
+  } else {
+    data = mb->mb_data;
+    size = mb->mb_size;
     h264_to_annexb(&avc->avc_annexb, &data, &size);
 
-  int64_t pts = store_metadata(vd, mb, avc, mc, data, size);
+    pts = store_metadata(vd, mb, avc, mc, data, size);
+    flags = mb->mb_keyframe ? 1 : 0; // BUFFER_FLAG_KEY_FRAME
+    rval = 0;
+  }
 
-  const int flags = mb->mb_keyframe ? 1 : 0; // BUFFER_FLAG_KEY_FRAME
 
   JNIEnv *env;
   (*JVM)->GetEnv(JVM, (void **)&env, JNI_VERSION_1_6);
@@ -595,7 +623,7 @@ android_codec_decode_locked(struct media_codec *mc, struct video_decoder *vd,
   if(bb_size < size) {
     TRACE(TRACE_ERROR, "android", "Video packet buffer too small %d < %d",
           bb_size, size);
-    return idx;
+    return rval;
   }
   memcpy(bb_buf, data, size);
 
@@ -607,7 +635,7 @@ android_codec_decode_locked(struct media_codec *mc, struct video_decoder *vd,
   (*env)->PopLocalFrame(env, NULL);
 
   hts_mutex_lock(&vd->vd_mp->mp_mutex);
-  return 0;
+  return rval;
 }
 
 
@@ -719,7 +747,6 @@ android_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
     if(mcp->extradata != NULL && mcp->extradata_size) {
 
       if(mc->codec_id == AV_CODEC_ID_H264) {
-
         h264_to_annexb_init(&avc->avc_annexb, mcp->extradata,
                             mcp->extradata_size);
       } else {
@@ -813,43 +840,7 @@ android_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
   mid = (*env)->GetStaticMethodID(env, ByteBuffer, "allocateDirect",
                                   "(I)Ljava/nio/ByteBuffer;");
 
-  const void *extradata;
-  int extradata_size;
 
-  if(avc->avc_annexb.extradata) {
-    extradata      = avc->avc_annexb.extradata;
-    extradata_size = avc->avc_annexb.extradata_size;
-    avc->avc_annexb.extradata_injected = 1;
-    hexdump("csd-0", extradata, extradata_size);
-  } else {
-    extradata      = avc->avc_extradata;
-    extradata_size = avc->avc_extradata_size;
-  }
-
-
-  if(extradata_size) {
-    jobject bb = (*env)->CallStaticObjectMethod(env, ByteBuffer,
-                                                mid,
-                                                extradata_size);
-    check_exception(env, "allocateDirect");
-
-    uint8_t *ptr = (*env)->GetDirectBufferAddress(env, bb);
-
-    memcpy(ptr, extradata, extradata_size);
-
-    mid = (*env)->GetMethodID(env, ByteBuffer, "limit",
-                              "(I)Ljava/nio/Buffer;");
-
-    (*env)->CallObjectMethod(env, bb, mid, extradata_size);
-    check_exception(env, "limit");
-
-    mid = (*env)->GetMethodID(env, MediaFormat, "setByteBuffer",
-                              "(Ljava/lang/String;Ljava/nio/ByteBuffer;)V");
-
-    (*env)->CallVoidMethod(env, format, mid,
-                           (*env)->NewStringUTF(env, "csd-0"), bb);
-    check_exception(env, "setByteBuffer");
-  }
   // ------------------------------------------------
 
   int surface;
@@ -865,16 +856,18 @@ android_codec_create(media_codec_t *mc, const media_codec_params_t *mcp,
   // if setCallback() is available (Lollipop) we will run MediaCodec
   // in async mode
 
-  mid = (*env)->GetStaticMethodID(env, STCore, "setVideoDecoderWrapper",
-                                  "(Landroid/media/MediaCodec;I)V");
-  (*env)->CallStaticVoidMethod(env, STCore, mid, avc->avc_decoder, (int)avc);
-  if((*env)->ExceptionOccurred(env)) {
-    (*env)->ExceptionClear(env);
-    avc->avc_async = 0;
-  } else {
-    avc->avc_async = 1;
+  if(avc->avc_async) {
+    mid = (*env)->GetStaticMethodID(env, STCore, "setVideoDecoderWrapper",
+                                    "(Landroid/media/MediaCodec;I)V");
+    (*env)->CallStaticVoidMethod(env, STCore, mid, avc->avc_decoder, (int)avc);
+    if((*env)->ExceptionOccurred(env)) {
+      (*env)->ExceptionClear(env);
+      avc->avc_async = 0;
+    } else {
+      avc->avc_async = 1;
+    }
   }
-
+  
   // ------------------------------------------------
 
   mid = (*env)->GetMethodID(env, avc->avc_MediaCodec, "configure", "(Landroid/media/MediaFormat;Landroid/view/Surface;Landroid/media/MediaCrypto;I)V");
