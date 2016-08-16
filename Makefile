@@ -242,16 +242,12 @@ SRCS-$(CONFIG_LIBAV) += \
 	src/fileaccess/fa_video.c \
 	src/fileaccess/fa_audio.c \
 
-SRCS-$(CONFIG_XMP)             += src/fileaccess/fa_xmp.c
-SRCS-$(CONFIG_LIBGME)          += src/fileaccess/fa_gmefile.c
 SRCS-$(CONFIG_LOCATEDB)        += src/fileaccess/fa_locatedb.c
 SRCS-$(CONFIG_SPOTLIGHT)       += src/fileaccess/fa_spotlight.c
 SRCS-$(CONFIG_LIBNTFS)         += src/fileaccess/fa_ntfs.c
 SRCS-$(CONFIG_NATIVESMB)       += src/fileaccess/smb/fa_nativesmb.c \
 				  src/fileaccess/smb/nmb.c
 SRCS-$(CONFIG_RAR)             += src/fileaccess/fa_rar.c
-SRCS-$(CONFIG_SID)             += src/fileaccess/fa_sidfile.c \
-				  ext/audio/sid.c
 
 BUNDLES += res/fileaccess
 
@@ -738,6 +734,24 @@ SRCS-$(CONFIG_SQLITE) += src/ecmascript/es_sqlite.c
 
 ${BUILDDIR}/ext/duktape/%.o : CFLAGS = -Wall ${OPTFLAGS} \
  -fstrict-aliasing -std=c99 -DDUK_OPT_FASTINT #-DDUK_OPT_ASSERTIONS #-DDUK_OPT_DEBUG -DDUK_OPT_DPRINT -DDUK_OPT_DDPRINT -DDUK_OPT_DDDPRINT
+
+##############################################################
+# VMIR
+##############################################################
+
+SRCS-${CONFIG_VMIR} += \
+	ext/vmir/src/vmir.c \
+	ext/tlsf/tlsf.c \
+	src/np/np.c \
+	src/np/np_fs.c \
+	src/np/np_prop.c \
+	src/np/np_backend.c \
+	src/np/np_stats.c \
+
+${BUILDDIR}/ext/vmir/src/vmir.o : CFLAGS = ${CFLAGS_std} ${OPTFLAGS} -DVMIR_USE_TLSF -Iext/tlsf
+
+${BUILDDIR}/src/np/%.o : CFLAGS = ${CFLAGS_std} ${OPTFLAGS} -DNATIVEPLUGIN_HOST -Inativeplugin/include/
+
 
 
 ##############################################################

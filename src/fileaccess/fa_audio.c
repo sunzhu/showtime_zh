@@ -38,15 +38,11 @@
 #include "metadata/playinfo.h"
 #include "misc/minmax.h"
 #include "usage.h"
+#include "backend/backend.h"
 
-#if ENABLE_LIBGME
-#include <gme/gme.h>
+#if ENABLE_VMIR
+#include "np/np.h"
 #endif
-
-#if ENABLE_XMP
-#include <xmp.h>
-#endif
-
 
 /**
  *
@@ -156,25 +152,25 @@ be_file_playaudio(const char *url, media_pipe_t *mp,
     // ZIP File
     return audio_play_zipfile(fh, mp, errbuf, errlen, hold);
 
-  // First we need to check for a few other formats
-#if ENABLE_LIBGME
-  if(*gme_identify_header(pb))
-    return fa_gme_playfile(mp, fh, errbuf, errlen, hold, url);
-#endif
-
-#if ENABLE_XMP
-  FILE *f = fa_fopen(fh, 0);
-
-  if(f != NULL) {
-    int r = xmp_test_modulef(f, NULL);
-    if(r == 0) {
-      e = fa_xmp_playfile(mp, f, errbuf, errlen, hold, url,
-                          fa_fsize(fh));
-      fclose(f);
-      return e;
+#if ENABLE_VMIR
+  metadata_t *md = metadata_create();
+  if(np_fa_probe(fh, pb, psiz, md, url) == 0) {
+    fa_close_with_park(fh, 1);
+    event_t *e = NULL;
+    if(md->md_redirect == NULL) {
+      snprintf(errbuf, errlen, "External player provided no redirect URL");
+    } else if(!strcmp(md->md_redirect, url)) {
+      snprintf(errbuf, errlen, "Redirect loop %s -> %s", url, md->md_redirect);
+    } else {
+      TRACE(TRACE_DEBUG, "Audio", "%s redirects to %s",
+            url, md->md_redirect);
+      e = backend_play_audio(md->md_redirect, mp, errbuf, errlen, hold,
+                             mimetype);
     }
-    fclose(f);
+    metadata_destroy(md);
+    return e;
   }
+  metadata_destroy(md);
 #endif
 
   AVIOContext *avio = fa_libav_reopen(fh, 0);

@@ -64,7 +64,6 @@ CONFIG_LIST="
  libcec
  libfontconfig
  libfreetype
- libgme
  libjpeg
  libntfs
  libogc
@@ -91,7 +90,6 @@ CONFIG_LIST="
  rar
  realpath
  release
- sid
  spotlight
  sqlite
  sqlite_internal
@@ -108,8 +106,8 @@ CONFIG_LIST="
  vdpau
  webkit
  webpopup
- xmp
  zlib
+ vmir
 "
 
 
@@ -421,20 +419,6 @@ rtmpdump_setup() {
 #
 #
 #
-xmp_setup() {
-    if disabled xmp; then
-        return
-    fi
-
-    update_ext_submodule xmp
-    echo >>${CONFIG_MAK} "LDFLAGS_cfg += -lxmp"
-    add_stamp xmp
-}
-
-
-#
-#
-#
 gumbo_setup() {
     if disabled gumbo; then
         return
@@ -444,11 +428,24 @@ gumbo_setup() {
 }
 
 
+
+#
+#
+#
+vmir_setup() {
+    if disabled vmir; then
+        return
+    fi
+
+    update_ext_submodule vmir
+}
+
+
 ext_setup() {
     libav_setup
     rtmpdump_setup
-    xmp_setup
     gumbo_setup
+    vmir_setup
 }
 
 
@@ -662,10 +659,8 @@ enable netlog
 enable playqueue
 enable plugins
 enable rar
-enable sid
 enable sqlite
 enable stpp
 enable upgrade
 enable upnp
 enable usagereport
-enable xmp
