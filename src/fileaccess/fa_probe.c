@@ -25,14 +25,6 @@
 #include <string.h>
 #include <ctype.h>
 
-#if ENABLE_LIBGME
-#include <gme/gme.h>
-#endif
-
-#if ENABLE_XMP
-#include "xmp.h"
-#endif
-
 #include "main.h"
 #include "fileaccess.h"
 #include "fa_probe.h"
@@ -49,6 +41,10 @@
 #include <libavformat/avformat.h>
 #include "fa_libav.h"
 #include "libav.h"
+#endif
+
+#if ENABLE_VMIR
+#include "np/np.h"
 #endif
 
 /**
@@ -105,8 +101,11 @@ libav_metadata_rstr(AVDictionary *m, const char *key)
   const char *str;
   char *d;
 
-  if((tag = av_dict_get(m, key, NULL, AV_DICT_IGNORE_SUFFIX)) == NULL)
-    return NULL;
+  if((tag = av_dict_get(m, key, NULL, 0)) == NULL) {
+    if((tag = av_dict_get(m, key, NULL, AV_DICT_IGNORE_SUFFIX)) == NULL) {
+      return NULL;
+    }
+  }
 
   str = tag->value;
   len = strlen(str);
@@ -172,44 +171,17 @@ fa_probe_playlist(metadata_t *md, const char *url, uint8_t *pb, size_t pbsize)
 }
 #endif
 
-/**
- * Probe SPC files
- */
-static void
-fa_probe_spc(metadata_t *md, const uint8_t *pb, const char *filename)
-{
-  char buf[33];
-  buf[32] = 0;
-
-  if(memcmp("v0.30", pb + 0x1c, 4))
-    return;
-
-  if(pb[0x23] != 0x1a)
-    return;
-
-  memcpy(buf, pb + 0x2e, 32);
-  md->md_title = rstr_alloc(buf);
-
-  memcpy(buf, pb + 0x4e, 32);
-  md->md_album = rstr_alloc(buf);
-
-  memcpy(buf, pb + 0xa9, 3);
-  buf[3] = 0;
-
-  md->md_duration = atoi(buf);
-  md->md_track = filename ? atoi(filename) : 0;
-}
-
-
+#if 0
 /**
  *
  */
 static void
-fa_probe_psid(metadata_t *md, uint8_t *pb)
+fa_probe_psid(metadata_t *md, const uint8_t *pb)
 {
-  md->md_title = rstr_from_bytes_len((char *)pb + 0x16, 32, NULL, 0);
-  md->md_artist = rstr_from_bytes_len((char *)pb + 0x36, 32, NULL, 0);
+  md->md_title = rstr_from_bytes_len((const char *)pb + 0x16, 32, NULL, 0);
+  md->md_artist = rstr_from_bytes_len((const char *)pb + 0x36, 32, NULL, 0);
 }
+#endif
 
 
 /**
@@ -241,8 +213,8 @@ jpeginfo_reader(void *handle, void *buf, int64_t offset, size_t size)
 
 
 static void
-fa_probe_exif(metadata_t *md, const char *url, uint8_t *pb, fa_handle_t *fh,
-              int buflen)
+fa_probe_exif(metadata_t *md, const char *url, const uint8_t *pb,
+              fa_handle_t *fh, int buflen)
 {
   jpeginfo_t ji;
 
@@ -264,30 +236,19 @@ fa_probe_exif(metadata_t *md, const char *url, uint8_t *pb, fa_handle_t *fh,
  */
 static int
 fa_probe_header(metadata_t *md, const char *url, fa_handle_t *fh,
-		const char *filename)
+		const char *filename, const uint8_t *buf, size_t l)
 {
   uint16_t flags;
-  uint8_t buf[1025];
 
-  int l = fa_read(fh, buf, sizeof(buf) - 1);
-  if(l < 8)
-    return 0;
-
-  buf[l] = 0;
-
-  if(l >= 256 && !memcmp(buf, "SNES-SPC700 Sound File Data", 27)) {
-    fa_probe_spc(md, buf, filename);
-    md->md_contenttype = CONTENT_AUDIO;
-    return 1;
-  }
-
+#if 0
   if(l >= 256 && (!memcmp(buf, "PSID", 4) || !memcmp(buf, "RSID", 4))) {
     fa_probe_psid(md, buf);
     md->md_contenttype = CONTENT_ALBUM;
     metdata_set_redirect(md, "sidfile://%s/", url);
     return 1;
   }
-
+#endif
+  
   if(l >= 256 && (!memcmp(buf, "d8:announce", 11))) {
     md->md_contenttype = CONTENT_ARCHIVE;
     metdata_set_redirect(md, "torrentfile://%s/", url);
@@ -470,117 +431,6 @@ fa_probe_iso(metadata_t *md, fa_handle_t *fh)
   return fa_probe_iso0(md, pb);
 }
 
-
-/**
- *
- */
-#if ENABLE_XMP
-static int
-xmp_probe(metadata_t *md, const char *url, fa_handle_t *fh)
-{
-  struct xmp_test_info info;
-  FILE *f = fa_fopen(fh, 0);
-  if(f == NULL)
-    return 0;
-
-  int r = xmp_test_modulef(f, &info);
-  fclose(f);
-  if(r < 0)
-    return 0;
-
-  md->md_title  = rstr_alloc(info.name);
-  md->md_contenttype = CONTENT_AUDIO;
-  return 1;
-}
-#endif
-
-
-/**
- *
- */
-#if ENABLE_LIBGME
-static int
-gme_probe(metadata_t *md, const char *url, fa_handle_t *fh)
-{
-  uint8_t b4[4], *buf;
-  gme_err_t err;
-  Music_Emu *emu;
-  gme_info_t *info;
-  int tracks;
-  size_t size;
-  const char *type;
-
-  if(fa_read(fh, b4, 4) != 4)
-    return 0;
-
-  type = gme_identify_header(b4);
-
-  if(*type == 0)
-    return 0;
-
-  size = fa_fsize(fh);
-  if(size == -1)
-    return -1;
-
-  buf = malloc(size);
-
-  fa_seek(fh, 0, SEEK_SET);
-
-  if(fa_read(fh, buf, size) != size) {
-    free(buf);
-    return 0;
-  }
-
-
-  err = gme_open_data(buf, size, &emu, gme_info_only);
-  free(buf);
-  if(err != NULL)
-    return 0;
-
-  err = gme_track_info(emu, &info, 0);
-  if(err != NULL) {
-    gme_delete(emu);
-    return 0;
-  }
-
-  tracks = gme_track_count(emu);
-
-#if 0
-  printf("tracks   : %d\n", tracks);
-  printf("system   : %s\n", info->system);
-  printf("game     : %s\n", info->game);
-  printf("song     : %s\n", info->song);
-  printf("author   : %s\n", info->author);
-  printf("copyright: %s\n", info->copyright);
-  printf("comment  : %s\n", info->comment);
-  printf("dumper   : %s\n", info->dumper);
-#endif
-
-  if(tracks == 1) {
-
-    md->md_title  = info->song[0]   ? rstr_alloc(info->song)   : NULL;
-    md->md_album  = info->game[0]   ? rstr_alloc(info->game)   : NULL;
-    md->md_artist = info->author[0] ? rstr_alloc(info->author) : NULL;
-
-    md->md_duration = info->play_length / 1000.0;
-    md->md_contenttype = CONTENT_AUDIO;
-
-  } else {
-
-    md->md_title  = info->game[0] ? rstr_alloc(info->game)   : NULL;
-    md->md_artist = info->author[0] ? rstr_alloc(info->author) : NULL;
-
-    md->md_contenttype = CONTENT_ALBUM;
-    metdata_set_redirect(md, "gmefile://%s/", url);
-  }
-
-  gme_free_info(info);
-  gme_delete(emu);
-  return 1;
-}
-#endif
-
-
 /**
  *
  */
@@ -728,25 +578,23 @@ fa_probe_metadata(const char *url, char *errbuf, size_t errsize,
 
   metadata_t *md = metadata_create();
 
-#if ENABLE_LIBGME
-  if(gme_probe(md, url, fh)) {
-    fa_park(fh);
-    return md;
-  }
-#endif
+  uint8_t buf[1025];
 
-#if ENABLE_XMP
-  if(xmp_probe(md, url, fh)) {
-    fa_close_with_park(fh, park);
-    return md;
-  }
+  int l = fa_read(fh, buf, sizeof(buf) - 1);
+  if(l > 0) {
+#if ENABLE_VMIR
+    if(np_fa_probe(fh, buf, l, md, url) == 0) {
+      fa_close_with_park(fh, park);
+      return md;
+    }
 #endif
-
+    buf[l] = 0;
+    if(fa_probe_header(md, url, fh, filename, buf, l)) {
+      fa_close_with_park(fh, park);
+      return md;
+    }
+  }
   fa_seek(fh, 0, SEEK_SET);
-  if(fa_probe_header(md, url, fh, filename)) {
-    fa_close_with_park(fh, park);
-    return md;
-  }
 
   if(!fa_probe_iso(md, fh)) {
     fa_close_with_park(fh, park);
