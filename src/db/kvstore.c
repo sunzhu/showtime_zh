@@ -481,8 +481,6 @@ kv_prop_bind_create(prop_t *p, const char *url)
 }
 
 
-
-
 /**
  *
  */
@@ -517,6 +515,26 @@ kv_url_opt_get(void *db, const char *url, int domain, const char *key)
   return NULL;
 }
 
+
+
+
+/**
+ *
+ */
+static kvstore_write_t *
+deferred_get(const char *url, int domain, const char *key)
+{
+  kvstore_write_t *kw;
+  LIST_FOREACH(kw, &deferred_writes, kw_link) {
+    if(!strcmp(kw->kw_url, url) &&
+       !strcmp(kw->kw_key, key) &&
+       kw->kw_domain == domain)
+      return kw;
+  }
+  return NULL;
+}
+
+
 /**
  *
  */
@@ -543,6 +561,33 @@ kv_url_opt_get_rstr(const char *url, int domain, const char *key)
 {
   if(url == NULL)
     return NULL;
+
+  hts_mutex_lock(&deferred_mutex);
+  kvstore_write_t *kw = deferred_get(url, domain, key);
+  if(kw != NULL) {
+    rstr_t *r;
+    char vtmp[32];
+    switch(kw->kw_type) {
+    case KVSTORE_SET_INT:
+      snprintf(vtmp, sizeof(vtmp), "%d", kw->kw_int);
+      r = rstr_alloc(vtmp);
+      break;
+
+    case KVSTORE_SET_INT64:
+      snprintf(vtmp, sizeof(vtmp), "%"PRId64, kw->kw_int64);
+      r = rstr_alloc(vtmp);
+      break;
+
+    case KVSTORE_SET_STRING:
+      r = rstr_alloc(kw->kw_string);
+      break;
+    default:
+      r = NULL;
+    }
+    hts_mutex_unlock(&deferred_mutex);
+    return r;
+  }
+  hts_mutex_unlock(&deferred_mutex);
 
   void *data;
   size_t size;
@@ -587,6 +632,33 @@ kv_url_opt_get_int(const char *url, int domain, const char *key, int def)
   if(url == NULL)
     return def;
 
+  hts_mutex_lock(&deferred_mutex);
+  kvstore_write_t *kw = deferred_get(url, domain, key);
+  if(kw != NULL) {
+    int r;
+    switch(kw->kw_type) {
+    case KVSTORE_SET_INT:
+      r = kw->kw_int;
+      break;
+
+    case KVSTORE_SET_INT64:
+      r = kw->kw_int64;
+      break;
+
+    case KVSTORE_SET_STRING:
+      r = atoi(kw->kw_string);
+      break;
+
+    default:
+      r = def;
+      break;
+    }
+    hts_mutex_unlock(&deferred_mutex);
+    return r;
+  }
+  hts_mutex_unlock(&deferred_mutex);
+
+
   void *data;
   size_t size;
   fa_err_code_t err = opt_get_ea(url, domain, key, &data, &size);
@@ -629,6 +701,32 @@ kv_url_opt_get_int64(const char *url, int domain, const char *key, int64_t def)
 {
   if(url == NULL)
     return def;
+
+  hts_mutex_lock(&deferred_mutex);
+  kvstore_write_t *kw = deferred_get(url, domain, key);
+  if(kw != NULL) {
+    int64_t r;
+    switch(kw->kw_type) {
+    case KVSTORE_SET_INT:
+      r = kw->kw_int;
+      break;
+
+    case KVSTORE_SET_INT64:
+      r = kw->kw_int64;
+      break;
+
+    case KVSTORE_SET_STRING:
+      r = strtoull(kw->kw_string, NULL, 10);
+      break;
+
+    default:
+      r = def;
+      break;
+    }
+    hts_mutex_unlock(&deferred_mutex);
+    return r;
+  }
+  hts_mutex_unlock(&deferred_mutex);
 
   void *data;
   size_t size;
@@ -807,88 +905,6 @@ kv_write_xattr(const kvstore_write_t *kw)
 }
 
 
-/**
- *
- */
-void
-kv_url_opt_set(const char *url, int domain, const char *key,
-	       int type, ...)
-{
-  void *db;
-  int rc;
-  uint64_t id;
-  va_list ap;
-
-  kvstore_write_t kw;
-  kw.kw_url    = (char *)url;
-  kw.kw_domain = domain;
-  kw.kw_key    = (char *)key;
-  kw.kw_type   = type & 0xff;
-  kw.kw_unimportant = type & KVSTORE_UNIMPORTANT;
-
-  va_start(ap, type);
-
-  switch(kw.kw_type) {
-  case KVSTORE_SET_INT:
-    kw.kw_int = va_arg(ap, int);
-    break;
-
-  case KVSTORE_SET_INT64:
-    kw.kw_int64 = va_arg(ap, int64_t);
-    break;
-
-  case KVSTORE_SET_STRING:
-    kw.kw_string = va_arg(ap, char *);
-    if(kw.kw_string == NULL)
-      kw.kw_type = KVSTORE_SET_VOID;
-    break;
-
-  default:
-    break;
-  }
-  va_end(ap);
-
-  if(gconf.fa_kvstore_as_xattr) {
-    if(!kv_write_xattr(&kw))
-      return;
-  }
-
-#ifdef STOS
-  if(kw.kw_unimportant)
-    return;
-#endif
-
-  db = kvstore_get();
-  if(db == NULL)
-    return;
-
- again:
-  if(db_begin(db)) {
-    kvstore_close(db);
-    return;
-  }
-
-  rc = get_url(db, url, &id);
-  if(rc == SQLITE_LOCKED) {
-    db_rollback_deadlock(db);
-    goto again;
-  }
-
-  if(rc != SQLITE_OK) {
-    db_rollback(db);
-    kvstore_close(db);
-    return;
-  }
-
-  rc = kv_write_db(db, &kw, id);
-  if(rc == SQLITE_LOCKED) {
-    db_rollback_deadlock(db);
-    goto again;
-  }
-  db_commit(db);
-  kvstore_close(db);
-}
-
 
 /**
  *
@@ -986,22 +1002,16 @@ deferred_callout_fire(struct callout *c, void *opaque)
  *
  */
 void
-kv_url_opt_set_deferred(const char *url, int domain, const char *key,
-                        int type, ...)
+kv_url_opt_set(const char *url, int domain, const char *key,
+               int type, ...)
 {
-  kvstore_write_t *kw;
   va_list ap;
   const char *str;
   va_start(ap, type);
 
   hts_mutex_lock(&deferred_mutex);
 
-  LIST_FOREACH(kw, &deferred_writes, kw_link) {
-    if(!strcmp(kw->kw_url, url) &&
-       !strcmp(kw->kw_key, key) &&
-       kw->kw_domain == domain)
-      break;
-  }
+  kvstore_write_t *kw = deferred_get(url, domain, key);
 
   if(kw == NULL) {
     kw = malloc(sizeof(kvstore_write_t));
@@ -1042,7 +1052,7 @@ kv_url_opt_set_deferred(const char *url, int domain, const char *key,
 
   hts_mutex_unlock(&deferred_mutex);
 
-  callout_arm(&deferred_callout, deferred_callout_fire, NULL, 5);
+  callout_arm(&deferred_callout, deferred_callout_fire, NULL, 1);
   va_end(ap);
 }
 
@@ -1089,12 +1099,6 @@ kv_url_opt_set(const char *url, int domain, const char *key,
 {
 }
 
-
-void
-kv_url_opt_set_deferred(const char *url, int domain, const char *key,
-                        int type, ...)
-{
-}
 
 void
 kvstore_deferred_flush(void)
