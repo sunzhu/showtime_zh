@@ -142,10 +142,24 @@ fa_resolve_proto(const char *url, fa_protocol_t **p,
 	continue;
     }
 
-    *p = fap;
     fap_retain(fap);
     hts_mutex_unlock(&fap_mutex);
-    return strdup(fap->fap_flags & FAP_INCLUDE_PROTO_IN_URL ? url0 : url);
+
+    const char *fname = fap->fap_flags & FAP_INCLUDE_PROTO_IN_URL ? url0 : url;
+
+
+    if(fap->fap_redirect != NULL) {
+      rstr_t *newurl = fap->fap_redirect(fap, fname);
+      if(newurl != NULL) {
+        fap_release(fap);
+        char *r = fa_resolve_proto(rstr_get(newurl), p, errbuf, errsize);
+        rstr_release(newurl);
+        return r;
+      }
+    }
+
+    *p = fap;
+    return strdup(fname);
   }
   hts_mutex_unlock(&fap_mutex);
   snprintf(errbuf, errsize, "Protocol %s not supported", buf);
@@ -1467,6 +1481,9 @@ typedef struct loadarg {
   const char *value;
 } loadarg_t;
 
+#define FA_LOAD_CACHE_STASH "fa-load"
+
+
 /**
  *
  */
@@ -1499,6 +1516,7 @@ fa_load(const char *url, ...)
   int protocol_code = 0;
   int *protocol_codep = &protocol_code;
   int no_fallback = 0;
+  int cache_evict = 0;
 
   va_list ap;
   va_start(ap, url);
@@ -1541,17 +1559,19 @@ fa_load(const char *url, ...)
     case FA_LOAD_TAG_QUERY_ARGVEC: {
       const char **args = va_arg(ap, const char **);
 
-      while(args[0] != NULL) {
-        if(args[1] != NULL) {
-          la = alloca(sizeof(loadarg_t));
-          la->key = args[0];
-          la->value = args[1];
-          SIMPLEQ_INSERT_TAIL(&qargs, la, link);
+      if(args != NULL) {
+        while(args[0] != NULL) {
+          if(args[1] != NULL) {
+            la = alloca(sizeof(loadarg_t));
+            la->key = args[0];
+            la->value = args[1];
+            SIMPLEQ_INSERT_TAIL(&qargs, la, link);
+          }
+          args += 2;
         }
-        args += 2;
       }
-    }
       break;
+    }
 
     case FA_LOAD_TAG_MIN_EXPIRE:
       min_expire = va_arg(ap, int);
@@ -1583,12 +1603,18 @@ fa_load(const char *url, ...)
       no_fallback = 1;
       break;
 
+    case FA_LOAD_TAG_CACHE_EVICT:
+      cache_evict = 1;
+      break;
+
     default:
       abort();
     }
   }
 
   va_end(ap);
+
+  *protocol_codep = 0;
 
   if(SIMPLEQ_FIRST(&qargs) != NULL) {
     // Construct URL with query args
@@ -1609,6 +1635,11 @@ fa_load(const char *url, ...)
     free(newurl);
   }
 
+  if(cache_evict) {
+    blobcache_evict(url, FA_LOAD_CACHE_STASH);
+    return NULL;
+  }
+
   if(locationptr != NULL)
     *locationptr = strdup(url);
 
@@ -1620,7 +1651,8 @@ fa_load(const char *url, ...)
     int max_age = 0;
 
     if(cache_control != BYPASS_CACHE && cache_control != DISABLE_CACHE) {
-      buf = blobcache_get(url, "fa_load", 1, &is_expired, &etag, &mtime);
+      buf = blobcache_get(url, FA_LOAD_CACHE_STASH,
+                          1, &is_expired, &etag, &mtime);
 
       if(buf != NULL) {
 	if(cache_control != NULL) {
@@ -1653,7 +1685,7 @@ fa_load(const char *url, ...)
     }
 
     if(cache_control == BYPASS_CACHE)
-      blobcache_get_meta(url, "fa_load", &etag, &mtime);
+      blobcache_get_meta(url, FA_LOAD_CACHE_STASH, &etag, &mtime);
 
     data2 = fap->fap_load(fap, filename, errbuf, errlen,
 			  &etag, &mtime, &max_age, flags, cb, opaque, c,
@@ -1703,16 +1735,16 @@ fa_load(const char *url, ...)
      * cache for a given time), up max_age
      */
     max_age = MAX(min_expire, max_age);
-
     if(data2 && cache_control != DISABLE_CACHE &&
+       *protocol_codep < 300 &&
        (cache_control || max_age || etag || mtime)) {
 
       int bc_flags = 0;
       if(flags & FA_IMPORTANT)
         bc_flags |= BLOBCACHE_IMPORTANT_ITEM;
 
-      no_change = blobcache_put(url, "fa_load", data2, max_age, etag, mtime,
-                                bc_flags);
+      no_change = blobcache_put(url, FA_LOAD_CACHE_STASH, data2, max_age,
+                                etag, mtime, bc_flags);
 
     } else {
       no_change = 0;
