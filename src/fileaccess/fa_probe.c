@@ -47,6 +47,10 @@
 #include "np/np.h"
 #endif
 
+#if ENABLE_PLUGINS
+#include "plugins.h"
+#endif
+
 /**
  *
  */
@@ -171,18 +175,6 @@ fa_probe_playlist(metadata_t *md, const char *url, uint8_t *pb, size_t pbsize)
 }
 #endif
 
-#if 0
-/**
- *
- */
-static void
-fa_probe_psid(metadata_t *md, const uint8_t *pb)
-{
-  md->md_title = rstr_from_bytes_len((const char *)pb + 0x16, 32, NULL, 0);
-  md->md_artist = rstr_from_bytes_len((const char *)pb + 0x36, 32, NULL, 0);
-}
-#endif
-
 
 /**
  *
@@ -240,15 +232,6 @@ fa_probe_header(metadata_t *md, const char *url, fa_handle_t *fh,
 {
   uint16_t flags;
 
-#if 0
-  if(l >= 256 && (!memcmp(buf, "PSID", 4) || !memcmp(buf, "RSID", 4))) {
-    fa_probe_psid(md, buf);
-    md->md_contenttype = CONTENT_ALBUM;
-    metdata_set_redirect(md, "sidfile://%s/", url);
-    return 1;
-  }
-#endif
-  
   if(l >= 256 && (!memcmp(buf, "d8:announce", 11))) {
     md->md_contenttype = CONTENT_ARCHIVE;
     metdata_set_redirect(md, "torrentfile://%s/", url);
@@ -578,17 +561,21 @@ fa_probe_metadata(const char *url, char *errbuf, size_t errsize,
 
   metadata_t *md = metadata_create();
 
-  uint8_t buf[1025];
-
+  uint8_t buf[4097];
   int l = fa_read(fh, buf, sizeof(buf) - 1);
   if(l > 0) {
+    buf[l] = 0;
+
+#if ENABLE_PLUGINS
+    plugin_probe_for_autoinstall(fh, buf, l, url);
+#endif
+
 #if ENABLE_VMIR
     if(np_fa_probe(fh, buf, l, md, url) == 0) {
       fa_close_with_park(fh, park);
       return md;
     }
 #endif
-    buf[l] = 0;
     if(fa_probe_header(md, url, fh, filename, buf, l)) {
       fa_close_with_park(fh, park);
       return md;

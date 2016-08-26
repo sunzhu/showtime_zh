@@ -19,12 +19,13 @@
  */
 #include <assert.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include "main.h"
 #include "blobcache.h"
 #include "misc/pool.h"
 #include "misc/sha.h"
-#include "misc/md5.h"
+#include "misc/murmur3.h"
 #include "arch/arch.h"
 #include "arch/threads.h"
 #include "arch/atomic.h"
@@ -160,15 +161,7 @@ digest_key(const char *key, const char *stash)
 static uint64_t
 digest_content(const void *data, size_t len)
 {
-  union {
-    uint8_t d[16];
-    uint64_t u64;
-  } u;
-  md5_decl(ctx);
-  md5_init(ctx);
-  md5_update(ctx, data, len);
-  md5_final(ctx, u.d);
-  return u.u64;
+  return MurHash3_32(data, len, 0);
 }
 
 
@@ -412,7 +405,6 @@ load_index(void)
   }
   free(base);
 }
-
 
 
 /**
@@ -727,6 +719,33 @@ prune_item(blobcache_item_t *p)
   make_filename(filename, sizeof(filename), p->bi_key_hash, 0);
   fa_unlink(filename, NULL, 0);
   pool_put(item_pool, p);
+}
+
+
+
+/**
+ *
+ */
+void
+blobcache_evict(const char *key, const char *stash)
+{
+  uint64_t dk = digest_key(key, stash);
+
+  hts_mutex_lock(&cache_lock);
+  if(bcstate == BLOBCACHE_RUN) {
+    blobcache_item_t *p, **q;
+    q = &hashvector[dk & ITEM_HASH_MASK];
+    while((p = *q) != NULL) {
+      if(p->bi_key_hash == dk) {
+        current_cache_size -= p->bi_size;
+        *q = p->bi_link;
+        prune_item(p);
+        break;
+      }
+      q = &p->bi_link;
+    }
+  }
+  hts_mutex_unlock(&cache_lock);
 }
 
 
