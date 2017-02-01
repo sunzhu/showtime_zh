@@ -528,12 +528,13 @@ blobcache_get(const char *key, const char *stash, int pad,
 
   now = time(NULL);
 
-  // If clock is not OK yet, always consider stuff as expired
-  int expired = bcstate == BLOBCACHE_RUN_BAD_CLOCK || now > p->bi_expiry;
+  const int clock_ok = now >= 1426926328;
+
+  int expired = now > p->bi_expiry && clock_ok;
 
   bcprintf("Found (expired=%s%s)\n",
            expired ? "yes":"no",
-           bcstate == BLOBCACHE_RUN ? "" : " (Bad system clock)");
+           clock_ok ? "" : " (Bad system clock)");
 
   if(expired && ignore_expiry == NULL)
     goto bad;
