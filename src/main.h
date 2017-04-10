@@ -206,6 +206,7 @@ typedef struct gconf {
   char *cache_path;
   char *persistent_path;
 
+  int max_video_buffer_size;
   int concurrency;
   int trace_level;
   int trace_to_syslog;
@@ -340,8 +341,7 @@ typedef struct gconf {
 extern gconf_t gconf;
 
 /* From version.c */
-extern const char *htsversion;
-extern const char *htsversion_full;
+extern const char *appversion;
 
 typedef struct inithelper {
   LIST_ENTRY(inithelper) link;

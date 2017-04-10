@@ -1,34 +1,45 @@
 #import "skin://theme.view"
 
-widget(container_z, {
-
+vbox({
 
   onEvent(activate, eventWithProp(pluginInfo, $self));
   focusable: true;
 
-  widget(quad, {
-    hidden: !$clone.primaryColor;
-    color: $clone.primaryColor;
-  });
+  zbox({
 
-  widget(image, {
-    margin: [1em, 0];
-    source: $self.metadata.icon;
-    $clone.primaryColor = RGBToString(primaryColor() * 0.3);
-    filterConstraintY: true;
-  });
+    widget(quad, {
+      hidden: !$clone.primaryColor;
+      color: $clone.primaryColor;
+    });
 
-  widget(container_y, {
-    filterConstraintY: true;
-    align: bottom;
-    widget(label, {
-      style: "GridLabel";
-      caption: $self.metadata.title;
+    widget(image, {
+      margin: [1em, 0];
+      source: $self.metadata.icon;
+      $clone.primaryColor = RGBToString(primaryColor() * 0.3);
+      filterConstraintY: true;
+    });
+
+    widget(border, {
+      style: "GridBorder";
+    });
+
+    hbox({
+      hidden: !$self.status.installed;
+      margin: [0.1em, 0];
+      space(1);
+      vbox({
+        space(1);
+        widget(image, {
+          height: 1.5em;
+          source: "skin://icons/ic_check_48px.svg";
+        });
+      });
     });
   });
 
-  widget(border, {
-    style: "GridBorder";
+  widget(label, {
+    style: "GridLabel";
+    caption: $self.metadata.title;
   });
 
 });

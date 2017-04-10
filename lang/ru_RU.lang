@@ -2,91 +2,58 @@ language: Russian
 native: Русский 
 maintainer: pvc1 <pvc1@yandex.ru> 
 #
-# ./glwskins/default/cmdmenu.view
+# ./glwskins/flat/ctxmenu/default_details.view
 #
-id: Add current page to bookmarks
-msg: Добавить текущую страницу в закладки
+id: Bookmark
+msg: Закладка
 
-id: Open settings
-msg: Открыть настройки
+id: Bookmarked
+msg: Отмечено
 
-id: Remove current page from bookmarks
-msg: Удалить текущую страницу из закладок
+id: Copy to clipboard
+msg: Скопировать в буфер обмена
 
-#
-# ./glwskins/default/cmdmenu/cmdmenu_common.view
-#
-id: Activate sleep timer
-msg: Включить таймер сна
-
-id: Disable sleep timer
-msg: Выключить таймер сна
-
-id: Exit %s
-msg: Выход
-
-id: Go to Home screen
-msg: Перейти на главный экран
-
-id: Hide system info
-msg: Скрыть системную информацию
-
-id: Master volume
-msg: Общая громкость
-
-id: Navigation
-msg: Навигация
-
-id: Open Settings
-msg: Открыть настройки
-
-id: Playqueue
-msg: Очередь воспроизведения
-
-id: Power off
-msg: Отключить систему
-
-id: Reload current page
-msg: Перезагрузить текущую страницу
-
-id: Show system info
-msg: Показать системную информацию
-
-id: Suspend
-msg: Отключить систему
-
-id: System
-msg: Система
-
-id: Time until sleep
-msg: Время до сна
-
-id: dB
-msg: дБ
-
-id: min
-msg: мин
-
-#
-# ./glwskins/default/cmdmenu/cmdmenu_dir.view
-#
-id: Add '%s' to home screen
-msg: Добавить '%s' на главный экран
-
-id: Remove '%s' from home screen
-msg: Удалить '%s' с главного экрана
-
-#
-# ./glwskins/default/cmdmenu/cmdmenu_item.view
-#
-id: Continue from %s
-msg: Продолжить с %s
-
-id: Continue playback here
-msg: Продолжить воспроизведение здесь
+id: Copy to location...
+msg: Копировать в ...
 
 id: Delete
 msg: Удалить
+
+id: Queue
+msg: Очередь
+
+#
+# ./glwskins/flat/ctxmenu/plugin_details.view
+#
+id: Author:
+msg: Автор:
+
+id: Available version:
+msg: Доступная версия:
+
+id: Changelog
+msg: Список изменений
+
+id: Install
+msg: Установка
+
+id: Installed version:
+msg: Установлен:
+
+id: Status:
+msg: Состояние:
+
+id: Uninstall
+msg: Удалить
+
+id: Upgrade
+msg: Обновить
+
+#
+# ./glwskins/flat/ctxmenu/video_details.view
+#
+id: Continue from %s
+msg: Продолжить с %s
 
 id: Mark as seen
 msg: Пометить как воспроизведённое
@@ -100,56 +67,56 @@ msg: Воспроизведение с начала
 id: Play until end of list
 msg: Воспроизведение до конца списка
 
-id: Queue
-msg: Очередь
-
-id: Star
-msg: Пометить
-
-id: Unstar
-msg: Снять метку
+id: Video Cast
+# Missing translation
+msg: 
 
 #
-# ./glwskins/default/cmdmenu/cmdmenu_video.view
+# ./glwskins/flat/items/details/video.view
 #
-id: Audio
-msg: Аудио
+id: Season %d - Episode %d
+msg: Сезон %d - Эпизод %d
 
-id: Audio settings
-msg: Настройки аудио
+id: Seen %d times, %s
+# Missing plural translation for 'Seen %d times, %s' and 'Seen %d time, %s'
+msg[0]: Просмотрено %d раза, %s
+msg[1]: Просмотрено %d раз, %s
 
-id: Audio tracks
-msg: Аудио дорожки
+#
+# ./glwskins/flat/items/list/add.view
+#
+id: Add new entry
+msg: Добавить
 
-id: Chapters
-msg: Главы
+#
+# ./glwskins/flat/items/list/bool.view
+#
+id: Off
+msg: Выкл
 
-id: Seek by time
-msg: Поиск по времени
+id: On
+msg: Вкл
 
-id: Settings
-msg: Настройки
-
-id: Subtitle settings
-msg: Настройки субтитров
-
-id: Subtitle tracks
-msg: Дорожки субтитров
+#
+# ./glwskins/flat/items/list/font.view
+#
+id: Condensed
+msg: Сжатый
 
 id: Subtitles
 msg: Субтитры
 
-id: Video
-msg: Видео
-
-id: Video menu
-msg: Меню видео
-
-id: Video settings
-msg: Настройки видео
+id: User interface
+msg: Пользовательский интерфейс
 
 #
-# ./glwskins/default/loading.view
+# ./glwskins/flat/items/list/tvepisode.view
+#
+id: Episode %d - %s
+msg: Эпизод %d - %s
+
+#
+# ./glwskins/flat/loading.view
 #
 id: %d kb/s
 msg: %d кб/с
@@ -158,31 +125,143 @@ id: Bitrate:
 msg: Битрейт:
 
 #
-# ./glwskins/default/log.view
+# ./glwskins/flat/log.view
 #
 id: System log
-msg: Системный лог
+msg: Системный журнал
 
 #
-# ./glwskins/default/osk.view
+# ./glwskins/flat/mediainfo.view
 #
-id: Cancel
-msg: Отмена
+id: A/V diff
+# Missing translation
+msg: 
 
-id: Clear
-msg: Очистить
+id: Audio bitrate
+msg: Битрейт аудио
 
+id: Audio codec
+msg: Аудиокодек
+
+id: Audio packets
+msg: Пакетов аудио
+
+id: Buffer usage
+msg: Использование буфера
+
+id: No media loaded
+msg: Медиа-файл не загружен
+
+id: Remaining buffer
+msg: Буферизованно
+
+id: Source
+msg: Источник
+
+id: Video bitrate
+msg: Битрейт видео
+
+id: Video codec
+msg: Видеокодек
+
+id: Video framerate
+msg: Частота кадров
+
+id: Video packets
+msg: Пакетов видео
+
+#
+# ./glwskins/flat/menu/sidebar.view
+#
+id: Bookmark page
+msg: Сделать закладку
+
+id: Page settings
+msg: Настройки
+
+id: Paste
+msg: Вставить
+
+id: Reload page
+msg: Перезагрузить страницу
+
+id: Remove bookmark
+msg: Удалить закладку
+
+id: Settings
+msg: Настройки
+
+#
+# ./glwskins/flat/menu/sidebar_common.view
+#
+id: Activate sleep timer
+msg: Включить таймер сна
+
+id: Disable sleep timer
+msg: Выключить таймер сна
+
+id: Exit %s
+msg: Выход
+
+id: Hide media info
+msg: Скрыть медиа-информацию
+
+id: Hide system info
+msg: Скрыть системную информацию
+
+id: Master volume
+msg: Общая громкость
+
+id: Show media info
+msg: Показать медиа-информацию
+
+id: Show system info
+msg: Показать системную информацию
+
+id: Suspend
+msg: Отключить систему
+
+id: Time until sleep
+msg: Время до сна
+
+id: View log
+msg: Показать системный журнал
+
+id: dB
+msg: дБ
+
+id: min
+msg: мин
+
+#
+# ./glwskins/flat/osd/osd_audio.view
+#
+id: Audio
+msg: Аудио
+
+#
+# ./glwskins/flat/osd/osd_main.view
+#
+id: Audio settings
+msg: Настройки аудио
+
+id: Subtitle settings
+msg: Настройки субтитров
+
+id: Video settings
+msg: Настройки видео
+
+#
+# ./glwskins/flat/osk.view
+#
 id: Default
 msg: По умолчанию 
 
 id: Keyboard layout:
 msg: Раскладка клавиатуры:
 
-id: OK
-msg: OK
-
 #
-# ./glwskins/default/pages/directory.view
+# ./glwskins/flat/pages/directory.view
 #
 id: Album
 msg: Альбом
@@ -193,183 +272,136 @@ msg: Исполнитель
 id: Custom
 msg: Пользовательский
 
-id: Images
-msg: Изображения
+id: Grid
+msg: Сетка
 
 id: List
 msg: Список
 
-id: Slideshow
-msg: Слайд-шоу
+id: Page layout
+msg: Макет страницы
 
-id: Tvchannels
-msg: ТВ-каналы
+id: Search results
+msg: Результаты поиска
 
-id: View
-msg: Вид
-
-#
-# ./glwskins/default/pages/discovered.view
-#
-id: Discovered resources on local network
-msg: Обнаруженные ресурсы в локальной сети
+id: TV Season
+msg: ТВ сезон
 
 #
-# ./glwskins/default/pages/home.view
+# ./glwskins/flat/pages/empty.view
 #
-id: Tiled
-msg: Плитка
+id: No contents
+msg: Нет содержимого
 
 #
-# ./glwskins/default/pages/home_clist.view
+# ./glwskins/flat/pages/home.view
 #
-id: Apps
-msg: Приложения
-
 id: Dismiss
 msg: Отклонить
 
-id: Search / Open URL
-msg: Найти / Открыть URL
+id: Home
+msg: Домашний экран
 
 #
-# ./glwskins/default/pages/iteminfo/image.view
+# ./glwskins/flat/pages/openerror.view
 #
-id: Camera: 
-msg: Камера:
-
-id: Date: 
-msg: Дата:
+id: Unable to open resource
+msg: Не удалось открыть ресурс
 
 #
-# ./glwskins/default/pages/iteminfo/plugin.view
+# ./glwskins/flat/pages/playqueue.view
 #
-id: %s %s or newer is required
-msg: Требуется %s %s или новее
-
-id: Author: 
-msg: Автор:
-
-id: Available version: 
-msg: Доступная версия:
-
-id: Installed version: 
-msg: Установленная версия:
+id: Playqueue
+msg: Очередь воспроизведения
 
 #
-# ./glwskins/default/pages/iteminfo/video.view
+# ./glwskins/flat/pages/searchresults.view
 #
-id: Duration:
-msg: Продолжительность:
+id: Show more
+msg: Показать больше
 
-id: File date:
-msg: Дата файла:
-
-id: Genre:
-msg: Жанр:
-
-id: Metadata from
-msg: Метаданные от
-
-id: Rating:
-msg: Рейтинг:
-
-id: Year:
-msg: Год:
-
-id: Seen %d times
-msg[0]: Воспроизведено раз: %d
-msg[1]: Воспроизведено раз: %d
+id: %d hits
+# Missing plural translation for '%d hits' and '%d hit'
+msg[0]: %d показов
+msg[1]: %d показ
 
 #
-# ./glwskins/default/pages/listitems/add.view
+# ./glwskins/flat/pages/slideshow.view
 #
-id: Add new entry
-msg: Добавить новую запись
+id: Interval: %ds
+msg: Задержка: %ds
+
+id: Play/Pause
+msg: Воспроизведение/Пауза
+
+id: Stop
+msg: Стоп
 
 #
-# ./glwskins/default/pages/listitems/bool.view
+# ./glwskins/flat/pages/stpp.view
 #
-id: No
-msg: Нет
+id: Remote control - %s
+msg: Дистанционное управление - %s
 
-id: Yes
-msg: Дa
-
-#
-# ./glwskins/default/pages/listitems/font.view
-#
-id: Condensed
-msg: Сжатый
-
-id: Main
-msg: Основной
-
-id: Subs
-msg: Субтитры
+id: Remote controlling %s
+msg: Дистанционное управление %s
 
 #
-# ./glwskins/default/pages/listitems/plugin.view
+# ./glwskins/flat/pages/stppstpp.view
 #
-id: Install
-msg: Установка
+id: Nested remote controll is not supported
+msg: Подключенный пульт дистанционного управления не поддерживается
 
-id: Uninstall
-msg: Удаление
-
-id: Upgrade
-msg: Обновление
+id: Remote control
+msg: Дистанционное управление
 
 #
-# ./glwskins/default/pages/openerror.view
+# ./glwskins/flat/pages/stppvideo.view
 #
-id: Unable to open %s
-msg: Невозможно открыть %s
+id: Audio tracks
+msg: Аудио дорожки
 
-id: resource
-msg: ресурс
+id: Audio volume adjustment: %d dB
+msg: Регулировка громкости аудио: %d дБ
 
-#
-# ./glwskins/default/pages/playqueue.view
-#
-id: Track %d / %d
-msg: Трек %d / %d
+id: CPU is too slow to decode this video
+msg: CPU слишком медленный для декодирования видео
 
-#
-# ./glwskins/default/pages/slideshow.view
-#
-id: Paused
-msg: Пауза 
+id: Next
+msg: Следующий
+
+id: Previous
+msg: Предыдущий
 
 #
-# ./glwskins/default/pages/upgrade.view
+# ./glwskins/flat/pages/tvseason.view
+#
+id: Season %d
+msg: Сезон %d
+
+#
+# ./glwskins/flat/pages/upgrade.view
 #
 id: %s is up to date
-msg: %s является актуальной
+msg: %s в актуальном состоянии
 
 id: An error occured during download
 msg: Произошла ошибка во время загрузки
 
-id: Available version:
-msg: Доступные версии:
-
 id: Changelog for %s releases
-msg: Лог изменений для релиза %s
+msg: Журнал изменений для релиза %s
 
 id: Check for updates now
 msg: Проверить обновления сейчас
 
-id: Checking for updates...
-msg: Проверка обновлений...
-
-id: Checking installed version of %s
-msg: Проверка установленной версии %s
+id: Checking for updates
+msg: Проверка обновлений
 
 id: Current version:
-msg: Текущая версия:
+msg: Установленная версия:
 
-id: Download and install...
-msg: Загрузить и установить...
+id: Download and install
+msg: Скачать и установить
 
 id: Downloading %s
 msg: Загрузка %s
@@ -380,14 +412,8 @@ msg: Новая версия %s доступна для загрузки
 id: No upgrade available
 msg: Нет обновлений
 
-id: Patching %s
-msg: Исправление %s
-
-id: Restarting %s in %d seconds...
-msg: Перезапуск %s через %d секунд...
-
-id: Retry...
-msg: Повторить ...
+id: Retry
+msg: Повторить
 
 id: Stable
 msg: Стабильный
@@ -396,70 +422,10 @@ id: Testing
 msg: Тестовый
 
 id: Unable to query for new version
-msg: Невозможно проверить новую версию
+msg: Невозможно проверить наличие обновлений
 
 #
-# ./glwskins/default/pages/video.view
-#
-id: A/V diff:
-msg: A/V смещение:
-
-id: Audio codec:
-msg: Аудиокодек:
-
-id: Audio queue len:
-msg: Очередь аудио сервера:
-
-id: Audio volume adjustment: %d dB
-msg: Регулировка громкости аудио: %d дБ
-
-id: CPU is too slow to decode this video
-msg: CPU является слишком медленным для декодирования видео
-
-id: Download speed:
-msg: Скорость загрузки:
-
-id: Packet buffer:
-msg: Пакет буферизации:
-
-id: Playback status
-msg: Статус воспроизведения
-
-id: Remaining buffer:
-msg: Остаток буферизации:
-
-id: Remote queue drops:
-msg: Пакеты сервера:
-
-id: Remote queue len:
-msg: Буферизация сервера:
-
-id: Source:
-msg: Источник:
-
-id: Video bitrate:
-msg: Видео битрейт:
-
-id: Video codec:
-msg: Видеокодек:
-
-id: Video decode time:
-msg: Время видеодекодирования:
-
-id: Video queue len:
-msg: Видео буферизация сервера:
-
-#
-# ./glwskins/default/playdecks/dvd.view
-#
-id: Chapter: %d
-msg: Раздел: %d
-
-id: Title: %d
-msg: Глава: %d
-
-#
-# ./glwskins/default/popups/auth.view
+# ./glwskins/flat/popups/auth.view
 #
 id: Domain
 msg: Домен
@@ -474,28 +440,58 @@ id: Username
 msg: Имя пользователя
 
 #
-# ./glwskins/default/popups/resume.view
+# ./glwskins/flat/popups/common.view
+#
+id: Cancel
+msg: Отмена
+
+id: Ok
+msg: Ok
+
+#
+# ./glwskins/flat/popups/filepicker.view
+#
+id: Back
+msg: Назад
+
+id: Close
+msg: Закрыть
+
+id: Folder select mode, press right to open subfolder
+msg: Режим выбора папок, нажмите «Вправо», чтобы открыть подпапку
+
+#
+# ./glwskins/flat/popups/resume.view
 #
 id: No, Start over
 msg: Нет, начать сначала
 
-id: Resume %s from %s
-msg: Возобновить %s с %s
+id: Resume from %s
+msg: Продолжить с %s
+
+id: Yes
+msg: Дa
 
 #
-# ./glwskins/default/screensaver.view
+# ./glwskins/flat/popups/textDialog.view
 #
-id: No media loaded
-msg: Медиа-файл не загружен
+id: OK
+msg: Ok
 
 #
-# ./glwskins/default/sysinfo.view
+# ./glwskins/flat/sysinfo.view
 #
 id: CPU Temp
 msg: Температура CPU
 
+id: Connected
+msg: Подключено
+
 id: Fragmentation
 msg: Фрагментация
+
+id: Framerate
+msg: Частота кадров
 
 id: GPU Temp
 msg: Температура GPU
@@ -503,51 +499,66 @@ msg: Температура GPU
 id: HDD Avail
 msg: HDD доступ 
 
-id: Inactive mem
-msg: Неактивная память
+id: IP Address
+msg: IP Адрес
+
+id: Inactive memory
+msg: Свободно RAM
 
 id: Memory usage
-msg: Использование памяти
+msg: Используется RAM
+
+id: Network
+msg: Сеть
+
+id: Not available
+msg: Не доступно
 
 id: System Free
-msg: Свободно
+msg: Свободно памяти
 
 id: System Total
-msg: Всего
+msg: Всего памяти
+
+id: VM Page In/Out
+# Missing translation
+msg: 
+
+id: Version
+msg: Версия Movian
 
 #
-# ./glwskins/default/universe.view
+# ./glwskins/flat/universe.view
 #
 id: Audio muted
 msg: Звук выключен
 
+id: Copying %d files
+msg: Копирование %d файлов
+
 id: Master volume: %d dB
 msg: Общая громкость: %d дБ
+
+id: Overscan adjustment\nPosition border at screen edges
+msg: Коррекция положения\nПоложение границы на краях экрана
 
 #
 # ./src/api/stpp.c
 #
 id: Allow remote control
-# Missing translation
-msg: 
+msg: Разрешить дистанционное управление
 
 id: Device not available
-# Missing translation
-msg: 
+msg: Устройство недоступно
 
 id: Movians for remote control
-# Missing translation
-msg: 
-
-id: Remote control
-# Missing translation
-msg: 
+msg: Movians для дистанционного управления
 
 #
 # ./src/api/tmdb.c
 #
 id: Language (ISO 639-1 code)
-msg: Язык (в кодировке ISO 639-1)
+msg: Язык (по коду ISO 639-1)
 
 id: Use original title
 msg: Использовать оригинальное название
@@ -601,28 +612,22 @@ id: 8 Channel PCM
 msg: 8 канальный PCM
 
 id: AC3 Pass-Through
-msg: AC3 Pass-Through
+msg: Сквозная передача AC3
 
 id: Analog
-msg: Аналог
+msg: Аналоговый
 
 id: Audio output port
 msg: Аудиовыход
 
 id: Autodetect
-msg: Автораспознание
+msg: Автораспознавание
 
 id: DTS Pass-Through
-msg: DTS Pass-Through
+msg: Сквозная передача DTS
 
 id: HDMI
 msg: HDMI
-
-id: Off
-msg: Выкл
-
-id: On
-msg: Вкл
 
 #
 # ./src/arch/rpi/rpi_tv.c
@@ -637,8 +642,7 @@ id: Audio delay
 msg: Задержка звука
 
 id: Audio gain
-# Missing translation
-msg: 
+msg: Усиление звука
 
 id: Setup audio output
 msg: Настройка аудиовыхода
@@ -650,7 +654,7 @@ msg: Воспроизведение видео
 # ./src/audio2/audio_test.c
 #
 id: 440Hz sinewave -12dB
-msg: 440 Гц синусоидальный-12дб
+msg: 440 Гц синусоидальный -12дб
 
 id: Audio test
 msg: Звуковой тест
@@ -665,7 +669,7 @@ id: Front Right
 msg: Спереди справа
 
 id: LFE
-msg: LFE
+msg: Низкочастотный эффект (LFE)
 
 id: Pink noise
 msg: Розовый шум
@@ -704,7 +708,7 @@ msg: Невозможно открыть торрент: %s
 # ./src/backend/bittorrent/diskio.c
 #
 id: Cached torrents use %d MB out of allowed %d MB. Total free space on volume: %d MB
-msg: Кэш торрента использует %d МБ из разрешенных %d МБ. Итого свободного места на томе: %d МБ
+msg: Кэш торрента использует %d МБ из разрешенных %d МБ. Всего на диске свободно: %d МБ
 
 #
 # ./src/backend/bittorrent/fa_torrent.c
@@ -727,6 +731,9 @@ msg: Торрент сидеры
 #
 # ./src/backend/bittorrent/torrent_settings.c
 #
+id: BitTorrent
+msg: BitTorrent
+
 id: Clear cache
 msg: Очистка кэша
 
@@ -734,11 +741,10 @@ id: Enable bittorrent
 msg: Включить битторрент
 
 id: Max upload speed
-# Missing translation
-msg: 
+msg: Максимальная скорость отдачи
 
 id: Max usage of free space for caching torrents
-msg: Максимальное использование свободного пространства для кэширования торрентов
+msg: Максимальный размер кэша на диске
 
 id: Status
 msg: Статус
@@ -786,8 +792,7 @@ msg: Рекордер
 # ./src/backend/playlist.c
 #
 id: Unable to open playlist
-# Missing translation
-msg: 
+msg: Не удалось открыть плейлист
 
 #
 # ./src/backend/search.c
@@ -832,8 +837,7 @@ id: Checking file contents
 msg: Проверка содержимого файла
 
 id: Invalid URL from redirect
-# Missing translation
-msg: 
+msg: Недопустимый URL-адрес перенаправления
 
 id: Unable to open file: %s
 msg: He удaлocь oткpыть фaйл: %s
@@ -853,20 +857,14 @@ msg: Поиск с использованием Unix locatedb
 #
 # ./src/fileaccess/fa_scanner.c
 #
-id: Albums
-msg: Альбомы
-
-id: Artists
-msg: Артисты
-
 id: Deleted %s
 msg: Удалено: %s
 
 id: Filename
 msg: Имя файла
 
-id: Indexed mode
-msg: Индексированный режим
+id: Include in library
+msg: Включить в библиотеку
 
 id: Newest first
 msg: Сначала новые
@@ -875,10 +873,10 @@ id: Oldest first
 msg: Сначала старые
 
 id: Show only supported files
-msg: Показывать только поддерживаемые файлы
+msg: Только поддерживаемые файлы
 
 id: Sort folders first
-msg: Сортировка сперва папок
+msg: Сначала сортировать папки
 
 id: Sort on
 msg: Сортировать по
@@ -898,23 +896,17 @@ msg: Поиск с использованием spotlight
 id: Are you sure you want to delete:
 msg: Вы уверены, что хотите удалить:
 
-id: BitTorrent
-msg: BitTorrent
-
 id: Browse archives as folders
 msg: Просмотр архивов как папок
 
 id: Enable file deletion from item menu
-msg: Включить удаление файла из пункта меню
-
-id: File browsing
-msg: Просмотр файлов
+msg: Включить удаление файлов из контекстного меню
 
 id: Show filename extensions
 msg: Отображать расширения у файлов
 
 id: Store per-file settings in filesystem
-msg: Хранение настроек per-file в файловой системе
+msg: Сохранять настройки отдельных файлов в системе
 
 id: %d archive parts
 msg[0]: частей архива: %d
@@ -965,7 +957,7 @@ id: Language
 msg: Язык
 
 id: Language codes should be configured as three character ISO codes, example (eng, swe, fra)
-msg: Коды языков должны быть настроены в виде трех символов ISO-кодировки, например: rus, eng, fra
+msg: Коды языков должны быть в виде трех символов ISO-кодировки, например: rus, eng, fra
 
 id: Languages
 msg: Языки
@@ -998,19 +990,19 @@ id: Time format
 msg: Формат времени
 
 id: Timezone
-msg: Часовой пояс
+msg: Часовой пояс (по gmt)
 
 #
 # ./src/ipc/libcec.c
 #
 id: Longpress SELECT for item menu
-msg: Удерживайте SELECT для входа в меню
+msg: Вход в меню удержанием SELECT
 
 id: Switch TV input source
 msg: Изменить источник ТВ сигнала
 
 id: Use STOP key for combo input
-msg: Используйте кнопку STOP для комбинированного ввода
+msg: Использовать кнопку STOP для комбинированного ввода
 
 #
 # ./src/keyring.c
@@ -1046,13 +1038,13 @@ id: Horizontal scale
 msg: Горизонтальный масштаб
 
 id: Reset defaults for folder '%s'
-msg: Сброс настроек по умолчанию для папки '%s'
+msg: Сброс настроек для папки '%s'
 
 id: Save as defaults for folder '%s'
-msg: Сохранить как настройки по умолчанию для папки '%s'
+msg: Сохранить настройки для папки '%s'
 
 id: Save as global default
-msg: Сохранить как главные настройки по умолчанию 
+msg: Сохранить как настройки по умолчанию 
 
 id: Scaling
 msg: Масштаб
@@ -1118,7 +1110,7 @@ msg: Трек %d
 # ./src/metadata/metadata_sources.c
 #
 id: Enabled
-msg: Включено
+msg: Использовать
 
 id: Metadata
 msg: Метаданные
@@ -1190,7 +1182,7 @@ id: filename
 msg: имя файла
 
 id: filename as TV episode
-msg: имя файла как TV-эпизод
+msg: имя файла как ТВ-эпизод
 
 id: folder name
 msg: имя папки
@@ -1199,10 +1191,10 @@ msg: имя папки
 # ./src/navigator.c
 #
 id: Add and remove items on homepage
-msg: Добавление и удаление элементов на главном экране
+msg: Добавление и удаление элементов на домашний экран
 
 id: Added %s to home page
-msg: %s добавлено на главный экран
+msg: %s добавлено на домашний экран
 
 id: Added new bookmark: %s
 msg: Добавлены новые закладки: %s
@@ -1211,7 +1203,7 @@ id: Bookmarks
 msg: Закладки
 
 id: Icon
-msg: Иконка
+msg: Значок
 
 id: Music
 msg: Музыка
@@ -1225,15 +1217,11 @@ msg: Прочее
 id: Photos
 msg: Фото
 
-id: Remove bookmark
-# Missing translation
-msg: 
-
 id: Removed %s from homepage
-msg: %s удалено с главного экрана
+msg: %s удалено с домашнего экрана
 
 id: Removed bookmark: %s
-msg: Удалить закладки: %s
+msg: Удалены закладки: %s
 
 id: TV
 msg: ТВ
@@ -1246,6 +1234,9 @@ msg: Тип
 
 id: URL
 msg: URL
+
+id: Video
+msg: Видео
 
 #
 # ./src/networking/connman.c
@@ -1272,25 +1263,37 @@ msg: TCP-порт сервера
 # ./src/networking/http_server.c
 #
 id: Power Off
-# Missing translation
-msg: 
+msg: Выключение
 
 id: Rebooting
-# Missing translation
-msg: 
+msg: Перезагрузка
 
 id: Restarting
-# Missing translation
-msg: 
+msg: Перезапуск
 
 id: Standby
 msg: Режим ожидания
 
 #
+# ./src/notifications.c
+#
+id: Show news on home screen
+msg: Показывать новости на домашнем экране
+
+#
 # ./src/plugins.c
 #
 id: Alternate plugin Repository URL
-msg: Альтернативный URL-репозитория плагинов
+msg: Альтернативный адрес репозитория плагинов
+
+id: Audio decoders
+msg: Аудио декодеры
+
+id: Auto install plugins on demand
+msg: Автоматическая установка плагинов по требованию
+
+id: Auto installed plugin %s (Version %s)
+msg: Автоматическая установка плагина %s (Версия %s)
 
 id: Automatically upgrade plugins
 msg: Автоматическое обновление плагинов
@@ -1329,11 +1332,13 @@ id: File open error
 msg: Ошибка при открытии файла
 
 id: Home page
-msg: Главный экран
+msg: Домашний экран
+
+id: Images
+msg: Изображения
 
 id: Installed
-# Missing translation
-msg: 
+msg: Установлено
 
 id: Installed plugins
 msg: Установленные плагины
@@ -1348,7 +1353,7 @@ id: List of albums
 msg: Список альбомов
 
 id: Loading screen
-msg: Загрузочный экран
+msg: Экран загрузки 
 
 id: Movies
 msg: Фильмы
@@ -1384,10 +1389,10 @@ id: Plugins
 msg: Плагины
 
 id: Preferred views from plugins
-msg: Предпочтительный вид при установленных плагинах
+msg: Плагины используемые по умолчанию
 
 id: Screen saver
-msg: Хранитель экрана
+msg: Заставка
 
 id: TV channels
 msg: ТВ каналы
@@ -1423,8 +1428,7 @@ msg: Потоковое видео
 # ./src/prop/prop_proxy.c
 #
 id: Remote exited
-# Missing translation
-msg: 
+msg: Удаленный выход
 
 #
 # ./src/runcontrol.c
@@ -1450,14 +1454,11 @@ msg: Выход
 id: SSH server
 msg: SSH-сервер
 
-id: Starting and stopping
-msg: Запуск и остановка
-
 #
 # ./src/sd/sd.c
 #
 id: Enabled on home screen
-msg: Включено на главном экране
+msg: Показывать на домашнем экране
 
 id: Name
 msg: Имя
@@ -1469,8 +1470,7 @@ id: Local network
 msg: Локальная сеть
 
 id: Remove from homepage
-# Missing translation
-msg: 
+msg: Удалить с домашнего экрана
 
 #
 # ./src/settings.c
@@ -1479,7 +1479,7 @@ id: About
 msg: О программе
 
 id: Applications and installed plugins
-msg: Приложения и установленные плагины
+msg: Приложения и плагины
 
 id: Configure communications with your TV
 msg: Настройка связи с телевизором
@@ -1490,6 +1490,9 @@ msg: Настройки для разработчиков
 id: Discovered media sources
 msg: Обнаруженные медиа источники
 
+id: File browsing
+msg: Просмотр файлов
+
 id: Fonts and user interface styling
 msg: Шрифты и интерфейс пользователя
 
@@ -1497,7 +1500,7 @@ id: General
 msg: Общее
 
 id: Global settings
-msg: Главные настройки
+msg: Основные настройки
 
 id: Look and feel
 msg: Внешний вид
@@ -1508,8 +1511,18 @@ msg: Сетевые услуги и т.п.
 id: Network settings
 msg: Сетевые настройки
 
+id: Reset
+# Missing translation
+msg: Сброс
+
 id: Settings useful for developers
 msg: Настройки полезные для разработчиков
+
+id: Software upgrade
+msg: Обновление ПО
+
+id: Starting and stopping
+msg: Запуск и остановка
 
 id: System name
 msg: Имя системы
@@ -1605,7 +1618,7 @@ msg: Субтитры с соответствующим именем файла 
 # ./src/text/fontstash.c
 #
 id: Defaults
-msg: По умолчанию
+msg: Сброс
 
 id: Fonts
 msg: Шрифты
@@ -1617,13 +1630,13 @@ id: Narrow text
 msg: Узкий шрифт
 
 id: Reset main font to default
-msg: Сброс основного шрифта по умолчанию
+msg: Сброс основного шрифта
 
 id: Reset narrow font to default
-msg: Сброс узкого шрифта по умолчанию
+msg: Сброс узкого шрифта
 
 id: Reset subtitle font to default
-msg: Сброс шрифта субтитров по умолчанию
+msg: Сброс шрифта субтитров
 
 id: Unable to install font: %s
 msg: Невозможно установить шрифт: %s 
@@ -1631,15 +1644,23 @@ msg: Невозможно установить шрифт: %s
 id: Use font %s for
 msg: Использовать шрифт %s для
 
-id: User interface
-msg: Пользовательский интерфейс
+#
+# ./src/ui/clipboard.c
+#
+id: Copy failed: %s
+msg: Ошибка копирования: %s
+
+id: Target folder
+msg: Целевая папка
 
 #
 # ./src/ui/glw/glw_ps3.c
 #
 id: Dual-Shock Remote
-# Missing translation
-msg: 
+msg: Удаленное управление Dual-Shock
+
+id: No
+msg: Нет
 
 id: Seek using L2 and R2 button
 msg: Перемотка видео кнопками L2 и R2
@@ -1657,7 +1678,7 @@ id: Emulate Up/Down buttons with mouse wheel
 msg: Эмулировать кнопки Вверх/Вниз с помощью колеса прокрутки 
 
 id: Folder for screensaver images
-msg: Папка с изображениями заставки
+msg: Папка с изображениями для заставки
 
 id: Font and icon size
 msg: Размер шрифта и значков
@@ -1666,20 +1687,19 @@ id: Interface horizontal shrink
 msg: Горизонтальное сжатие интерфейса
 
 id: Interface vertical shrink
-msg: Вертикальное сжатие интерфейска
+msg: Вертикальное сжатие интерфейса
 
 id: Screensaver
-msg: Экранная заставка
+msg: Заставка
 
 id: Screensaver delay
-msg: Задержка заставки
+msg: Задержка включения заставки
 
 id: Seconds per image
-# Missing translation
-msg: 
+msg: Задержка смены изображений
 
 id: Use Bing images of the day
-msg: Испозовать изображения дня из Bing
+msg: Использовать изображения дня из Bing
 
 id: Wrap when reaching beginning/end of lists
 msg: Переход при достижении начала/конца списка
@@ -1747,8 +1767,8 @@ msg: Уведомлять об обновлениях
 id: Open download page
 msg: Открыть страницу загрузки
 
-id: Software upgrade
-msg: Обновление ПО
+id: System
+msg: Система
 
 id: Upgrade to releases from
 msg: Обновление до релиза
@@ -1814,14 +1834,13 @@ id: Resume video playback
 msg: Boзoбнoвить вocпpoизвeдeниe видeo
 
 id: Show clock during playback
-# Missing translation
-msg: 
+msg: Отображать часы во время воспроизведения
 
 id: Step when seeking backward
-msg: Шаг при поиске назад
+msg: Шаг при перемотке назад
 
 id: Step when seeking forward
-msg: Шаг при поиске вперед
+msg: Шаг при перемотке вперед
 
 id: Temporal
 msg: Временный
@@ -1834,4 +1853,7 @@ msg: Контроль вверх/вниз во время воспроизвед
 
 id: Video acceleration and display behaviour
 msg: Ускорение видео и поведение изображения
+
+id: Video buffer size
+msg: Размер видеобуфера
 
