@@ -421,8 +421,10 @@ plugin_fill_prop(struct htsmsg *pm, struct prop *p,
   prop_set(metadata, "version", PROP_SET_STRING,
            htsmsg_get_str(pm, "version"));
 
-  prop_set(metadata, "popularity", PROP_SET_INT,
-           htsmsg_get_u32_or_default(pm, "popularity", 0));
+  unsigned int popularity;
+
+  if(!htsmsg_get_u32(pm, "popularity", &popularity))
+    prop_set(metadata, "popularity", PROP_SET_INT, popularity);
 
   if(icon != NULL) {
     if(basepath != NULL) {
@@ -2099,7 +2101,7 @@ plugin_check_prefix_for_autoinstall(const char *uri)
   autoplugin_t *ap;
   const char *installme = NULL;
 
-  if(!autoinstall)
+  if(!autoinstall || devplugins)
     return -1;
 
   hts_mutex_lock(&autoplugin_mutex);

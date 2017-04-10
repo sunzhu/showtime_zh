@@ -4982,7 +4982,7 @@ glwf_isFocused(glw_view_eval_context_t *ec, struct token *self,
   ec->dynamic_eval |= GLW_VIEW_EVAL_FHP_CHANGE;
 
   r = eval_alloc(self, ec, TOKEN_INT);
-  r->t_int = glw_is_focused(ec->w);
+  r->t_int = glw_is_focused(ec->w) && ec->w->glw_root->gr_keyboard_mode;
   eval_push(ec, r);
   return 0;
 }
@@ -5344,6 +5344,25 @@ glwf_isVisible(glw_view_eval_context_t *ec, struct token *self,
 }
 
 
+/**
+ * Return 1 if the current widget is preloaded
+ */
+static int
+glwf_isPreloaded(glw_view_eval_context_t *ec, struct token *self,
+                 token_t **argv, unsigned int argc)
+{
+  token_t *r;
+
+  ec->dynamic_eval |= GLW_VIEW_EVAL_ACTIVE;
+
+  r = eval_alloc(self, ec, TOKEN_INT);
+
+  r->t_int = ec->w->glw_flags & GLW_PRELOADED ? 1 : 0;
+  eval_push(ec, r);
+  return 0;
+}
+
+
 
 /**
  * Return 1 if the current widget is can to be scrolled / moved
@@ -5693,9 +5712,10 @@ glwf_rand(glw_view_eval_context_t *ec, struct token *self,
 
 typedef struct glwf_delay_extra {
 
-  float oldval;
   float curval;
+  float nextval;
   int64_t deadline;
+  int waiting;
 
 } glwf_delay_extra_t;
 
@@ -5721,22 +5741,25 @@ glwf_delay(glw_view_eval_context_t *ec, struct token *self,
     return -1;
 
   f = token2float(ec, a);
-  if(f != e->curval) {
+
+  if(f != e->nextval) {
     // trig
-    e->oldval = e->curval;
     e->deadline = (int64_t)
       (token2float(ec, f >= e->curval ? b : c) * 1000000.0) +
       gr->gr_frame_start;
-    e->curval = f;
+    e->nextval = f;
   }
 
-  if(e->deadline > gr->gr_frame_start) {
-    f = e->oldval;
+  if(gr->gr_frame_start < e->deadline) {
+    e->waiting = 1;
+    f = e->curval;
+
     ec->dynamic_eval |= GLW_VIEW_EVAL_LAYOUT;
     glw_schedule_refresh(gr, e->deadline);
+
   } else {
-    eval_push(ec, a);
-    return 0;
+    e->waiting = 0;
+    f = e->curval = e->nextval;
   }
 
   r = eval_alloc(self, ec, TOKEN_FLOAT);
@@ -7277,6 +7300,7 @@ static const token_func_t funcvec[] = {
   {"bind", 1, glwf_bind},
   {"delta", 2, glwf_delta, glwf_delta_ctor, glwf_delta_dtor},
   {"isVisible", 0, glwf_isVisible},
+  {"isPreloaded", 0, glwf_isPreloaded},
   {"canScroll", 0, glwf_canScroll},
   {"select", 3, glwf_select},
   {"trace", 2, glwf_trace},

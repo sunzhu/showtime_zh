@@ -190,14 +190,22 @@ glw_container_x_constraints(glw_container_t *co, glw_t *skip)
         } else {
           width += rw;
         }
+
+        if(f & GLW_CONSTRAINT_W && c->glw_req_weight < 0) {
+          const int rh = glw_req_height(c) + rw / -c->glw_req_weight;
+          height = GLW_MAX(height, rh);
+          cflags |= GLW_CONSTRAINT_Y;
+        }
+
       } else if(f & GLW_CONSTRAINT_W) {
 
         if(c->glw_req_weight == 0)
           continue;
-        if(c->glw_req_weight > 0)
+        if(c->glw_req_weight > 0) {
           weight += c->glw_req_weight;
-        else
+        } else {
           co->co_using_aspect = 1;
+        }
 
       } else {
         weight += 1.0f;
@@ -382,7 +390,7 @@ glw_container_y_constraints(glw_container_t *co, glw_t *skip)
   float weight = 0;
   int cflags = 0, f;
   int elements = 0;
-
+  float req_aspect = 0;
   co->co_using_aspect = 0;
 
   if(co->w.glw_flags2 & GLW2_DEBUG)
@@ -413,10 +421,13 @@ glw_container_y_constraints(glw_container_t *co, glw_t *skip)
     if(f & GLW_CONSTRAINT_Y) {
       height += glw_req_height(c);
     } else if(f & GLW_CONSTRAINT_W) {
-      if(c->glw_req_weight > 0)
+      if(c->glw_req_weight > 0) {
 	weight += c->glw_req_weight;
-      else
-	co->co_using_aspect = 1;
+      } else if(c->glw_req_weight < 0) {
+        co->co_using_aspect = 1;
+        req_aspect = c->glw_req_weight;
+        cflags |= GLW_CONSTRAINT_W;
+      }
     } else {
       weight += 1.0f;
     }
@@ -439,8 +450,11 @@ glw_container_y_constraints(glw_container_t *co, glw_t *skip)
   if(weight)
     cflags &= ~GLW_CONSTRAINT_Y;
 
+  if(co->w.glw_flags2 & GLW2_DEBUG)
+    printf("Total dimensions: %d x %d 0x%x\n", width, height, cflags);
+
   width += co->co_padding[0] + co->co_padding[2];
-  glw_set_constraints(&co->w, width, height, 0, cflags);
+  glw_set_constraints(&co->w, width, height, req_aspect, cflags);
   return 1;
 }
 

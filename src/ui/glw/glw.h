@@ -293,7 +293,8 @@ typedef struct glw_scope {
 #define GLW_ROOT_ARGS   3
 #define GLW_ROOT_CLONE  4
 #define GLW_ROOT_CORE   5
-#define GLW_ROOT_static 6
+#define GLW_ROOT_PARENTVIEW 6
+#define GLW_ROOT_static 7
 
   prop_root_t gs_roots[GLW_ROOT_static];
 
@@ -1088,6 +1089,9 @@ typedef struct glw_rctx {
   uint8_t rc_invisible : 1;    /* Not really visible in UI
                                 * Set when items are preloaded, etc
                                 */
+
+  uint8_t rc_preloaded : 1;
+
   uint8_t rc_segwayed : 1;
 } glw_rctx_t;
 
@@ -1219,6 +1223,7 @@ typedef struct glw {
 #define GLW_MARK                 0x8000
 
 #define GLW_HAVE_MARGINS         0x10000
+#define GLW_PRELOADED            0x20000
 
 #define GLW_CLIPPED              0x1000000
 #define GLW_FHP_SPILL_TO_CHILDS  0x4000000

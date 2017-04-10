@@ -70,12 +70,8 @@ video_settings_init(void)
 #if defined(__APPLE__) || defined(__ANDROID__)
   setting_create(SETTING_BOOL, s, SETTINGS_INITIAL_UPDATE,
                  SETTING_TITLE(_p("Hardware accelerated decoding")),
-                 SETTING_STORE("videoplayback", "videoaccel"),
-#if defined(__APPLE__)
+                 SETTING_STORE("videoplayback", "videoaccel2"),
                  SETTING_VALUE(1),
-#else
-                 SETTING_VALUE(0),
-#endif
                  SETTING_WRITE_BOOL(&video_settings.video_accel),
                  NULL);
 #endif
@@ -215,7 +211,7 @@ video_settings_init(void)
   setting_create(SETTING_INT, s, SETTINGS_INITIAL_UPDATE,
                  SETTING_TITLE(_p("Video buffer size")),
                  SETTING_VALUE(48),
-                 SETTING_RANGE(16, 64),
+                 SETTING_RANGE(16, gconf.max_video_buffer_size ?: 128),
                  SETTING_UNIT_CSTR("MB"),
                  SETTING_STORE("videoplayback", "videobuffersize"),
                  SETTING_WRITE_INT(&video_settings.video_buffer_size),
