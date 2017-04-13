@@ -27,6 +27,7 @@
 
 #include "dvdread/dvd_reader.h"      /* DVD_VIDEO_LB_LEN */
 #include "dvd_input.h"
+#include "main.h"
 
 
 /* The function pointers that is the exported interface of this file. */
@@ -94,6 +95,7 @@ static dvd_input_t css_open(const char *target)
   dev->dvdcss = DVDcss_open(target);
   if(dev->dvdcss == 0) {
     fprintf(stderr, "libdvdread: Could not open %s with libdvdcss.\n", target);
+    TRACE(TRACE_ERROR, "libdvdread", "Could not open %s with libdvdcss.",target);
     free(dev);
     return NULL;
   }
@@ -277,7 +279,7 @@ int dvdinput_setup(void)
 #ifdef HAVE_DVDCSS_DVDCSS_H
   /* linking to libdvdcss */
   dvdcss_library = &dvdcss_library;  /* Give it some value != NULL */
-
+  TRACE(TRACE_INFO, "libdvdread", "Using own dvdcss.");
 #else
   /* dlopening libdvdcss */
 

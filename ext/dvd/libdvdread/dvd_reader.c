@@ -77,6 +77,8 @@ static inline int _private_gettimeofday( struct timeval *tv, void *tz )
 #include "md5.h"
 #include "dvdread/ifo_read.h"
 
+#include "main.h"
+
 #define DEFAULT_UDF_CACHE_LEVEL 1
 
 struct dvd_reader_s {
@@ -237,11 +239,13 @@ static dvd_reader_t *DVDOpenImageFile( const char *location, int have_css )
   dvd_input_t dev;
   static int volid_size = 32, volsetid_size = 128;
   char volid[volid_size];
-unsigned char volsetid[volsetid_size];
+  unsigned char volsetid[volsetid_size];
 
   dev = dvdinput_open( location );
   if( !dev ) {
     fprintf( stderr, "libdvdread: Can't open %s for reading\n", location );
+    TRACE(TRACE_ERROR, "libdvdread", "Can't open '%s' for reading: %s",
+               location, strerror(errno));
     return NULL;
   }
 

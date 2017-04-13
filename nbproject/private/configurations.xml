@@ -27,8 +27,6 @@
           <in>unzcrash.c</in>
         </df>
         <df name="ext">
-          <df name="audio">
-          </df>
           <df name="duktape">
           </df>
           <df name="dvd">
@@ -70,8 +68,6 @@
             <in>amf.d</in>
             <in>log.d</in>
           </df>
-          <df name="miner">
-          </df>
           <df name="minilibs">
           </df>
           <df name="polarssl-1.2.0">
@@ -100,8 +96,6 @@
             <df name="librtmp">
             </df>
           </df>
-          <df name="spidermonkey">
-          </df>
           <df name="sqlite">
           </df>
           <df name="tlsf">
@@ -110,12 +104,6 @@
           </df>
           <df name="trex">
             <in>trex.d</in>
-          </df>
-          <df name="xmp">
-            <df name="src">
-              <df name="loaders">
-              </df>
-            </df>
           </df>
         </df>
         <df name="inst">
@@ -372,8 +360,6 @@
             <df name="rtmp">
               <in>rtmp.d</in>
             </df>
-            <df name="shoutcast">
-            </df>
             <df name="slideshow">
             </df>
             <in>backend.d</in>
@@ -406,8 +392,6 @@
             <in>htsmsg_store.d</in>
           </df>
           <df name="image">
-          </df>
-          <df name="js">
           </df>
           <df name="media">
           </df>
@@ -512,6 +496,10 @@
         </df>
         <df name="dvd">
           <df name="dvdcss">
+            <df name="dvdcss">
+              <in>dvdcss.h</in>
+              <in>version.h</in>
+            </df>
             <in>common.h</in>
             <in>css.c</in>
             <in>css.h</in>
@@ -526,13 +514,23 @@
             <in>libdvdcss.h</in>
           </df>
           <df name="dvdnav">
+            <df name="dvdnav">
+              <in>dvd_types.h</in>
+              <in>dvdnav.h</in>
+              <in>dvdnav_events.h</in>
+            </df>
             <df name="vm">
               <in>decoder.c</in>
               <in>decoder.h</in>
+              <in>getset.c</in>
+              <in>getset.h</in>
+              <in>play.c</in>
+              <in>play.h</in>
               <in>vm.c</in>
               <in>vm.h</in>
               <in>vmcmd.c</in>
               <in>vmcmd.h</in>
+              <in>vmget.c</in>
             </df>
             <in>dvd_types.h</in>
             <in>dvdnav.c</in>
@@ -549,6 +547,17 @@
             <in>settings.c</in>
           </df>
           <df name="libdvdread">
+            <df name="dvdread">
+              <in>bitreader.h</in>
+              <in>dvd_reader.h</in>
+              <in>dvd_udf.h</in>
+              <in>ifo_print.h</in>
+              <in>ifo_read.h</in>
+              <in>ifo_types.h</in>
+              <in>nav_print.h</in>
+              <in>nav_read.h</in>
+              <in>nav_types.h</in>
+            </df>
             <in>bitreader.c</in>
             <in>bitreader.h</in>
             <in>bswap.h</in>
@@ -559,11 +568,14 @@
             <in>dvd_udf.c</in>
             <in>dvd_udf.h</in>
             <in>dvdread_internal.h</in>
+            <in>ifo_print.c</in>
             <in>ifo_read.c</in>
             <in>ifo_read.h</in>
             <in>ifo_types.h</in>
+            <in>iso9660.h</in>
             <in>md5.c</in>
             <in>md5.h</in>
+            <in>nav_print.c</in>
             <in>nav_read.c</in>
             <in>nav_read.h</in>
             <in>nav_types.h</in>
@@ -7068,13 +7080,13 @@
       </toolsSet>
       <compile>
         <compiledirpicklist>
-          <compiledirpicklistitem>${AUTO_FOLDER}</compiledirpicklistitem>
           <compiledirpicklistitem>.</compiledirpicklistitem>
+          <compiledirpicklistitem>${AUTO_FOLDER}</compiledirpicklistitem>
         </compiledirpicklist>
         <compiledir>${AUTO_FOLDER}</compiledir>
         <compilecommandpicklist>
-          <compilecommandpicklistitem>${AUTO_COMPILE}</compilecommandpicklistitem>
           <compilecommandpicklistitem>${MAKE} ${ITEM_NAME}.o</compilecommandpicklistitem>
+          <compilecommandpicklistitem>${AUTO_COMPILE}</compilecommandpicklistitem>
         </compilecommandpicklist>
         <compilecommand>${AUTO_COMPILE}</compilecommand>
       </compile>
