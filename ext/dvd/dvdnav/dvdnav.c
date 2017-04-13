@@ -133,10 +133,9 @@ dvdnav_status_t dvdnav_free_dup(dvdnav_t *this) {
   return DVDNAV_STATUS_OK;
 }
 
-dvdnav_status_t dvdnav_open(dvdnav_t** dest, const char *path) {
+dvdnav_status_t dvdnav_open(dvdnav_t** dest, const char *path, void *svfs_ops) {
   dvdnav_t *this;
   struct timeval time;
-  int i=0;
 
   /* Create a new structure */
   fprintf(MSG_OUT, "libdvdnav: Using dvdnav version %s\n", VERSION);
@@ -145,7 +144,7 @@ dvdnav_status_t dvdnav_open(dvdnav_t** dest, const char *path) {
   this = (dvdnav_t*)calloc(1, sizeof(dvdnav_t));
   if(!this)
     return DVDNAV_STATUS_ERR;
-  i++;
+  this->svfs_ops = svfs_ops;
   hts_mutex_init(&this->vm_lock);
   /* Initialise the error string */
   printerr("");
@@ -156,19 +155,16 @@ dvdnav_status_t dvdnav_open(dvdnav_t** dest, const char *path) {
     printerr("Error initialising the DVD VM.");
     goto fail;
   }
-  i++;
-  if(!vm_reset(this->vm, path)) {
-    printerr("Error starting the VM / opening the DVD device.");
+  if(!vm_reset(this->vm, path, this->svfs_ops)) {
     TRACE(TRACE_ERROR, "dvdnav", "Unable to start VM: %s", path);
+    printerr("Error starting the VM / opening the DVD device.");
     goto fail;
   }
-  i++;
 
   /* Set the path. */
   this->path = strdup(path);
   if(!this->path)
     goto fail;
-  i++;
 
   /* Pre-open and close a file so that the CSS-keys are cached. */
   this->file = DVDOpenFile(vm_get_dvd_reader(this->vm), 0, DVD_READ_MENU_VOBS);
@@ -177,7 +173,6 @@ dvdnav_status_t dvdnav_open(dvdnav_t** dest, const char *path) {
   this->cache = dvdnav_read_cache_new(this);
   if(!this->cache)
     goto fail;
-  i++;
 
   /* Seed the random numbers. So that the DVD VM Command rand()
    * gives a different start value each time a DVD is played. */
@@ -194,7 +189,6 @@ fail:
   vm_free_vm(this->vm);
   free(this->path);
   free(this);
-  TRACE(TRACE_ERROR, "dvdnav", "Failed at step: %d", i);
   return DVDNAV_STATUS_ERR;
 }
 
@@ -245,7 +239,7 @@ dvdnav_status_t dvdnav_reset(dvdnav_t *this) {
 #ifdef LOG_DEBUG
   fprintf(MSG_OUT, "libdvdnav: reseting vm\n");
 #endif
-  if(!vm_reset(this->vm, NULL)) {
+  if(!vm_reset(this->vm, NULL, this->svfs_ops)) {
     printerr("Error restarting the VM.");
     hts_mutex_unlock(&this->vm_lock); 
     return DVDNAV_STATUS_ERR;

@@ -31,7 +31,7 @@
 
 
 /* The function pointers that is the exported interface of this file. */
-dvd_input_t (*dvdinput_open)  (const char *);
+dvd_input_t (*dvdinput_open)  (const char *, struct svfs_ops *svfs_ops);
 int         (*dvdinput_close) (dvd_input_t);
 int         (*dvdinput_seek)  (dvd_input_t, int);
 int         (*dvdinput_title) (dvd_input_t, int);
@@ -40,8 +40,9 @@ char *      (*dvdinput_error) (dvd_input_t);
 
 #ifdef HAVE_DVDCSS_DVDCSS_H
 /* linking to libdvdcss */
+# include <dvdcss/libdvdcss.h>
 # include <dvdcss/dvdcss/dvdcss.h>
-# define DVDcss_open(a) dvdcss_open((char*)(a))
+# define DVDcss_open(a,b) dvdcss_open((char*)(a),(b))
 # define DVDcss_close   dvdcss_close
 # define DVDcss_seek    dvdcss_seek
 # define DVDcss_read    dvdcss_read
@@ -80,7 +81,7 @@ struct dvd_input_s {
 /**
  * initialize and open a DVD device or file.
  */
-static dvd_input_t css_open(const char *target)
+static dvd_input_t css_open(const char *target, struct svfs_ops *svfs_ops)
 {
   dvd_input_t dev;
 
@@ -92,7 +93,7 @@ static dvd_input_t css_open(const char *target)
   }
 
   /* Really open it with libdvdcss */
-  dev->dvdcss = DVDcss_open(target);
+  dev->dvdcss = DVDcss_open(target, svfs_ops);
   if(dev->dvdcss == 0) {
     fprintf(stderr, "libdvdread: Could not open %s with libdvdcss.\n", target);
     TRACE(TRACE_ERROR, "libdvdread", "Could not open %s with libdvdcss.",target);
@@ -156,7 +157,7 @@ static int css_close(dvd_input_t dev)
 /**
  * initialize and open a DVD device or file.
  */
-static dvd_input_t file_open(const char *target)
+static dvd_input_t file_open(const char *target, struct svfs_ops *svfs_ops)
 {
   dvd_input_t dev;
 
