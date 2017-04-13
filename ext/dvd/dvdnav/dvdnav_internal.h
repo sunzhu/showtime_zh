@@ -55,7 +55,7 @@ static inline int _private_gettimeofday( struct timeval *tv, void *tz )
 
 #else
 
-#include <pthread.h>
+#include "arch/threads.h"
 
 #endif /* WIN32 */
 
@@ -185,7 +185,7 @@ struct dvdnav_s {
   /* General data */
   char       *path;               /* Path to DVD device/dir */
   dvd_file_t *file;               /* Currently opened file */
-
+  void       *svfs_ops;           /* Movian Virtual FS ops */
   /* Position data */
   vm_position_t position_next;
   vm_position_t position_current;
@@ -208,7 +208,7 @@ struct dvdnav_s {
 
   /* VM */
   vm_t *vm;
-  pthread_mutex_t vm_lock;
+  hts_mutex_t vm_lock;
 
   /* Read-ahead cache */
   read_cache_t *cache;

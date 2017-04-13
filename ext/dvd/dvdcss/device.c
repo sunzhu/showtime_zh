@@ -27,7 +27,10 @@
  *****************************************************************************/
 #include "config.h"
 
-#include <limits.h>
+#if !defined(WII) && !defined(PS3)
+#define CSS_LIBC
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,6 +46,18 @@
 
 #ifdef HAVE_UNISTD_H
 #   include <unistd.h>
+#endif
+
+#ifdef HAVE_LIMITS_H
+#   include <limits.h>
+#endif
+
+#if defined( WIN32 ) && !defined( SYS_CYGWIN )
+#   include <io.h>                                                 /* read() */
+#else
+#ifdef CSS_LIBC
+#   include <sys/uio.h>                                      /* struct iovec */
+#endif
 #endif
 
 #ifdef DARWIN_DVD_IOCTL
@@ -74,14 +89,22 @@
 /*****************************************************************************
  * Device reading prototypes
  *****************************************************************************/
+#ifdef CSS_LIBC
 static int libc_open  ( dvdcss_t, const char * );
 static int libc_seek  ( dvdcss_t, int );
 static int libc_read  ( dvdcss_t, void *, int );
 static int libc_readv ( dvdcss_t, const struct iovec *, int );
+#endif
 
 static int stream_seek  ( dvdcss_t, int );
 static int stream_read  ( dvdcss_t, void *, int );
 static int stream_readv ( dvdcss_t, const struct iovec *, int );
+
+/* Movian Virtual File System */
+static int svfs_open  ( dvdcss_t, char const * );
+static int svfs_seek  ( dvdcss_t, int );
+static int svfs_read  ( dvdcss_t, void *, int );
+static int svfs_readv ( dvdcss_t, struct iovec *, int );
 
 #ifdef _WIN32
 static int win2k_open  ( dvdcss_t, const char * );
@@ -341,14 +364,29 @@ void dvdcss_check_device ( dvdcss_t dvdcss )
     print_error( dvdcss, "could not find a suitable default drive" );
 }
 
-int dvdcss_open_device ( dvdcss_t dvdcss )
+int dvdcss_open_device ( dvdcss_t dvdcss, struct svfs_ops *svfs_ops )
 {
-    const char *psz_device = getenv( "DVDCSS_RAW_DEVICE" );
-    if( !psz_device )
-    {
-         psz_device = dvdcss->psz_device;
-    }
+    char const *psz_device = dvdcss->psz_device;
     print_debug( dvdcss, "opening target `%s'", psz_device );
+    TRACE(TRACE_INFO, "dvdcss", "Opening target `%s'", psz_device);
+
+    dvdcss->svfs_ops = svfs_ops;
+
+#ifdef WII
+    if(!strcmp(psz_device, "/dev/di")) {
+        dvdcss->pf_seek  = di_seek;
+        dvdcss->pf_read  = di_read;
+        dvdcss->pf_readv = di_readv;
+        return di_open(dvdcss, psz_device);
+    }
+#endif
+
+    if(svfs_ops != NULL) {
+        dvdcss->pf_seek  = svfs_seek;
+        dvdcss->pf_read  = svfs_read;
+        dvdcss->pf_readv = svfs_readv;
+        return svfs_open( dvdcss, psz_device );
+    }
 
 #if defined( _WIN32 )
     /* Initialize readv temporary buffer */
@@ -396,11 +434,15 @@ int dvdcss_open_device ( dvdcss_t dvdcss )
     else
 #endif
     {
+#ifdef CSS_LIBC
         print_debug( dvdcss, "using libc API for access" );
         dvdcss->pf_seek  = libc_seek;
         dvdcss->pf_read  = libc_read;
         dvdcss->pf_readv = libc_readv;
         return libc_open( dvdcss, psz_device );
+#else
+	return -1;
+#endif
     }
 }
 
@@ -435,11 +477,12 @@ int dvdcss_close_device ( dvdcss_t dvdcss )
 /*****************************************************************************
  * Open commands.
  *****************************************************************************/
+#if !defined(WII) && !defined(PS3)
 static int libc_open ( dvdcss_t dvdcss, const char *psz_device )
 {
     char* pfile=psz_device+7;
 #if !defined( WIN32 )
-    dvdcss->i_fd = open( pfile, O_LARGEFILE );
+    dvdcss->i_fd = open( pfile, 0 );
 #else
     dvdcss->i_fd = open( pfile, O_LARGEFILE | O_BINARY );
 #endif
@@ -455,6 +498,7 @@ static int libc_open ( dvdcss_t dvdcss, const char *psz_device )
 
     return 0;
 }
+#endif
 
 #if defined( _WIN32 )
 static int win2k_open ( dvdcss_t dvdcss, const char *psz_device )
@@ -870,3 +914,121 @@ static int win2k_readv ( dvdcss_t dvdcss, const struct iovec *p_iovec,
     return i_blocks_read;
 }
 #endif /* defined( _WIN32 ) */
+
+/*****************************************************************************
+ * Movian Virtual File System 
+ */
+
+static int svfs_open ( dvdcss_t dvdcss, char const *psz_device )
+{
+    dvdcss->svfs_handle = dvdcss->svfs_ops->open(psz_device);
+    dvdcss->i_pos = 0;
+    return dvdcss->svfs_handle == NULL ? -1 : 0;
+}
+
+static int svfs_seek( dvdcss_t dvdcss, int i_blocks )
+{
+    int64_t   off;
+
+    if(dvdcss->i_pos == i_blocks)
+	return i_blocks;
+
+    off = (int64_t)i_blocks * (int64_t)DVDCSS_BLOCK_SIZE;
+
+    off = dvdcss->svfs_ops->seek(dvdcss->svfs_handle, off, SEEK_SET);
+    if(off < 0) {
+	dvdcss->i_pos = -1;
+	return -1;
+    }
+    dvdcss->i_pos = i_blocks;
+    return dvdcss->i_pos;
+}
+
+static int svfs_read ( dvdcss_t dvdcss, void *p_buffer, int i_blocks )
+{
+    off_t i_size, i_ret;
+
+    i_size = (off_t)i_blocks * (off_t)DVDCSS_BLOCK_SIZE;
+    i_ret = dvdcss->svfs_ops->read( dvdcss->svfs_handle, p_buffer, i_size );
+
+    if( i_ret < 0 )
+    {
+        print_error( dvdcss, "read error" );
+        dvdcss->i_pos = -1;
+        return i_ret;
+    }
+
+    /* Handle partial reads */
+    if( i_ret != i_size )
+    {
+        int i_seek;
+
+        dvdcss->i_pos = -1;
+        i_seek = svfs_seek( dvdcss, i_ret / DVDCSS_BLOCK_SIZE );
+        if( i_seek < 0 )
+        {
+            return i_seek;
+        }
+
+        /* We have to return now so that i_pos isn't clobbered */
+        return i_ret / DVDCSS_BLOCK_SIZE;
+    }
+
+    dvdcss->i_pos += i_ret / DVDCSS_BLOCK_SIZE;
+    return i_ret / DVDCSS_BLOCK_SIZE;
+}
+
+
+static int svfs_readv ( dvdcss_t dvdcss, struct iovec *p_iovec, int i_blocks )
+{
+    int i_index, i_len, i_total = 0;
+    unsigned char *p_base;
+    int i_bytes;
+
+    for( i_index = i_blocks;
+         i_index;
+         i_index--, p_iovec++ )
+    {
+        i_len  = p_iovec->iov_len;
+        p_base = p_iovec->iov_base;
+
+        if( i_len <= 0 )
+        {
+            continue;
+        }
+
+        i_bytes = dvdcss->svfs_ops->read( dvdcss->svfs_handle, p_base, i_len );
+
+        if( i_bytes < 0 )
+        {
+            /* One of the reads failed, too bad.
+             * We won't even bother returning the reads that went ok,
+             * and as in the posix spec the file postition is left
+             * unspecified after a failure */
+            dvdcss->i_pos = -1;
+            return -1;
+        }
+
+        i_total += i_bytes;
+
+        if( i_bytes != i_len )
+        {
+            /* We reached the end of the file or a signal interrupted
+             * the read. Return a partial read. */
+            int i_seek;
+
+            dvdcss->i_pos = -1;
+            i_seek = svfs_seek( dvdcss, i_total / DVDCSS_BLOCK_SIZE );
+            if( i_seek < 0 )
+            {
+                return i_seek;
+            }
+
+            /* We have to return now so that i_pos isn't clobbered */
+            return i_total / DVDCSS_BLOCK_SIZE;
+        }
+    }
+
+    dvdcss->i_pos += i_total / DVDCSS_BLOCK_SIZE;
+    return i_total / DVDCSS_BLOCK_SIZE;
+}
