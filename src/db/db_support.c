@@ -216,7 +216,7 @@ db_upgrade_schema(sqlite3 *db, const char *schemadir, const char *dbname,
   char path[256];
   char buf[256];
   char detach[256];
-
+  
   if(extra_db != NULL) {
     char tmp[256];
     snprintf(tmp, sizeof(tmp),
