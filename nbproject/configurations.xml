@@ -5079,8 +5079,6 @@
         <in>keyring.h</in>
         <in>libav.h</in>
         <in>main.h</in>
-        <in>media.c</in>
-        <in>media.h</in>
         <in>navigator.c</in>
         <in>navigator.h</in>
         <in>notifications.c</in>
@@ -5096,7 +5094,6 @@
         <in>settings.c</in>
         <in>settings.h</in>
         <in>showtime.c</in>
-        <in>showtime.h</in>
         <in>task.c</in>
         <in>task.h</in>
         <in>trace.c</in>
@@ -31823,33 +31820,6 @@
       </item>
       <item path="src/main.h" ex="false" tool="3" flavor2="0">
       </item>
-      <item path="src/media.c" ex="false" tool="0" flavor2="2">
-        <cTool>
-          <incDir>
-            <pElem>ext/dvd/libdvdread</pElem>
-            <pElem>src/misc</pElem>
-            <pElem>../ps3dev/host/ppu/lib/gcc/ppu/4.5.2/include</pElem>
-            <pElem>src/arch/ps3</pElem>
-            <pElem>build.ps3/libav/install/include/libavcodec</pElem>
-            <pElem>src/audio2</pElem>
-            <pElem>build.ps3/libav/install/include/libavutil</pElem>
-            <pElem>build.ps3/libav/install/include/libavresample</pElem>
-            <pElem>.</pElem>
-            <pElem>../ps3dev/host/ppu/ppu/include</pElem>
-            <pElem>../PSL1GHT/target/include/psl1ght</pElem>
-            <pElem>src/prop</pElem>
-            <pElem>../PSL1GHT/target/include/sys</pElem>
-            <pElem>../PSL1GHT/target/include</pElem>
-            <pElem>src/video</pElem>
-            <pElem>build.ps3/libav/install/include</pElem>
-            <pElem>src</pElem>
-            <pElem>build.ps3/libav/install/include/libavformat</pElem>
-            <pElem>src/arch</pElem>
-          </incDir>
-        </cTool>
-      </item>
-      <item path="src/media.h" ex="false" tool="3" flavor2="0">
-      </item>
       <item path="src/media/media.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="src/media/media.h" ex="false" tool="3" flavor2="0">
@@ -32496,8 +32466,6 @@
             <pElem>../ps3dev/host/ppu/ppu/include</pElem>
           </incDir>
         </cTool>
-      </item>
-      <item path="src/showtime.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="src/subtitles/dvdspu.c" ex="false" tool="0" flavor2="0">
       </item>

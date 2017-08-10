@@ -6640,8 +6640,6 @@
         <in>libav.c</in>
         <in>libav.h</in>
         <in>main.h</in>
-        <in>media.c</in>
-        <in>media.h</in>
         <in>navigator.c</in>
         <in>navigator.h</in>
         <in>notifications.c</in>
@@ -6657,7 +6655,6 @@
         <in>settings.c</in>
         <in>settings.h</in>
         <in>showtime.c</in>
-        <in>showtime.h</in>
         <in>task.c</in>
         <in>task.h</in>
         <in>trace.c</in>
