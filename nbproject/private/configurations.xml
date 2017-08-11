@@ -6441,7 +6441,6 @@
         <df name="text">
           <in>fontconfig.c</in>
           <in>fontstash.c</in>
-          <in>freetype-old.c</in>
           <in>freetype.c</in>
           <in>parser.c</in>
           <in>text.h</in>
@@ -6474,7 +6473,6 @@
             <in>glw_expander.c</in>
             <in>glw_flicker.c</in>
             <in>glw_freefloat.c</in>
-            <in>glw_fx_texrot.c</in>
             <in>glw_image.c</in>
             <in>glw_keyintercept.c</in>
             <in>glw_layer.c</in>
@@ -6486,7 +6484,6 @@
             <in>glw_math_sse.h</in>
             <in>glw_mirror.c</in>
             <in>glw_mirror.h</in>
-            <in>glw_multitile.c</in>
             <in>glw_navigation.c</in>
             <in>glw_navigation.h</in>
             <in>glw_opengl.h</in>

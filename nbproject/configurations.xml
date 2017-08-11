@@ -4940,8 +4940,9 @@
           <in>vobsub.h</in>
         </df>
         <df name="text">
+          <in>fontconfig.c</in>
           <in>fontstash.c</in>
-          <in>freetype-old.c</in>
+          <in>freetype.c</in>
           <in>parser.c</in>
           <in>text.h</in>
         </df>
@@ -4954,9 +4955,12 @@
             <in>glw_bloom.c</in>
             <in>glw_clip.c</in>
             <in>glw_clist.c</in>
+            <in>glw_cocoa.h</in>
             <in>glw_container.c</in>
             <in>glw_coverflow.c</in>
             <in>glw_cube.c</in>
+            <in>glw_cursor.c</in>
+            <in>glw_cursor.h</in>
             <in>glw_deck.c</in>
             <in>glw_detachable.c</in>
             <in>glw_displacement.c</in>
@@ -4966,21 +4970,27 @@
             <in>glw_expander.c</in>
             <in>glw_flicker.c</in>
             <in>glw_freefloat.c</in>
-            <in>glw_fx_texrot.c</in>
             <in>glw_image.c</in>
             <in>glw_keyintercept.c</in>
             <in>glw_layer.c</in>
             <in>glw_list.c</in>
             <in>glw_math.c</in>
+            <in>glw_math_c.h</in>
             <in>glw_math_sse.c</in>
             <in>glw_math_sse.h</in>
             <in>glw_mirror.c</in>
-            <in>glw_multitile.c</in>
+            <in>glw_mirror.h</in>
             <in>glw_navigation.c</in>
             <in>glw_navigation.h</in>
+            <in>glw_opengl.h</in>
+            <in>glw_opengl_es.c</in>
+            <in>glw_opengl_ff.c</in>
+            <in>glw_opengl_ogl.c</in>
+            <in>glw_opengl_shaders.c</in>
             <in>glw_playfield.c</in>
             <in>glw_primitives.c</in>
             <in>glw_ps3.c</in>
+            <in>glw_rec.c</in>
             <in>glw_rec.h</in>
             <in>glw_renderer.c</in>
             <in>glw_renderer.h</in>
@@ -4988,6 +4998,7 @@
             <in>glw_rotator.c</in>
             <in>glw_rsx.c</in>
             <in>glw_rsx.h</in>
+            <in>glw_settings.c</in>
             <in>glw_settings.h</in>
             <in>glw_slider.c</in>
             <in>glw_slideshow.c</in>
@@ -4996,7 +5007,9 @@
             <in>glw_text_bitmap.c</in>
             <in>glw_text_bitmap.h</in>
             <in>glw_texture.h</in>
+            <in>glw_texture_gx.c</in>
             <in>glw_texture_loader.c</in>
+            <in>glw_texture_opengl.c</in>
             <in>glw_texture_rsx.c</in>
             <in>glw_throbber.c</in>
             <in>glw_transitions.c</in>
@@ -5005,6 +5018,7 @@
             <in>glw_video_android.c</in>
             <in>glw_video_common.c</in>
             <in>glw_video_common.h</in>
+            <in>glw_video_opengl.c</in>
             <in>glw_video_overlay.c</in>
             <in>glw_video_overlay.h</in>
             <in>glw_video_rpi.c</in>
@@ -5012,6 +5026,7 @@
             <in>glw_video_sunxi.c</in>
             <in>glw_video_tex.c</in>
             <in>glw_video_vda.c</in>
+            <in>glw_video_vdpau.c</in>
             <in>glw_video_yuvp.c</in>
             <in>glw_view.c</in>
             <in>glw_view.h</in>
@@ -5022,6 +5037,7 @@
             <in>glw_view_parser.c</in>
             <in>glw_view_preproc.c</in>
             <in>glw_view_support.c</in>
+            <in>glw_x11.c</in>
           </df>
           <in>longpress.c</in>
           <in>longpress.h</in>
@@ -5077,6 +5093,7 @@
         <in>keymapper.h</in>
         <in>keyring.c</in>
         <in>keyring.h</in>
+        <in>libav.c</in>
         <in>libav.h</in>
         <in>main.h</in>
         <in>navigator.c</in>
@@ -31816,6 +31833,8 @@
       </item>
       <item path="src/keyring.h" ex="false" tool="3" flavor2="0">
       </item>
+      <item path="src/libav.c" ex="false" tool="0" flavor2="0">
+      </item>
       <item path="src/libav.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="src/main.h" ex="false" tool="3" flavor2="0">
@@ -32495,6 +32514,8 @@
       </item>
       <item path="src/task.h" ex="false" tool="3" flavor2="0">
       </item>
+      <item path="src/text/fontconfig.c" ex="false" tool="0" flavor2="0">
+      </item>
       <item path="src/text/fontstash.c" ex="false" tool="0" flavor2="2">
         <cTool>
           <incDir>
@@ -32514,21 +32535,7 @@
           </incDir>
         </cTool>
       </item>
-      <item path="src/text/freetype-old.c" ex="false" tool="0" flavor2="2">
-        <cTool>
-          <incDir>
-            <pElem>../PSL1GHT/target/include/psl1ght</pElem>
-            <pElem>src/misc</pElem>
-            <pElem>../ps3dev/host/ppu/lib/gcc/ppu/4.5.2/include</pElem>
-            <pElem>src/arch/ps3</pElem>
-            <pElem>../PSL1GHT/target/include/sys</pElem>
-            <pElem>../ps3dev/host/ppu/include/freetype2/freetype</pElem>
-            <pElem>../PSL1GHT/target/include</pElem>
-            <pElem>../ps3dev/host/ppu/include/freetype2/freetype/config</pElem>
-            <pElem>src/fileaccess</pElem>
-            <pElem>src</pElem>
-          </incDir>
-        </cTool>
+      <item path="src/text/freetype.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="src/text/parser.c" ex="false" tool="0" flavor2="2">
       </item>
@@ -32649,6 +32656,8 @@
           </incDir>
         </cTool>
       </item>
+      <item path="src/ui/glw/glw_cocoa.h" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="src/ui/glw/glw_container.c" ex="false" tool="0" flavor2="2">
         <cTool>
           <incDir>
@@ -32696,6 +32705,10 @@
             <pElem>src</pElem>
           </incDir>
         </cTool>
+      </item>
+      <item path="src/ui/glw/glw_cursor.c" ex="false" tool="0" flavor2="0">
+      </item>
+      <item path="src/ui/glw/glw_cursor.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="src/ui/glw/glw_deck.c" ex="false" tool="0" flavor2="2">
         <cTool>
@@ -32828,22 +32841,6 @@
           </incDir>
         </cTool>
       </item>
-      <item path="src/ui/glw/glw_fx_texrot.c" ex="false" tool="0" flavor2="2">
-        <cTool>
-          <incDir>
-            <pElem>src/misc</pElem>
-            <pElem>../PSL1GHT/target/include/psl1ght</pElem>
-            <pElem>src/prop</pElem>
-            <pElem>../ps3dev/host/ppu/lib/gcc/ppu/4.5.2/include</pElem>
-            <pElem>src/htsmsg</pElem>
-            <pElem>src/arch/ps3</pElem>
-            <pElem>../PSL1GHT/target/include/sys</pElem>
-            <pElem>../PSL1GHT/target/include</pElem>
-            <pElem>../PSL1GHT/target/include/rsx</pElem>
-            <pElem>src</pElem>
-          </incDir>
-        </cTool>
-      </item>
       <item path="src/ui/glw/glw_image.c" ex="false" tool="0" flavor2="2">
         <cTool>
           <incDir>
@@ -32911,6 +32908,8 @@
       </item>
       <item path="src/ui/glw/glw_math.c" ex="false" tool="0" flavor2="2">
       </item>
+      <item path="src/ui/glw/glw_math_c.h" ex="false" tool="3" flavor2="0">
+      </item>
       <item path="src/ui/glw/glw_math_sse.c" ex="false" tool="3" flavor2="0">
       </item>
       <item path="src/ui/glw/glw_math_sse.h" ex="false" tool="3" flavor2="0">
@@ -32931,21 +32930,7 @@
           </incDir>
         </cTool>
       </item>
-      <item path="src/ui/glw/glw_multitile.c" ex="false" tool="0" flavor2="2">
-        <cTool>
-          <incDir>
-            <pElem>src/misc</pElem>
-            <pElem>../PSL1GHT/target/include/psl1ght</pElem>
-            <pElem>src/prop</pElem>
-            <pElem>../ps3dev/host/ppu/lib/gcc/ppu/4.5.2/include</pElem>
-            <pElem>src/htsmsg</pElem>
-            <pElem>src/arch/ps3</pElem>
-            <pElem>../PSL1GHT/target/include/sys</pElem>
-            <pElem>../PSL1GHT/target/include</pElem>
-            <pElem>../PSL1GHT/target/include/rsx</pElem>
-            <pElem>src</pElem>
-          </incDir>
-        </cTool>
+      <item path="src/ui/glw/glw_mirror.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="src/ui/glw/glw_navigation.c" ex="false" tool="0" flavor2="2">
         <cTool>
@@ -32964,6 +32949,16 @@
         </cTool>
       </item>
       <item path="src/ui/glw/glw_navigation.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="src/ui/glw/glw_opengl.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="src/ui/glw/glw_opengl_es.c" ex="false" tool="0" flavor2="0">
+      </item>
+      <item path="src/ui/glw/glw_opengl_ff.c" ex="false" tool="0" flavor2="0">
+      </item>
+      <item path="src/ui/glw/glw_opengl_ogl.c" ex="false" tool="0" flavor2="0">
+      </item>
+      <item path="src/ui/glw/glw_opengl_shaders.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="src/ui/glw/glw_playfield.c" ex="false" tool="0" flavor2="2">
         <cTool>
@@ -33023,6 +33018,8 @@
           </incDir>
         </cTool>
       </item>
+      <item path="src/ui/glw/glw_rec.c" ex="false" tool="0" flavor2="0">
+      </item>
       <item path="src/ui/glw/glw_rec.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="src/ui/glw/glw_renderer.c" ex="false" tool="0" flavor2="2">
@@ -33078,6 +33075,8 @@
         </cTool>
       </item>
       <item path="src/ui/glw/glw_rsx.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="src/ui/glw/glw_settings.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="src/ui/glw/glw_settings.h" ex="false" tool="3" flavor2="0">
       </item>
@@ -33138,6 +33137,8 @@
       </item>
       <item path="src/ui/glw/glw_texture.h" ex="false" tool="3" flavor2="0">
       </item>
+      <item path="src/ui/glw/glw_texture_gx.c" ex="false" tool="0" flavor2="0">
+      </item>
       <item path="src/ui/glw/glw_texture_loader.c" ex="false" tool="0" flavor2="2">
         <cTool>
           <incDir>
@@ -33154,6 +33155,8 @@
             <pElem>src/arch</pElem>
           </incDir>
         </cTool>
+      </item>
+      <item path="src/ui/glw/glw_texture_opengl.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="src/ui/glw/glw_texture_rsx.c" ex="false" tool="0" flavor2="2">
         <cTool>
@@ -33233,6 +33236,8 @@
       </item>
       <item path="src/ui/glw/glw_video_common.h" ex="false" tool="3" flavor2="0">
       </item>
+      <item path="src/ui/glw/glw_video_opengl.c" ex="false" tool="0" flavor2="0">
+      </item>
       <item path="src/ui/glw/glw_video_overlay.c" ex="false" tool="0" flavor2="2">
         <cTool>
           <incDir>
@@ -33287,6 +33292,8 @@
       <item path="src/ui/glw/glw_video_tex.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="src/ui/glw/glw_video_vda.c" ex="false" tool="0" flavor2="0">
+      </item>
+      <item path="src/ui/glw/glw_video_vdpau.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="src/ui/glw/glw_video_yuvp.c" ex="false" tool="0" flavor2="0">
       </item>
@@ -33428,6 +33435,8 @@
             <pElem>src/arch</pElem>
           </incDir>
         </cTool>
+      </item>
+      <item path="src/ui/glw/glw_x11.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="src/ui/longpress.c" ex="false" tool="0" flavor2="0">
       </item>
