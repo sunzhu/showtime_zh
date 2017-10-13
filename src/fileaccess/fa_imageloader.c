@@ -156,7 +156,7 @@ fa_imageloader2(const char *url, const char **vpaths,
                 FA_LOAD_ERRBUF(errbuf, errlen),
                 FA_LOAD_CACHE_CONTROL(cache_control),
                 FA_LOAD_CANCELLABLE(c),
-                FA_LOAD_FLAGS(FA_CONTENT_ON_ERROR),
+                FA_LOAD_FLAGS(FA_NON_INTERACTIVE | FA_CONTENT_ON_ERROR),
                 NULL);
   if(buf == NULL || buf == NOT_MODIFIED)
     return (image_t *)buf;
