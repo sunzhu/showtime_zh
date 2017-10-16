@@ -464,8 +464,6 @@
           <df name="video">
           </df>
         </df>
-        <df name="stamps">
-        </df>
         <df name="support">
           <df name="dataroot">
           </df>
@@ -489,7 +487,6 @@
       </df>
       <df name="ext">
         <df name="audio">
-          <in>sid.c</in>
         </df>
         <df name="bspatch">
           <in>bspatch.c</in>
@@ -690,6 +687,8 @@
             <df name="plan9">
               <in>main.c</in>
             </df>
+            <df name="solaris">
+            </df>
             <df name="tms470">
               <in>math.h</in>
             </df>
@@ -707,6 +706,7 @@
               <in>filter_audio.c</in>
               <in>metadata.c</in>
               <in>output.c</in>
+              <in>qsvdec.c</in>
               <in>transcode_aac.c</in>
             </df>
             <in>print_options.c</in>
@@ -715,17 +715,25 @@
             <df name="aarch64">
               <in>asm-offsets.h</in>
               <in>cabac.h</in>
+              <in>dcadsp_init.c</in>
+              <in>dcadsp_neon.S</in>
               <in>fft_init_aarch64.c</in>
               <in>fft_neon.S</in>
+              <in>fmtconvert_init.c</in>
+              <in>fmtconvert_neon.S</in>
               <in>h264chroma_init_aarch64.c</in>
               <in>h264cmc_neon.S</in>
               <in>h264dsp_init_aarch64.c</in>
               <in>h264dsp_neon.S</in>
               <in>h264idct_neon.S</in>
+              <in>h264pred_init.c</in>
+              <in>h264pred_neon.S</in>
               <in>h264qpel_init_aarch64.c</in>
               <in>h264qpel_neon.S</in>
               <in>hpeldsp_init_aarch64.c</in>
               <in>hpeldsp_neon.S</in>
+              <in>imdct15_init.c</in>
+              <in>imdct15_neon.S</in>
               <in>mdct_neon.S</in>
               <in>mpegaudiodsp_init.c</in>
               <in>mpegaudiodsp_neon.S</in>
@@ -734,6 +742,7 @@
               <in>opus_imdct_init.c</in>
               <in>opus_imdct_neon.S</in>
               <in>rv40dsp_init_aarch64.c</in>
+              <in>synth_filter_neon.S</in>
               <in>vc1dsp_init_aarch64.c</in>
               <in>videodsp.S</in>
               <in>videodsp_init.c</in>
@@ -776,6 +785,8 @@
               <in>fmtconvert_neon.S</in>
               <in>fmtconvert_vfp.S</in>
               <in>fmtconvert_vfp_armv6.S</in>
+              <in>g722dsp_init_arm.c</in>
+              <in>g722dsp_neon.S</in>
               <in>h264chroma_init_arm.c</in>
               <in>h264cmc_neon.S</in>
               <in>h264dsp_init_arm.c</in>
@@ -941,7 +952,6 @@
               <in>dct-test.c</in>
               <in>dct32.asm</in>
               <in>dct_init.c</in>
-              <in>deinterlace.asm</in>
               <in>dnxhdenc.asm</in>
               <in>dnxhdenc_init.c</in>
               <in>fdct.c</in>
@@ -975,6 +985,7 @@
               <in>h264chroma_init.c</in>
               <in>h264dsp_init.c</in>
               <in>hevc_deblock.asm</in>
+              <in>hevc_mc.asm</in>
               <in>hevcdsp_init.c</in>
               <in>hpeldsp.asm</in>
               <in>hpeldsp.h</in>
@@ -984,9 +995,6 @@
               <in>huffyuvdsp.asm</in>
               <in>huffyuvdsp_init.c</in>
               <in>huffyuvencdsp_mmx.c</in>
-              <in>idct_mmx_xvid.c</in>
-              <in>idct_sse2_xvid.c</in>
-              <in>idct_xvid.h</in>
               <in>idctdsp.h</in>
               <in>idctdsp_init.c</in>
               <in>idctdsp_mmx.c</in>
@@ -1024,6 +1032,8 @@
               <in>simple_idct.c</in>
               <in>simple_idct.h</in>
               <in>svq1enc.c</in>
+              <in>v210enc.asm</in>
+              <in>v210enc_init.c</in>
               <in>vc1dsp.asm</in>
               <in>vc1dsp.h</in>
               <in>vc1dsp_init.c</in>
@@ -1043,7 +1053,10 @@
               <in>vp9dsp.asm</in>
               <in>vp9dsp_init.c</in>
               <in>w64xmmtest.c</in>
+              <in>xvididct.h</in>
               <in>xvididct_init.c</in>
+              <in>xvididct_mmx.c</in>
+              <in>xvididct_sse2.c</in>
             </df>
             <in>4xm.c</in>
             <in>8bps.c</in>
@@ -1197,6 +1210,8 @@
             <in>cabac.c</in>
             <in>cabac.h</in>
             <in>cabac_functions.h</in>
+            <in>canopus.c</in>
+            <in>canopus.h</in>
             <in>cavs.c</in>
             <in>cavs.h</in>
             <in>cavs_parser.c</in>
@@ -1230,15 +1245,22 @@
             <in>cos_tablegen.c</in>
             <in>cscd.c</in>
             <in>cyuv.c</in>
+            <in>d3d11va.c</in>
+            <in>d3d11va.h</in>
             <in>dca.c</in>
             <in>dca.h</in>
+            <in>dca_exss.c</in>
             <in>dca_parser.c</in>
             <in>dca_parser.h</in>
+            <in>dca_syncwords.h</in>
+            <in>dca_xll.c</in>
+            <in>dcadata.c</in>
             <in>dcadata.h</in>
             <in>dcadec.c</in>
             <in>dcadsp.c</in>
             <in>dcadsp.h</in>
             <in>dcahuff.h</in>
+            <in>dcamath.h</in>
             <in>dct-test.c</in>
             <in>dct.c</in>
             <in>dct.h</in>
@@ -1249,6 +1271,7 @@
             <in>dct32_template.c</in>
             <in>dctref.c</in>
             <in>dctref.h</in>
+            <in>dds.c</in>
             <in>dfa.c</in>
             <in>dirac.c</in>
             <in>dirac.h</in>
@@ -1261,6 +1284,7 @@
             <in>dnxhdenc.h</in>
             <in>dpcm.c</in>
             <in>dpx.c</in>
+            <in>dpx_parser.c</in>
             <in>dpxenc.c</in>
             <in>dsicinaudio.c</in>
             <in>dsicinav.c</in>
@@ -1268,6 +1292,7 @@
             <in>dsputil.c</in>
             <in>dsputil.h</in>
             <in>dsputil_template.c</in>
+            <in>dss_sp.c</in>
             <in>dump_extradata_bsf.c</in>
             <in>dv.c</in>
             <in>dv.h</in>
@@ -1290,9 +1315,11 @@
             <in>dwt.h</in>
             <in>dxa.c</in>
             <in>dxtory.c</in>
+            <in>dxv.c</in>
             <in>dxva2.c</in>
             <in>dxva2.h</in>
             <in>dxva2_h264.c</in>
+            <in>dxva2_hevc.c</in>
             <in>dxva2_internal.h</in>
             <in>dxva2_mpeg2.c</in>
             <in>dxva2_vc1.c</in>
@@ -1310,6 +1337,8 @@
             <in>eatqi.c</in>
             <in>elbg.c</in>
             <in>elbg.h</in>
+            <in>elsdec.c</in>
+            <in>elsdec.h</in>
             <in>error_resilience.c</in>
             <in>error_resilience.h</in>
             <in>escape124.c</in>
@@ -1362,9 +1391,14 @@
             <in>g722.c</in>
             <in>g722.h</in>
             <in>g722dec.c</in>
+            <in>g722dsp.c</in>
+            <in>g722dsp.h</in>
             <in>g722enc.c</in>
             <in>g723_1.c</in>
+            <in>g723_1.h</in>
             <in>g723_1_data.h</in>
+            <in>g723_1dec.c</in>
+            <in>g723_1enc.c</in>
             <in>g726.c</in>
             <in>get_bits.h</in>
             <in>gif.c</in>
@@ -1389,6 +1423,7 @@
             <in>h263.h</in>
             <in>h263_parser.c</in>
             <in>h263_parser.h</in>
+            <in>h263data.c</in>
             <in>h263data.h</in>
             <in>h263dec.c</in>
             <in>h263dsp.c</in>
@@ -1427,13 +1462,21 @@
             <in>h264qpel.c</in>
             <in>h264qpel.h</in>
             <in>h264qpel_template.c</in>
+            <in>hap.c</in>
+            <in>hap.h</in>
+            <in>hapdec.c</in>
+            <in>hapenc.c</in>
             <in>hevc.c</in>
             <in>hevc.h</in>
             <in>hevc_cabac.c</in>
+            <in>hevc_data.c</in>
             <in>hevc_filter.c</in>
+            <in>hevc_mp4toannexb_bsf.c</in>
             <in>hevc_mvs.c</in>
+            <in>hevc_parse.c</in>
             <in>hevc_parser.c</in>
             <in>hevc_ps.c</in>
+            <in>hevc_ps_enc.c</in>
             <in>hevc_refs.c</in>
             <in>hevc_sei.c</in>
             <in>hevcdsp.c</in>
@@ -1445,6 +1488,16 @@
             <in>hpel_template.c</in>
             <in>hpeldsp.c</in>
             <in>hpeldsp.h</in>
+            <in>hq_hqa.c</in>
+            <in>hq_hqa.h</in>
+            <in>hq_hqadata.c</in>
+            <in>hq_hqadsp.c</in>
+            <in>hq_hqadsp.h</in>
+            <in>hqx.c</in>
+            <in>hqx.h</in>
+            <in>hqxdsp.c</in>
+            <in>hqxdsp.h</in>
+            <in>hqxvlc.c</in>
             <in>huffman.c</in>
             <in>huffman.h</in>
             <in>huffyuv.c</in>
@@ -1463,6 +1516,8 @@
             <in>iirfilter.h</in>
             <in>imc.c</in>
             <in>imcdata.h</in>
+            <in>imdct15.c</in>
+            <in>imdct15.h</in>
             <in>imgconvert.c</in>
             <in>imgconvert.h</in>
             <in>imx_dump_header_bsf.c</in>
@@ -1484,6 +1539,8 @@
             <in>intrax8huf.h</in>
             <in>ituh263dec.c</in>
             <in>ituh263enc.c</in>
+            <in>ivi.c</in>
+            <in>ivi.h</in>
             <in>ivi_common.c</in>
             <in>ivi_common.h</in>
             <in>ivi_dsp.c</in>
@@ -1494,6 +1551,8 @@
             <in>jpeg2000.c</in>
             <in>jpeg2000.h</in>
             <in>jpeg2000dec.c</in>
+            <in>jpeg2000dsp.c</in>
+            <in>jpeg2000dsp.h</in>
             <in>jpeg2000dwt.c</in>
             <in>jpeg2000dwt.h</in>
             <in>jpegls.c</in>
@@ -1501,6 +1560,8 @@
             <in>jpeglsdec.c</in>
             <in>jpeglsdec.h</in>
             <in>jpeglsenc.c</in>
+            <in>jpegtables.c</in>
+            <in>jpegtables.h</in>
             <in>jrevdct.c</in>
             <in>jvdec.c</in>
             <in>kbdwin.c</in>
@@ -1514,14 +1575,17 @@
             <in>lcl.h</in>
             <in>lcldec.c</in>
             <in>lclenc.c</in>
+            <in>libdcadec.c</in>
             <in>libfaac.c</in>
             <in>libfdk-aacdec.c</in>
             <in>libfdk-aacenc.c</in>
             <in>libgsmdec.c</in>
             <in>libgsmenc.c</in>
             <in>libilbc.c</in>
+            <in>libkvazaar.c</in>
             <in>libmp3lame.c</in>
             <in>libopencore-amr.c</in>
+            <in>libopenh264enc.c</in>
             <in>libopenjpegdec.c</in>
             <in>libopenjpegenc.c</in>
             <in>libopus.c</in>
@@ -1558,6 +1622,8 @@
             <in>lpc.h</in>
             <in>lsp.c</in>
             <in>lsp.h</in>
+            <in>lzf.c</in>
+            <in>lzf.h</in>
             <in>lzw.c</in>
             <in>lzw.h</in>
             <in>lzwenc.c</in>
@@ -1594,8 +1660,10 @@
             <in>mlpdec.c</in>
             <in>mlpdsp.c</in>
             <in>mlpdsp.h</in>
+            <in>mmaldec.c</in>
             <in>mmvideo.c</in>
             <in>motion_est.c</in>
+            <in>motion_est.h</in>
             <in>motion_est_template.c</in>
             <in>motionpixels.c</in>
             <in>motionpixels_tablegen.c</in>
@@ -1616,6 +1684,7 @@
             <in>mpeg12dec.c</in>
             <in>mpeg12decdata.h</in>
             <in>mpeg12enc.c</in>
+            <in>mpeg12vlc.h</in>
             <in>mpeg4audio.c</in>
             <in>mpeg4audio.h</in>
             <in>mpeg4data.h</in>
@@ -1649,6 +1718,8 @@
             <in>mpegaudiodsp_template.c</in>
             <in>mpegaudioenc.c</in>
             <in>mpegaudiotab.h</in>
+            <in>mpegpicture.c</in>
+            <in>mpegpicture.h</in>
             <in>mpegutils.c</in>
             <in>mpegutils.h</in>
             <in>mpegvideo.c</in>
@@ -1657,6 +1728,8 @@
             <in>mpegvideo_motion.c</in>
             <in>mpegvideo_parser.c</in>
             <in>mpegvideo_xvmc.c</in>
+            <in>mpegvideodata.c</in>
+            <in>mpegvideodata.h</in>
             <in>mpegvideodsp.c</in>
             <in>mpegvideodsp.h</in>
             <in>mpegvideoencdsp.c</in>
@@ -1694,6 +1767,10 @@
             <in>nellymoserenc.c</in>
             <in>noise_bsf.c</in>
             <in>nuv.c</in>
+            <in>nvenc.c</in>
+            <in>nvenc.h</in>
+            <in>nvenc_h264.c</in>
+            <in>nvenc_hevc.c</in>
             <in>old_codec_ids.h</in>
             <in>on2avc.c</in>
             <in>on2avcdata.c</in>
@@ -1740,6 +1817,8 @@
             <in>pnm_parser.c</in>
             <in>pnmdec.c</in>
             <in>pnmenc.c</in>
+            <in>profiles.c</in>
+            <in>profiles.h</in>
             <in>proresdata.c</in>
             <in>proresdata.h</in>
             <in>proresdec.c</in>
@@ -1765,6 +1844,19 @@
             <in>qpel_template.c</in>
             <in>qpeldsp.c</in>
             <in>qpeldsp.h</in>
+            <in>qsv.c</in>
+            <in>qsv.h</in>
+            <in>qsv_api.c</in>
+            <in>qsv_internal.h</in>
+            <in>qsvdec.c</in>
+            <in>qsvdec.h</in>
+            <in>qsvdec_h2645.c</in>
+            <in>qsvdec_mpeg2.c</in>
+            <in>qsvenc.c</in>
+            <in>qsvenc.h</in>
+            <in>qsvenc_h264.c</in>
+            <in>qsvenc_hevc.c</in>
+            <in>qsvenc_mpeg2.c</in>
             <in>qtrle.c</in>
             <in>qtrleenc.c</in>
             <in>r210dec.c</in>
@@ -1790,6 +1882,7 @@
             <in>remove_extradata_bsf.c</in>
             <in>resample.c</in>
             <in>resample2.c</in>
+            <in>rl.c</in>
             <in>rl.h</in>
             <in>rl2.c</in>
             <in>rle.c</in>
@@ -1801,9 +1894,11 @@
             <in>roqvideodec.c</in>
             <in>roqvideoenc.c</in>
             <in>rpza.c</in>
+            <in>rscc.c</in>
             <in>rtjpeg.c</in>
             <in>rtjpeg.h</in>
             <in>rv10.c</in>
+            <in>rv10.h</in>
             <in>rv10enc.c</in>
             <in>rv20enc.c</in>
             <in>rv30.c</in>
@@ -1827,6 +1922,7 @@
             <in>sbr.h</in>
             <in>sbrdsp.c</in>
             <in>sbrdsp.h</in>
+            <in>screenpresso.c</in>
             <in>sgi.h</in>
             <in>sgidec.c</in>
             <in>sgienc.c</in>
@@ -1846,6 +1942,8 @@
             <in>siprdata.h</in>
             <in>smacker.c</in>
             <in>smc.c</in>
+            <in>snappy.c</in>
+            <in>snappy.h</in>
             <in>sp5x.h</in>
             <in>sp5xdec.c</in>
             <in>srtdec.c</in>
@@ -1875,6 +1973,10 @@
             <in>targa.c</in>
             <in>targa.h</in>
             <in>targaenc.c</in>
+            <in>tdsc.c</in>
+            <in>texturedsp.c</in>
+            <in>texturedsp.h</in>
+            <in>texturedspenc.c</in>
             <in>thread.h</in>
             <in>tiertexseqv.c</in>
             <in>tiff.c</in>
@@ -1907,6 +2009,7 @@
             <in>utvideoenc.c</in>
             <in>v210dec.c</in>
             <in>v210enc.c</in>
+            <in>v210enc.h</in>
             <in>v210x.c</in>
             <in>v410dec.c</in>
             <in>v410enc.c</in>
@@ -1921,7 +2024,13 @@
             <in>vble.c</in>
             <in>vc1.c</in>
             <in>vc1.h</in>
+            <in>vc1_block.c</in>
+            <in>vc1_common.h</in>
+            <in>vc1_loopfilter.c</in>
+            <in>vc1_mc.c</in>
             <in>vc1_parser.c</in>
+            <in>vc1_pred.c</in>
+            <in>vc1_pred.h</in>
             <in>vc1acdata.h</in>
             <in>vc1data.c</in>
             <in>vc1data.h</in>
@@ -1936,6 +2045,7 @@
             <in>vdpau.c</in>
             <in>vdpau.h</in>
             <in>vdpau_h264.c</in>
+            <in>vdpau_hevc.c</in>
             <in>vdpau_internal.h</in>
             <in>vdpau_mpeg12.c</in>
             <in>vdpau_mpeg4.c</in>
@@ -1955,6 +2065,7 @@
             <in>vorbis_enc_data.h</in>
             <in>vorbis_parser.c</in>
             <in>vorbis_parser.h</in>
+            <in>vorbis_parser_internal.h</in>
             <in>vorbisdec.c</in>
             <in>vorbisdsp.c</in>
             <in>vorbisdsp.h</in>
@@ -1997,6 +2108,8 @@
             <in>wma.h</in>
             <in>wma_common.c</in>
             <in>wma_common.h</in>
+            <in>wma_freqs.c</in>
+            <in>wma_freqs.h</in>
             <in>wmadata.h</in>
             <in>wmadec.c</in>
             <in>wmaenc.c</in>
@@ -2012,6 +2125,7 @@
             <in>wmv2dsp.h</in>
             <in>wmv2enc.c</in>
             <in>wnv1.c</in>
+            <in>wrapped_avframe.c</in>
             <in>ws-snd1.c</in>
             <in>xan.c</in>
             <in>xbmdec.c</in>
@@ -2036,27 +2150,31 @@
           </df>
           <df name="libavdevice">
             <in>alldevices.c</in>
-            <in>alsa-audio-common.c</in>
-            <in>alsa-audio-dec.c</in>
-            <in>alsa-audio-enc.c</in>
-            <in>alsa-audio.h</in>
+            <in>alsa.c</in>
+            <in>alsa.h</in>
+            <in>alsa_dec.c</in>
+            <in>alsa_enc.c</in>
             <in>avdevice.c</in>
             <in>avdevice.h</in>
+            <in>avfoundation_dec.m</in>
             <in>bktr.c</in>
             <in>dv1394.c</in>
             <in>dv1394.h</in>
             <in>fbdev.c</in>
             <in>file_open.c</in>
-            <in>jack_audio.c</in>
+            <in>jack.c</in>
             <in>libcdio.c</in>
             <in>libdc1394.c</in>
-            <in>oss_audio.c</in>
+            <in>oss.c</in>
+            <in>oss.h</in>
             <in>oss_audio.h</in>
             <in>oss_audio_dec.c</in>
             <in>oss_audio_enc.c</in>
+            <in>oss_dec.c</in>
+            <in>oss_enc.c</in>
             <in>pulse.c</in>
-            <in>sndio_common.c</in>
-            <in>sndio_common.h</in>
+            <in>sndio.c</in>
+            <in>sndio.h</in>
             <in>sndio_dec.c</in>
             <in>sndio_enc.c</in>
             <in>timefilter.c</in>
@@ -2065,6 +2183,7 @@
             <in>version.h</in>
             <in>vfwcap.c</in>
             <in>x11grab.c</in>
+            <in>xcbgrab.c</in>
           </df>
           <df name="libavfilter">
             <df name="x86">
@@ -2074,6 +2193,8 @@
               <in>vf_gradfun_init.c</in>
               <in>vf_hqdn3d.asm</in>
               <in>vf_hqdn3d_init.c</in>
+              <in>vf_interlace.asm</in>
+              <in>vf_interlace_init.c</in>
               <in>vf_yadif.asm</in>
               <in>vf_yadif_init.c</in>
             </df>
@@ -2099,7 +2220,6 @@
             <in>avfilter.h</in>
             <in>avfiltergraph.c</in>
             <in>avfiltergraph.h</in>
-            <in>buffer.c</in>
             <in>buffersink.c</in>
             <in>buffersink.h</in>
             <in>buffersrc.c</in>
@@ -2112,6 +2232,7 @@
             <in>formats.h</in>
             <in>gradfun.h</in>
             <in>graphparser.c</in>
+            <in>interlace.h</in>
             <in>internal.h</in>
             <in>pthread.c</in>
             <in>setpts.c</in>
@@ -2139,6 +2260,7 @@
             <in>vf_hflip.c</in>
             <in>vf_hqdn3d.c</in>
             <in>vf_hqdn3d.h</in>
+            <in>vf_hwupload_cuda.c</in>
             <in>vf_interlace.c</in>
             <in>vf_libopencv.c</in>
             <in>vf_lut.c</in>
@@ -2221,6 +2343,7 @@
             <in>crcenc.c</in>
             <in>crypto.c</in>
             <in>cutils.c</in>
+            <in>dashenc.c</in>
             <in>daud.c</in>
             <in>dauddec.c</in>
             <in>daudenc.c</in>
@@ -2228,6 +2351,7 @@
             <in>diracdec.c</in>
             <in>dnxhddec.c</in>
             <in>dsicin.c</in>
+            <in>dss.c</in>
             <in>dtsdec.c</in>
             <in>dump.c</in>
             <in>dv.c</in>
@@ -2328,6 +2452,7 @@
             <in>mov.c</in>
             <in>mov_chan.c</in>
             <in>mov_chan.h</in>
+            <in>movenc-test.c</in>
             <in>movenc.c</in>
             <in>movenc.h</in>
             <in>movenchint.c</in>
@@ -2343,6 +2468,7 @@
             <in>mpegtsenc.c</in>
             <in>mpegvideodec.c</in>
             <in>mpjpeg.c</in>
+            <in>mpjpegdec.c</in>
             <in>msnwc_tcp.c</in>
             <in>mtv.c</in>
             <in>mux.c</in>
@@ -2376,6 +2502,7 @@
             <in>oggparsespeex.c</in>
             <in>oggparsetheora.c</in>
             <in>oggparsevorbis.c</in>
+            <in>oggparsevp8.c</in>
             <in>oma.c</in>
             <in>oma.h</in>
             <in>omadec.c</in>
@@ -2433,16 +2560,21 @@
             <in>rtp.h</in>
             <in>rtpdec.c</in>
             <in>rtpdec.h</in>
+            <in>rtpdec_ac3.c</in>
             <in>rtpdec_amr.c</in>
             <in>rtpdec_asf.c</in>
+            <in>rtpdec_dv.c</in>
             <in>rtpdec_formats.h</in>
             <in>rtpdec_g726.c</in>
+            <in>rtpdec_h261.c</in>
             <in>rtpdec_h263.c</in>
             <in>rtpdec_h263_rfc2190.c</in>
             <in>rtpdec_h264.c</in>
+            <in>rtpdec_hevc.c</in>
             <in>rtpdec_ilbc.c</in>
             <in>rtpdec_jpeg.c</in>
             <in>rtpdec_latm.c</in>
+            <in>rtpdec_mpa_robust.c</in>
             <in>rtpdec_mpeg12.c</in>
             <in>rtpdec_mpeg4.c</in>
             <in>rtpdec_mpegts.c</in>
@@ -2451,6 +2583,7 @@
             <in>rtpdec_qt.c</in>
             <in>rtpdec_svq3.c</in>
             <in>rtpdec_vp8.c</in>
+            <in>rtpdec_vp9.c</in>
             <in>rtpdec_xiph.c</in>
             <in>rtpenc.c</in>
             <in>rtpenc.h</in>
@@ -2458,11 +2591,13 @@
             <in>rtpenc_amr.c</in>
             <in>rtpenc_chain.c</in>
             <in>rtpenc_chain.h</in>
+            <in>rtpenc_h261.c</in>
             <in>rtpenc_h263.c</in>
             <in>rtpenc_h263_rfc2190.c</in>
-            <in>rtpenc_h264.c</in>
+            <in>rtpenc_h264_hevc.c</in>
             <in>rtpenc_jpeg.c</in>
             <in>rtpenc_latm.c</in>
+            <in>rtpenc_mpegts.c</in>
             <in>rtpenc_mpv.c</in>
             <in>rtpenc_vp8.c</in>
             <in>rtpenc_xiph.c</in>
@@ -2514,6 +2649,9 @@
             <in>thp.c</in>
             <in>tiertexseq.c</in>
             <in>tls.c</in>
+            <in>tls.h</in>
+            <in>tls_gnutls.c</in>
+            <in>tls_openssl.c</in>
             <in>tmv.c</in>
             <in>tta.c</in>
             <in>tty.c</in>
@@ -2531,6 +2669,7 @@
             <in>version.h</in>
             <in>voc.c</in>
             <in>voc.h</in>
+            <in>voc_packet.c</in>
             <in>vocdec.c</in>
             <in>vocenc.c</in>
             <in>vorbiscomment.c</in>
@@ -2565,9 +2704,12 @@
               <in>resample_neon.S</in>
             </df>
             <df name="arm">
+              <in>asm-offsets.h</in>
               <in>audio_convert_init.c</in>
               <in>audio_convert_neon.S</in>
               <in>neontest.c</in>
+              <in>resample_init.c</in>
+              <in>resample_neon.S</in>
             </df>
             <df name="x86">
               <in>audio_convert.asm</in>
@@ -2607,6 +2749,7 @@
               <in>float_dsp_init.c</in>
               <in>float_dsp_neon.S</in>
               <in>neontest.h</in>
+              <in>timer.h</in>
             </df>
             <df name="arm">
               <in>asm.S</in>
@@ -2641,6 +2784,8 @@
               <in>float_dsp_altivec.c</in>
               <in>float_dsp_altivec.h</in>
               <in>float_dsp_init.c</in>
+              <in>float_dsp_vsx.c</in>
+              <in>float_dsp_vsx.h</in>
               <in>intreadwrite.h</in>
               <in>timer.h</in>
               <in>types_altivec.h</in>
@@ -2728,6 +2873,13 @@
             <in>frame.h</in>
             <in>hmac.c</in>
             <in>hmac.h</in>
+            <in>hwcontext.c</in>
+            <in>hwcontext.h</in>
+            <in>hwcontext_cuda.c</in>
+            <in>hwcontext_cuda.h</in>
+            <in>hwcontext_internal.h</in>
+            <in>hwcontext_vdpau.c</in>
+            <in>hwcontext_vdpau.h</in>
             <in>imgutils.c</in>
             <in>imgutils.h</in>
             <in>internal.h</in>
@@ -2779,11 +2931,13 @@
             <in>thread.h</in>
             <in>time.c</in>
             <in>time.h</in>
+            <in>time_internal.h</in>
             <in>timer.h</in>
             <in>tree.c</in>
             <in>tree.h</in>
             <in>utils.c</in>
             <in>version.h</in>
+            <in>wchar_filename.h</in>
             <in>xtea.c</in>
             <in>xtea.h</in>
           </df>
@@ -2825,6 +2979,27 @@
           <df name="presets">
           </df>
           <df name="tests">
+            <df name="checkasm">
+              <df name="aarch64">
+                <in>checkasm.S</in>
+              </df>
+              <df name="arm">
+                <in>checkasm.S</in>
+              </df>
+              <df name="x86">
+                <in>checkasm.asm</in>
+              </df>
+              <in>bswapdsp.c</in>
+              <in>checkasm.c</in>
+              <in>checkasm.h</in>
+              <in>dcadsp.c</in>
+              <in>fmtconvert.c</in>
+              <in>h264pred.c</in>
+              <in>h264qpel.c</in>
+              <in>hevc_mc.c</in>
+              <in>synth_filter.c</in>
+              <in>v210enc.c</in>
+            </df>
             <df name="fate">
             </df>
             <df name="filtergraphs">
@@ -2856,6 +3031,7 @@
             <in>pktdumper.c</in>
             <in>probetest.c</in>
             <in>qt-faststart.c</in>
+            <in>sidxindex.c</in>
             <in>trasher.c</in>
           </df>
           <in>avconv.c</in>
@@ -2863,6 +3039,7 @@
           <in>avconv_dxva2.c</in>
           <in>avconv_filter.c</in>
           <in>avconv_opt.c</in>
+          <in>avconv_qsv.c</in>
           <in>avconv_vda.c</in>
           <in>avconv_vdpau.c</in>
           <in>avplay.c</in>
@@ -3579,23 +3756,9 @@
           <df name="include">
             <in>xmp.h</in>
           </df>
-          <df name="java">
-            <df name="src">
-              <df name="org">
-                <df name="helllabs">
-                  <df name="java">
-                    <df name="xmp">
-                    </df>
-                  </df>
-                </df>
-              </df>
-            </df>
-          </df>
           <df name="players">
             <df name="android">
               <df name="assets">
-                <df name="fonts">
-                </df>
                 <df name="mod">
                   <in>preludesynth.mod</in>
                 </df>
@@ -3749,52 +3912,6 @@
                 </df>
                 <in>xmp-jni.c</in>
               </df>
-              <df name="res">
-                <df name="anim">
-                </df>
-                <df name="drawable">
-                </df>
-                <df name="drawable-hdpi">
-                </df>
-                <df name="drawable-ldpi">
-                </df>
-                <df name="drawable-mdpi">
-                </df>
-                <df name="drawable-xhdpi">
-                </df>
-                <df name="layout">
-                </df>
-                <df name="layout-v11">
-                </df>
-                <df name="menu">
-                </df>
-                <df name="values">
-                </df>
-                <df name="values-v11">
-                </df>
-                <df name="values-v13">
-                </df>
-                <df name="xml">
-                </df>
-              </df>
-              <df name="src">
-                <df name="com">
-                  <df name="commonsware">
-                    <df name="cwac">
-                      <df name="tlv">
-                      </df>
-                    </df>
-                  </df>
-                </df>
-                <df name="org">
-                  <df name="helllabs">
-                    <df name="android">
-                      <df name="xmp">
-                      </df>
-                    </df>
-                  </df>
-                </df>
-              </df>
             </df>
             <df name="nacl">
               <in>xmp.c</in>
@@ -3884,16 +4001,6 @@
           </df>
           <df name="python">
             <df name="ctypesgen">
-              <df name="ctypesgencore">
-                <df name="parser">
-                </df>
-                <df name="printer_json">
-                </df>
-                <df name="printer_python">
-                </df>
-                <df name="processor">
-                </df>
-              </df>
               <df name="demo">
                 <in>demoapp.c</in>
                 <in>demolib.c</in>
@@ -4252,8 +4359,6 @@
                 <in>1.mod</in>
                 <in>f.mod</in>
               </df>
-            </df>
-            <df name="t">
             </df>
           </df>
         </df>
@@ -5924,6 +6029,16 @@
           <in>version.h</in>
         </df>
       </df>
+      <df name="res">
+        <df name="ecmascript">
+          <df name="modules">
+            <df name="showtime">
+            </df>
+          </df>
+        </df>
+        <df name="metadb">
+        </df>
+      </df>
       <df name="resources">
         <df name="cachedb">
         </df>
@@ -5966,6 +6081,7 @@
           <in>lastfm.h</in>
           <in>opensubtitles.c</in>
           <in>opensubtitles.h</in>
+          <in>screenshot.c</in>
           <in>soap.c</in>
           <in>soap.h</in>
           <in>stpp.c</in>
@@ -6063,7 +6179,6 @@
           <in>arch.h</in>
           <in>atomic.h</in>
           <in>darwin.c</in>
-          <in>darwin.h</in>
           <in>emu_thread_specifics.c</in>
           <in>halloc.h</in>
           <in>threads.h</in>
@@ -6183,7 +6298,6 @@
           <in>fa_fs.c</in>
           <in>fa_ftp.c</in>
           <in>fa_funopen.c</in>
-          <in>fa_gmefile.c</in>
           <in>fa_http.c</in>
           <in>fa_imageloader.c</in>
           <in>fa_imageloader.h</in>
@@ -6201,14 +6315,12 @@
           <in>fa_rar.c</in>
           <in>fa_scanner.c</in>
           <in>fa_search.h</in>
-          <in>fa_sidfile.c</in>
           <in>fa_slice.c</in>
           <in>fa_spotlight.c</in>
           <in>fa_vfs.c</in>
           <in>fa_vfs.h</in>
           <in>fa_video.c</in>
           <in>fa_video.h</in>
-          <in>fa_xmp.c</in>
           <in>fa_zip.c</in>
           <in>fa_zlib.c</in>
           <in>fa_zlib.h</in>
@@ -6243,6 +6355,7 @@
           <in>image_decoder_libav.c</in>
           <in>jpeg.c</in>
           <in>jpeg.h</in>
+          <in>nanosvg.c</in>
           <in>pixmap.c</in>
           <in>pixmap.h</in>
           <in>rasterizer_ft.c</in>
@@ -6342,6 +6455,8 @@
           <in>pixmap.h</in>
           <in>pool.c</in>
           <in>pool.h</in>
+          <in>prng.c</in>
+          <in>prng.h</in>
           <in>ptrvec.c</in>
           <in>ptrvec.h</in>
           <in>queue.h</in>

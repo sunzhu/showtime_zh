@@ -564,18 +564,6 @@ if enabled nvctrl; then
 fi
 
 
-
-#
-# libgme
-#
-if enabled libgme; then
-    
-    check_header "gme/gme.h" || fatal "libgme" "Missing include file gme/gme.h"
-    check_lib    "gme"       || fatal "libgme" "Unable to link with libgme"
-    echo >>${CONFIG_MAK} "LDFLAGS_cfg += -lgme"
-fi
-
-
 #
 # sanitize
 #
@@ -611,7 +599,6 @@ esac
 LIBAV_ARCH_FLAGS="--disable-shared --enable-static"
 libav_setup
 rtmpdump_setup
-xmp_setup
 gumbo_setup
 
 #

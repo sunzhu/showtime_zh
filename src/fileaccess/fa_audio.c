@@ -39,14 +39,6 @@
 #include "misc/minmax.h"
 #include "usage.h"
 
-#if ENABLE_LIBGME
-#include <gme/gme.h>
-#endif
-
-#if ENABLE_XMP
-#include <xmp.h>
-#endif
-
 
 /**
  *
@@ -154,27 +146,6 @@ be_file_playaudio(const char *url, media_pipe_t *mp,
   if(pb[0] == 0x50 && pb[1] == 0x4b && pb[2] == 0x03 && pb[3] == 0x04)
     // ZIP File
     return audio_play_zipfile(fh, mp, errbuf, errlen, hold);
-
-  // First we need to check for a few other formats
-#if ENABLE_LIBGME
-  if(*gme_identify_header(pb))
-    return fa_gme_playfile(mp, fh, errbuf, errlen, hold, url);
-#endif
-
-#if ENABLE_XMP
-  FILE *f = fa_fopen(fh, 0);
-
-  if(f != NULL) {
-    int r = xmp_test_modulef(f, NULL);
-    if(r == 0) {
-      e = fa_xmp_playfile(mp, f, errbuf, errlen, hold, url,
-                          fa_fsize(fh));
-      fclose(f);
-      return e;
-    }
-    fclose(f);
-  }
-#endif
 
   AVIOContext *avio = fa_libav_reopen(fh, 0);
 

@@ -47,7 +47,6 @@ CONFIG_LIST="
  avahi
  bonjour
  nvctrl
- libgme
  libxss
  libxv
  openssl
@@ -78,7 +77,6 @@ CONFIG_LIST="
  webpopup
  webkit
  valgrind
- xmp
  bughunt
  bspatch
  connman
@@ -98,7 +96,6 @@ CONFIG_LIST="
  nativesmb
  rar
  playqueue
- sid
  htsp
  media_settings
  glw_settings
@@ -392,20 +389,6 @@ rtmpdump_setup() {
 #
 #
 #
-xmp_setup() {
-    if disabled xmp; then
-        return
-    fi
-
-    update_ext_submodule xmp
-    echo >>${CONFIG_MAK} "LDFLAGS_cfg += -lxmp"
-    add_stamp xmp
-}
-
-
-#
-#
-#
 gumbo_setup() {
     if disabled gumbo; then
         return
@@ -414,6 +397,12 @@ gumbo_setup() {
     update_ext_submodule gumbo-parser
 }
 
+ext_setup() {
+    libav_setup
+    rtmpdump_setup
+    gumbo_setup
+#    vmir_setup
+}
 
 #
 #
@@ -616,7 +605,6 @@ EOF
 #
 
 enable libav
-enable xmp
 enable audiotest
 enable metadata
 enable sqlite
@@ -631,7 +619,6 @@ enable usagereport
 enable nativesmb
 enable rar
 enable playqueue
-enable sid
 enable htsp
 enable media_settings
 enable glw_settings

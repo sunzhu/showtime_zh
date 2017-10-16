@@ -595,9 +595,6 @@
         <in>config.h</in>
       </df>
       <df name="ext">
-        <df name="audio">
-          <in>sid.c</in>
-        </df>
         <df name="bspatch">
           <in>bspatch.c</in>
           <in>bspatch.h</in>
@@ -4719,13 +4716,11 @@
           <in>fa_rar.c</in>
           <in>fa_scanner.c</in>
           <in>fa_search.h</in>
-          <in>fa_sidfile.c</in>
           <in>fa_slice.c</in>
           <in>fa_vfs.c</in>
           <in>fa_vfs.h</in>
           <in>fa_video.c</in>
           <in>fa_video.h</in>
-          <in>fa_xmp.c</in>
           <in>fa_zip.c</in>
           <in>fa_zlib.c</in>
           <in>fa_zlib.h</in>
@@ -6864,8 +6859,6 @@
             flavor2="0">
       </item>
       <item path="build.ps3/xmp/build/include/xmp.h" ex="false" tool="3" flavor2="0">
-      </item>
-      <item path="ext/audio/sid.c" ex="false" tool="0" flavor2="2">
       </item>
       <item path="ext/bspatch/bspatch.c" ex="false" tool="0" flavor2="0">
       </item>
@@ -21635,24 +21628,6 @@
       </item>
       <item path="ext/xmp/test/util.c" ex="false" tool="0" flavor2="0">
       </item>
-      <folder path="0/ext/audio">
-        <cTool>
-          <incDir>
-            <pElem>src/misc</pElem>
-            <pElem>src/metadata</pElem>
-            <pElem>../PSL1GHT/target/include/psl1ght</pElem>
-            <pElem>../ps3dev/host/ppu/lib/gcc/ppu/4.5.2/include</pElem>
-            <pElem>src/prop</pElem>
-            <pElem>../PSL1GHT/target/include/sys</pElem>
-            <pElem>src/arch/ps3</pElem>
-            <pElem>../PSL1GHT/target/include</pElem>
-            <pElem>src</pElem>
-            <pElem>ext/audio</pElem>
-            <pElem>src/backend</pElem>
-            <pElem>../ps3dev/host/ppu/ppu/include</pElem>
-          </incDir>
-        </cTool>
-      </folder>
       <folder path="0/ext/dvd/dvdcss">
         <cTool>
           <incDir>
@@ -31501,16 +31476,6 @@
       </item>
       <item path="src/fileaccess/fa_search.h" ex="false" tool="3" flavor2="0">
       </item>
-      <item path="src/fileaccess/fa_sidfile.c" ex="false" tool="0" flavor2="2">
-        <cTool>
-          <incDir>
-            <pElem>src/metadata</pElem>
-            <pElem>src/misc</pElem>
-            <pElem>src/arch</pElem>
-            <pElem>../ps3dev/host/ppu/ppu/include/sys</pElem>
-          </incDir>
-        </cTool>
-      </item>
       <item path="src/fileaccess/fa_slice.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="src/fileaccess/fa_vfs.c" ex="false" tool="0" flavor2="0">
@@ -31538,8 +31503,6 @@
         </cTool>
       </item>
       <item path="src/fileaccess/fa_video.h" ex="false" tool="3" flavor2="0">
-      </item>
-      <item path="src/fileaccess/fa_xmp.c" ex="false" tool="0" flavor2="0">
       </item>
       <item path="src/fileaccess/fa_zip.c" ex="false" tool="0" flavor2="2">
         <cTool>

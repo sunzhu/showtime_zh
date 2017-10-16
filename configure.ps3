@@ -65,7 +65,6 @@ LIBAV_LDFLAGS="${BUILDDIR}/libav/mallocstub.o"
 
 libav_setup
 rtmpdump_setup
-xmp_setup
 bzip2_setup
 gumbo_setup
 
