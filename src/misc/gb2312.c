@@ -1159,7 +1159,7 @@ void UnicodeToUtf8(char* utf8, char *unicode)
  ***********************************************************************/
 void GB2312StrToUtf8(
         char *utf8Str,        /* Output Utf-8 chars */
-        const char* gbStr,        /* Input GB2312 chars */
+        const uint8_t* gbStr,        /* Input GB2312 chars */
         int nBytes            /* size of input GB2312 chars */
         )
 {
@@ -1197,7 +1197,7 @@ void GB2312StrToUtf8(
 }
 
 int gb2312_convert(const struct charset *cs, char *dst,
-                 const char *src, int len, int strict)
+                 const uint8_t *src, int len, int strict)
 {
 	GB2312StrToUtf8(dst,src,len);
 	return strlen(dst);
