@@ -259,7 +259,8 @@ loader_thread(void *aux)
       cancellable_reset(glt->glt_cancellable);
 
       glw_unlock(gr);
-      img = backend_imageloader(url, &im, gr->gr_vpaths, errbuf, sizeof(errbuf),
+      img = backend_imageloader(url, &im, gr->gr_fa_resolver,
+                                errbuf, sizeof(errbuf),
                                 ccptr, glt->glt_cancellable);
 
       glw_lock(gr);

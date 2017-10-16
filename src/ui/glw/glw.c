@@ -37,6 +37,8 @@
 #include "glw_style.h"
 #include "glw_navigation.h"
 
+#include "fileaccess/fileaccess.h"
+
 static void glw_focus_init_widget(glw_t *w, float weight);
 static void glw_focus_leave(glw_t *w);
 static void glw_root_set_hover(glw_root_t *gr, glw_t *w);
@@ -131,6 +133,51 @@ glw_init(glw_root_t *gr)
   return glw_init3(gr, &prop_courier_poll_timed, prop_courier_create_passive());
 }
 
+typedef struct skin_resolver {
+  fa_resolver_t super;
+  char *path;
+
+} skin_resolver_t;
+
+
+/**
+ *
+ */
+static void
+skin_resolver_cleanup(fa_resolver_t *super)
+{
+  skin_resolver_t *sr = (skin_resolver_t *)super;
+  free(sr->path);
+}
+
+
+/**
+ *
+ */
+static const char *
+skin_resolver_vpath(fa_resolver_t *super, const char *proto)
+{
+  skin_resolver_t *sr = (skin_resolver_t *)super;
+  if(!strcmp(proto, "skin"))
+    return sr->path;
+  return NULL;
+}
+
+
+
+/**
+ *
+ */
+static fa_resolver_t *
+create_skin_resolver(const char *skin)
+{
+  skin_resolver_t *sr = calloc(1, sizeof(skin_resolver_t));
+  sr->path = strdup(skin);
+  atomic_set(&sr->super.far_refcount, 1);
+  sr->super.far_cleanup = skin_resolver_cleanup;
+  sr->super.far_vpath = skin_resolver_vpath;
+  return &sr->super;
+}
 
 /**
  *
@@ -176,18 +223,14 @@ glw_init3(glw_root_t *gr,
   gr->gr_style_binding_pool = pool_create("glwstylebindings",
                                           sizeof(glw_style_binding_t), 0);
 
-  gr->gr_skin = strdup(skin);
-
-  gr->gr_vpaths[0] = "skin";
-  gr->gr_vpaths[1] = gr->gr_skin;
-  gr->gr_vpaths[2] = NULL;
+  gr->gr_fa_resolver = create_skin_resolver(skin);
 
   gr->gr_font_domain = freetype_get_context();
 
   glw_text_bitmap_init(gr);
 
   prop_setv(gr->gr_prop_ui, "skin", "path", NULL,
-	    PROP_SET_STRING, gr->gr_skin);
+	    PROP_SET_STRING, skin);
 
   gr->gr_pointer_visible    = prop_create(gr->gr_prop_ui, "pointerVisible");
   gr->gr_is_fullscreen      = prop_create(gr->gr_prop_ui, "fullscreen");
@@ -283,7 +326,7 @@ glw_fini(glw_root_t *gr)
   free(gr->gr_render_jobs);
   free(gr->gr_render_order);
   free(gr->gr_vertex_buffer);
-  free(gr->gr_skin);
+  far_release(gr->gr_fa_resolver);
 }
 
 
