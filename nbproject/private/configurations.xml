@@ -464,6 +464,8 @@
           <df name="video">
           </df>
         </df>
+        <df name="stamps">
+        </df>
         <df name="support">
           <df name="dataroot">
           </df>
