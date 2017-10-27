@@ -158,8 +158,11 @@ metadata_filename_to_title(const char *filename, int *yearp, rstr_t **titlep)
   char* start=NULL;
   if(filename[0]=='[') {
       start = strchr(filename,']');
-      if(start != NULL)
-          start = start + 2;
+      if(start != NULL) {
+          start++;
+          if(start[0]=='.')
+              start++;
+      }
       if(start>=filename+strlen(filename)) //don't skip if the '[]' includes the whole filename
           start=NULL;
   }
