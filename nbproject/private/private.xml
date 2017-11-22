@@ -10,9 +10,10 @@
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
-            <file>file:/home/sunzhu/ps3/showtime_zh/src/metadata/metadata.h</file>
+            <file>file:/home/sunzhu/ps3/showtime_zh/src/subtitles/video_overlay.c</file>
             <file>file:/home/sunzhu/ps3/showtime_zh/src/metadata/metadata_str.c</file>
             <file>file:/home/sunzhu/ps3/showtime_zh/src/metadata/mlp.c</file>
+            <file>file:/home/sunzhu/ps3/showtime_zh/build.ps3/inst/include/libavcodec/avcodec.h</file>
         </group>
     </open-files>
 </project-private>

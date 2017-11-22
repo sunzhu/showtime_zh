@@ -134,7 +134,7 @@ fs_scandir(fa_protocol_t *fap, fa_dir_t *fd, const char *url,
 
     if(stat(buf, &st))
       continue;
-
+    
     switch(st.st_mode & S_IFMT) {
     case S_IFDIR:
       type = CONTENT_DIR;

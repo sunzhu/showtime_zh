@@ -260,12 +260,12 @@ metadata_filename_to_episode(const char *s,
     if((s[i] == 's' || s[i] == 'S') && isnum(s[i+1]) && isnum(s[i+2])) {
       int o = 3+i;
       if(s[o] == '.')
-	o++;
+        o++;
 
       if((s[o] == 'e' || s[o] == 'E') && isnum(s[o+1]) && isnum(s[o+2])) {
-	season = atoi(s+i+1);
-	episode = atoi(s+o+1);
-	break;
+        season = atoi(s+i+1);
+        episode = atoi(s+o+1);
+        break;
       }
     }
   }
